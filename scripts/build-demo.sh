@@ -20,7 +20,7 @@ python3 - <<'PY'
 import re
 s = open('index.html').read()
 s = s.replace('<head>', '<head><script>' + open('../demo/demo-shim.js').read() + '</script>', 1)
-s = re.sub(r'<title>.*?</title>', '<title>AgroSyntra Management</title>', s)
+s = re.sub(r'<title>.*?</title>', '<title>AgroCloud Management</title>', s)
 open('index.html', 'w').write(s)
 PY
 echo "build-demo ready"

@@ -1,6 +1,6 @@
 {
-  "appId": "com.agrosyntra.app",
-  "appName": "AgroSyntra",
+  "appId": "com.agrocloud.management",
+  "appName": "AgroCloud",
   "webDir": "www",
   "android": {
     "allowMixedContent": true

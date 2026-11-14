@@ -1,8 +1,8 @@
 {
-  "name": "agrosyntra-android",
+  "name": "agrocloud-android",
   "private": true,
   "version": "1.0.0",
-  "description": "Android (APK) wrapper for the AgroSyntra demo build",
+  "description": "Android (APK) wrapper for the AgroCloud Management demo build",
   "scripts": {
     "sync": "rm -rf www && cp -r ../build-demo www && npx cap sync android"
   },

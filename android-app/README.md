@@ -1,9 +1,9 @@
-# AgroSyntra Android app (APK)
+# AgroCloud Management Android app (APK)
 
 Wraps the demo build (`../build-demo`, built by `scripts/build-demo.sh`) in a Capacitor WebView.
 The app runs fully on the phone with built-in demo data; no server is needed.
 
-Built automatically by `.github/workflows/android-apk.yml` (Actions → "Android APK" → artifact `AgroSyntra-apk`).
+Built automatically by `.github/workflows/android-apk.yml` (Actions → "Android APK" → artifact `AgroCloud-apk`).
 
 Local build (needs JDK 17 and the Android SDK):
 
