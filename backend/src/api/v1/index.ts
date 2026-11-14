@@ -55,6 +55,7 @@ import { formsRouter } from './forms.routes';
 import { aiRouter } from './ai.routes';
 import { soilSensorRouter } from './soil-sensor.routes';
 import { gisRouter } from './gis.routes';
+import { geoRouter } from './geo.routes';
 import { permissionsRouter } from './permissions.routes';
 import { featureFlagsRouter } from './feature-flags.routes';
 import { agronomicRouter } from './agronomic.routes';
@@ -203,6 +204,7 @@ router.use('/soil-sensor', soilSensorRouter);
 
 // GIS layers and features - requires auth (handled in router)
 router.use('/gis', gisRouter);
+router.use('/geo', geoRouter);
 
 // Permissions management - requires manager role (handled in router)
 router.use('/permissions', permissionsRouter);

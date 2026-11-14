@@ -1,0 +1,18 @@
+-- Down 178: remove the geo model (geometries drawn in AgroCloud are lost).
+DROP TRIGGER IF EXISTS trg_countries_key ON countries;
+DROP TRIGGER IF EXISTS trg_sites_key ON sites;
+DROP TRIGGER IF EXISTS trg_farm_areas_key ON farm_areas;
+DROP TRIGGER IF EXISTS trg_fields_key ON fields;
+DROP FUNCTION IF EXISTS geo_assign_key();
+DROP FUNCTION IF EXISTS geo_next_key(TEXT, TEXT, INT, TEXT[]);
+DROP INDEX IF EXISTS uq_sites_key_id;
+DROP INDEX IF EXISTS uq_farm_areas_key_id;
+DROP INDEX IF EXISTS uq_fields_key_id;
+DROP TABLE IF EXISTS geo_edit_history;
+DROP TABLE IF EXISTS geo_domain_values;
+DROP TABLE IF EXISTS geo_domains;
+DROP TABLE IF EXISTS geo_subtypes;
+ALTER TABLE countries  DROP COLUMN IF EXISTS geom, DROP COLUMN IF EXISTS key_id, DROP COLUMN IF EXISTS subtype_code, DROP COLUMN IF EXISTS geom_updated_at;
+ALTER TABLE sites      DROP COLUMN IF EXISTS geom, DROP COLUMN IF EXISTS key_id, DROP COLUMN IF EXISTS subtype_code, DROP COLUMN IF EXISTS geom_updated_at;
+ALTER TABLE farm_areas DROP COLUMN IF EXISTS geom, DROP COLUMN IF EXISTS key_id, DROP COLUMN IF EXISTS subtype_code, DROP COLUMN IF EXISTS geom_updated_at;
+ALTER TABLE fields     DROP COLUMN IF EXISTS key_id, DROP COLUMN IF EXISTS subtype_code, DROP COLUMN IF EXISTS geom_updated_at;

@@ -518,3 +518,11 @@ Pages:
 - The masked configuration ID that the demo used to show is removed.
 - GIS layer name in the demo says whether the polygons came live from ArcGIS Online or from the offline sample.
 - Attribute mapping of a new layer is pre-filled from common field names (Farm_Name → field name, Area_ha → area, Structure_Type → field type, Remarks → notes).
+
+## Round 48 — Zones & Sites map editor (own geometry)
+
+- New tab **Map** on Zones & Sites (`?tab=map`, all roles; editing for CEO and farm managers in their zones; the API checks again).
+- The system now owns its shapes: zones, sites, farm areas, fields (no ArcGIS dependency). Migration 178 adds `geom` (MultiPolygon 4326) to countries / sites / farm_areas (fields keep `polygon`), a permanent **KeyID** assigned by trigger and locked (`MH`, `MH-S01`, `MH-S01-A01`, `MH-S01-F001`), `subtype_code`, plus `geo_subtypes`, `geo_domains`, `geo_domain_values`, `geo_edit_history`.
+- API `/api/v1/geo`: `model`, `layers`, `/:cls/:id/validate|geometry|subtype|history`. Rules on save (PostGIS): valid shape, minimum size, inside its parent (5 m margin), no overlap with siblings; failures return 422 `GEOMETRY_RULE` with the issues.
+- Editor (leaflet-geoman, MIT): feature tree with KeyID, search and layer toggles; Attributes panel (KeyID, parent, area, subtype, live rule check, history); edit strip: polygon, rectangle, circle (pivot), vertices, move, rotate, snap, undo/redo (Ctrl+Z / Ctrl+Y), upload GeoJSON / KML / zipped Shapefile, delete shape, save, discard.
+- Demo: geo store in `demo-shim.js` (`agro_demo_geo_v1`), MH · Site 1 pre-drawn.

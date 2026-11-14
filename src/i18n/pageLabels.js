@@ -11,6 +11,15 @@ import { SHELL_AR } from './shellLabels';
  * Adding a word: one line here. Keep keys exactly as they appear on screen.
  */
 export const PAGE_AR = {
+  // Map editor (round 48).
+  'Map': 'الخريطة',
+  'Zones': 'المناطق',
+  'Sites': 'المواقع',
+  'Farm areas': 'مناطق المزرعة',
+  'Fields': 'الحقول',
+  'Zone': 'المنطقة',
+  'Site': 'الموقع',
+  'Field': 'الحقل',
   // GIS feature card (round 42).
   'No readings for this period and site': 'لا توجد قراءات لهذه الفترة والموقع',
   'First Valve': 'المحبس الأول',

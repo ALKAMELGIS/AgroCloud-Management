@@ -45,6 +45,7 @@ import InfoNote from '../components/InfoNote';
 import PageTitle from '../components/PageTitle';
 import ExportButton from '../components/ExportButton';
 import GisRelationshipConfig from '../components/gis/GisRelationshipConfig';
+import GeoEditor from '../components/geo/GeoEditor';
 import { useSearchParams } from 'react-router-dom';
 import { Tabs, Tab } from '@mui/material';
 import { INTEGRATION_ADMIN_ROLES } from '../utils/roleAccess';
@@ -77,10 +78,11 @@ function CountriesSitesManagement() {
   // Settings tab: the zones/sites themselves, or the GIS layer configuration that builds them.
   const [searchParams, setSearchParams] = useSearchParams();
   const canConfigureGis = INTEGRATION_ADMIN_ROLES.includes(user?.role);
-  const tab = canConfigureGis && searchParams.get('tab') === 'gis' ? 'gis' : 'zones';
+  const rawTab = searchParams.get('tab');
+  const tab = rawTab === 'map' ? 'map' : (canConfigureGis && rawTab === 'gis' ? 'gis' : 'zones');
   const setTab = (v) => {
     const next = new URLSearchParams(searchParams);
-    if (v === 'gis') next.set('tab', 'gis'); else next.delete('tab');
+    if (v === 'zones') next.delete('tab'); else next.set('tab', v);
     setSearchParams(next, { replace: true });
   };
 
@@ -255,21 +257,20 @@ function CountriesSitesManagement() {
   }
 
   return (
-    <Container maxWidth={tab === 'gis' ? false : 'lg'} disableGutters={tab === 'gis'}>
+    <Container maxWidth={tab === 'zones' ? 'lg' : false} disableGutters={tab !== 'zones'}>
       <Box>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: canConfigureGis ? 1.5 : 3, gap: 2, flexWrap: 'wrap' }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5, gap: 2, flexWrap: 'wrap' }}>
           <PageTitle>{t('zoneAccess.title')}</PageTitle>
           {tab === 'zones' && <ExportButton label={t('zoneAccess.exportExcel')} onClick={handleExport} />}
         </Box>
 
-        {canConfigureGis && (
-          <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2.5, borderBottom: 1, borderColor: 'divider' }}>
-            <Tab value="zones" label="Zones & Sites" />
-            <Tab value="gis" label="GIS configuration" />
-          </Tabs>
-        )}
+        <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: tab === 'map' ? 0 : 2.5, borderBottom: 1, borderColor: 'divider' }}>
+          <Tab value="zones" label="Zones & Sites" />
+          <Tab value="map" label="Map" />
+          {canConfigureGis && <Tab value="gis" label="GIS configuration" />}
+        </Tabs>
 
-        {tab === 'gis' ? <GisRelationshipConfig /> : (<>
+        {tab === 'map' ? <GeoEditor canEdit={isCeo || isFarmManager} /> : tab === 'gis' ? <GisRelationshipConfig /> : (<>
 
         {scopeNote ? (
           <InfoNote mode="line" severity="info" sx={{ mb: 2 }}>{scopeNote}</InfoNote>

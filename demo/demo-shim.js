@@ -56,9 +56,88 @@
     checks:[],ok:true,inspectedAt:new Date().toISOString()};
   var CONN=[]; var AICONV=[]; var AIMSG={};
   function ok(data,extra){var o={success:true,data:data}; if(extra) for(var k in extra) o[k]=extra[k]; return o;}
+
+  /* Map editor (/geo): shapes, KeyIDs, subtypes and history kept in this browser.
+     MH · Site 1 starts with drawn greenhouse and nethouse fields; the rest is empty,
+     ready to draw. Same rules as the server: valid, inside the parent, no overlap. */
+  var GEO_KEY='agro_demo_geo_v1';
+  var GEO_SUB=[['zone',1,'Region','منطقة','#e8f2ec','#165c3a'],['site',1,'Farm site','موقع مزرعة','#e8f2ec','#1f7a4d'],['site',2,'Nursery site','موقع مشتل','#f1f7e8','#4d7c0f'],['site',9,'Not applicable','غير مطبق','#f3f5f2','#6b746e'],
+    ['farm_area',1,'Greenhouse','بيت محمي','#ffffff','#267300'],['farm_area',2,'Nethouse','بيت شبكي','#e6f4ff','#005ce6'],['farm_area',3,'Open field','حقل مفتوح','#fff4d6','#a87000'],['farm_area',4,'Pivot','محوري','#e6ffd9','#38a800'],
+    ['field',1,'Greenhouse','بيت محمي','#ffffff','#267300'],['field',2,'Nethouse','بيت شبكي','#e6f4ff','#005ce6'],['field',3,'Open field','حقل مفتوح','#fff4d6','#a87000'],['field',4,'Pivot','محوري','#e6ffd9','#38a800'],['field',5,'Nursery bed','حوض مشتل','#f1f7e8','#4d7c0f']]
+    .map(function(a,i){return {class_key:a[0],code:a[1],name_en:a[2],name_ar:a[3],fill_color:a[4],line_color:a[5],sort_order:i};});
+  var GEO_DOM=[{key:'irrigation_system',name_en:'Irrigation system',name_ar:'نظام الري',kind:'coded',values:[['drip','Drip','تنقيط'],['sprinkler','Sprinkler','رش'],['pivot','Centre pivot','محوري'],['flood','Flood','غمر'],['hydro','Hydroponic','زراعة مائية']]},
+    {key:'soil_type',name_en:'Soil type',name_ar:'نوع التربة',kind:'coded',values:[['sand','Sand','رملية'],['loamy_sand','Loamy sand','رملية طميية'],['loam','Loam','طميية'],['clay','Clay','طينية'],['substrate','Substrate','وسط زراعي']]},
+    {key:'status',name_en:'Status',name_ar:'الحالة',kind:'coded',values:[['active','Active','نشط'],['fallow','Fallow','بور'],['planned','Planned','مخطط'],['retired','Retired','متوقف']]}]
+    .map(function(d){ return {key:d.key,name_en:d.name_en,name_ar:d.name_ar,kind:d.kind,values:d.values.map(function(v,i){return {domain_key:d.key,code:v[0],name_en:v[1],name_ar:v[2],sort_order:i};})}; });
+  function geoRect(x,y,w,h){ return {type:'MultiPolygon',coordinates:[[[[x,y],[x+w,y],[x+w,y+h],[x,y+h],[x,y]]]]}; }
+  function geoStore(){
+    var st=null; try{ st=JSON.parse(localStorage.getItem(GEO_KEY)||'null'); }catch(e){}
+    if(st) return st;
+    st={}; var lon0=55.74,lat0=24.20;
+    var mh=countries.filter(function(c){return c.code==='MH';})[0];
+    var s1=sites.filter(function(x){return mh&&x.countryId===mh.id&&x.name==='Site 1';})[0];
+    if(s1){
+      st[s1.id]={geometry:geoRect(lon0-0.001,lat0-0.001,0.009,0.0095),subtype:1,history:[]};
+      areas.filter(function(a){return a.siteId===s1.id;}).forEach(function(a,ai){
+        st[a.id]={geometry:ai?geoRect(lon0-0.0005,lat0+0.004,0.0078,0.004):geoRect(lon0-0.0005,lat0-0.0005,0.0102-0.001,0.0045),subtype:ai?2:1,history:[]};
+        fields.filter(function(f){return f.farmAreaId===a.id;}).forEach(function(f,k){
+          st[f.id]={geometry:ai?geoRect(lon0+k*0.0024,lat0+0.0045,0.002,0.003):geoRect(lon0+k*0.0016,lat0,0.0012,0.0035),subtype:ai?2:1,history:[]};
+        });
+      });
+    }
+    try{ localStorage.setItem(GEO_KEY,JSON.stringify(st)); }catch(e){}
+    return st;
+  }
+  function geoSave(st){ try{ localStorage.setItem(GEO_KEY,JSON.stringify(st)); }catch(e){} }
+  function geoKeys(){ var k={};
+    countries.forEach(function(c){ k[c.id]=c.code.replace(/\s+/g,''); });
+    countries.forEach(function(c){ sites.filter(function(x){return x.countryId===c.id;}).forEach(function(x,i){ k[x.id]=k[c.id]+'-S'+('0'+(i+1)).slice(-2);
+      var fn=0; areas.filter(function(a){return a.siteId===x.id;}).forEach(function(a,ai){ k[a.id]=k[x.id]+'-A'+('0'+(ai+1)).slice(-2);
+        fields.filter(function(f){return f.farmAreaId===a.id;}).forEach(function(f){ fn++; k[f.id]=k[x.id]+'-F'+('00'+fn).slice(-3); }); }); }); });
+    return k; }
+  function geoArea(g){ if(!g) return null; var R=6378137, tot=0;
+    (g.type==='Polygon'?[g.coordinates]:g.coordinates).forEach(function(poly){ poly.forEach(function(ring,ri){ var a=0;
+      for(var i=0;i<ring.length-1;i++){ var p1=ring[i],p2=ring[i+1]; a+=(p2[0]-p1[0])*Math.PI/180*(2+Math.sin(p1[1]*Math.PI/180)+Math.sin(p2[1]*Math.PI/180)); }
+      a=Math.abs(a*R*R/2); tot+=ri?-a:a; }); });
+    return Math.round(tot/10000*10000)/10000; }
+  function geoBBox(g){ var b=[180,90,-180,-90]; (g.type==='Polygon'?[g.coordinates]:g.coordinates).forEach(function(p){ p[0].forEach(function(c){ b[0]=Math.min(b[0],c[0]);b[1]=Math.min(b[1],c[1]);b[2]=Math.max(b[2],c[0]);b[3]=Math.max(b[3],c[1]); }); }); return b; }
+  function geoItems(){ var st=geoStore(), k=geoKeys();
+    function item(r,parent){ var e=st[r.id]||{}; return {id:r.id,name:r.name,key_id:k[r.id],subtype_code:e.subtype||null,parent_id:parent,geometry:e.geometry||null,area_ha:geoArea(e.geometry),geom_updated_at:e.at||null}; }
+    return {zones:countries.map(function(c){return item(c,null);}),sites:sites.map(function(x){return item(x,x.countryId);}),
+      farm_areas:areas.map(function(a){return item(a,a.siteId);}),fields:fields.map(function(f){return item(f,f.farmAreaId);})}; }
+  function geoValidate(cls,id,g){ var L=geoItems(), issues=[], area=geoArea(g);
+    var list=cls==='zone'?L.zones:cls==='site'?L.sites:cls==='farm_area'?L.farm_areas:L.fields;
+    var me=list.filter(function(x){return x.id===id;})[0]; if(!me) return {ok:false,issues:[{code:'invalid',message:'Not found'}],area_ha:null};
+    if(!area||area<=0) issues.push({code:'too_small',message:'The shape has no area.'});
+    var plist=cls==='site'?L.zones:cls==='farm_area'?L.sites:cls==='field'?L.farm_areas:[];
+    var par=plist.filter(function(x){return x.id===me.parent_id;})[0];
+    var b=geoBBox(g), eps=0.00005;
+    if(par&&par.geometry){ var pb=geoBBox(par.geometry); if(b[0]<pb[0]-eps||b[1]<pb[1]-eps||b[2]>pb[2]+eps||b[3]>pb[3]+eps) issues.push({code:'outside_parent',message:'Part of the shape lies outside '+par.key_id+'.',keys:[par.key_id]}); }
+    var sib=list.filter(function(x){ return x.id!==id&&x.geometry&&(cls==='field'?(function(){ var a1=L.farm_areas.filter(function(a){return a.id===x.parent_id;})[0], a2=L.farm_areas.filter(function(a){return a.id===me.parent_id;})[0]; return a1&&a2&&a1.parent_id===a2.parent_id; })():x.parent_id===me.parent_id); });
+    var hits=sib.filter(function(x){ var ob=geoBBox(x.geometry); var w=Math.min(b[2],ob[2])-Math.max(b[0],ob[0]), h=Math.min(b[3],ob[3])-Math.max(b[1],ob[1]); return w>eps&&h>eps; });
+    if(hits.length) issues.push({code:'overlap',message:'Overlaps '+hits.map(function(x){return x.key_id;}).join(', ')+'.',keys:hits.map(function(x){return x.key_id;})});
+    return {ok:!issues.length,issues:issues,area_ha:area}; }
   function body(url,method,reqBody){
     var path=url.replace(/^https?:\/\/[^/]+/,'').replace(/^.*\/api\/v1/,'').split('?')[0];
     var q={}; (url.split('?')[1]||'').split('&').forEach(function(p){var kv=p.split('='); if(kv[0]) q[decodeURIComponent(kv[0])]=decodeURIComponent(kv[1]||'');});
+    if(path==='/geo/model') return ok({subtypes:GEO_SUB,domains:GEO_DOM});
+    if(path==='/geo/layers') return ok(geoItems());
+    var gm=path.match(/^\/geo\/(zone|site|farm_area|field)\/([^/]+)\/(validate|geometry|subtype|history)$/);
+    if(gm){
+      var gcls=gm[1], gid=gm[2], gop=gm[3], gst=geoStore(), now=new Date().toISOString();
+      var gfind=function(){ var L=geoItems(); var lst=gcls==='zone'?L.zones:gcls==='site'?L.sites:gcls==='farm_area'?L.farm_areas:L.fields; return lst.filter(function(x){return x.id===gid;})[0]; };
+      if(gop==='validate') return ok(geoValidate(gcls,gid,reqBody&&reqBody.geometry));
+      if(gop==='history') return ok(((gst[gid]||{}).history||[]).slice().reverse());
+      gst[gid]=gst[gid]||{history:[]};
+      if(gop==='subtype'){ gst[gid].subtype=reqBody?reqBody.subtypeCode:null; gst[gid].history.push({id:Date.now(),operation:'subtype',edited_at:now,edited_by_name:'Demo Manager',area_ha:geoArea(gst[gid].geometry)}); geoSave(gst); return ok(gfind()); }
+      if(method==='DELETE'){ gst[gid].history.push({id:Date.now(),operation:'delete',edited_at:now,edited_by_name:'Demo Manager',area_ha:null}); gst[gid].geometry=null; geoSave(gst); return ok(gfind()); }
+      var gchk=geoValidate(gcls,gid,reqBody&&reqBody.geometry);
+      if(!gchk.ok) return {success:false,error:{code:'GEOMETRY_RULE',message:gchk.issues.map(function(i){return i.message;}).join(' '),details:{issues:gchk.issues}}};
+      var g0=reqBody.geometry; gst[gid].history.push({id:Date.now(),operation:reqBody.operation||(gst[gid].geometry?'edit':'draw'),edited_at:now,edited_by_name:'Demo Manager',area_ha:geoArea(g0)});
+      gst[gid].geometry=g0.type==='Polygon'?{type:'MultiPolygon',coordinates:[g0.coordinates]}:g0; gst[gid].at=now;
+      if(reqBody.subtypeCode!==undefined) gst[gid].subtype=reqBody.subtypeCode;
+      geoSave(gst); return ok(gfind());
+    }
     // Demo inventory: real-looking inputs with stock, minimum level and cost.
     if(path==='/inventory'||path==='/inventory/low-stock'){
       var INV=[['NPK 20-20-20','fertilizer','kg',420,200,6.5,'Yara'],['Calcium nitrate','fertilizer','kg',150,250,4.2,'Yara'],['Potassium sulphate','fertilizer','kg',90,120,5.8,'SQM'],
