@@ -2,12 +2,13 @@
   "name": "agrocloud-android",
   "private": true,
   "version": "1.0.0",
-  "description": "Android (APK) wrapper for the AgroCloud Management demo build",
+  "description": "Android (APK) and iOS wrapper for the AgroCloud Management demo build",
   "scripts": {
     "sync": "rm -rf www && cp -r ../build-demo www && npx cap sync android"
   },
   "dependencies": {
     "@capacitor/android": "6.2.1",
+    "@capacitor/ios": "6.2.1",
     "@capacitor/core": "6.2.1"
   },
   "devDependencies": {

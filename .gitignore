@@ -44,3 +44,4 @@ dump.rdb
 /test-results
 /playwright-report
 dump.rdb
+ios-out/

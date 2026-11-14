@@ -1,0 +1,92 @@
+name: iOS app
+
+# Builds the AgroCloud Management iPhone app (demo build, works offline) with
+# Capacitor on a macOS runner. Without signing secrets the result is an UNSIGNED
+# .ipa, installable with a free Apple ID through Sideloadly / AltStore (they sign
+# it on the user's computer). The latest .ipa is kept on the "ios" branch:
+#   https://github.com/<owner>/<repo>/raw/ios/AgroCloud.ipa
+# It does not create a GitHub Release (that would trigger deploy-production.yml).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ios-app-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install web dependencies
+        run: npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+      - name: Build demo web app
+        env:
+          CI: false
+        run: bash scripts/build-demo.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: build-demo
+          path: build-demo
+          retention-days: 3
+
+  ios:
+    needs: web
+    runs-on: macos-14
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/download-artifact@v4
+        with:
+          name: build-demo
+          path: android-app/www
+      - name: Create iOS project
+        working-directory: android-app
+        run: |
+          npm install --no-audit --no-fund
+          npx cap add ios
+          npx cap sync ios
+      - name: App icon
+        working-directory: android-app
+        continue-on-error: true
+        run: npx @capacitor/assets generate --ios --iconBackgroundColor '#1d5a3c' --splashBackgroundColor '#1d5a3c'
+      - name: Build unsigned app
+        working-directory: android-app/ios/App
+        run: |
+          xcodebuild -workspace App.xcworkspace -scheme App -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build | tail -20
+          APP=$(find build/Build/Products -name "App.app" -type d | head -1)
+          mkdir -p ../../../ios-out/Payload
+          cp -R "$APP" ../../../ios-out/Payload/
+          cd ../../../ios-out && zip -qry AgroCloud.ipa Payload && rm -rf Payload && ls -la
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AgroCloud-ipa
+          path: ios-out/AgroCloud.ipa
+          retention-days: 30
+      - name: Publish IPA to the ios branch
+        run: |
+          cd ios-out
+          git init -q -b ios
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          printf '# AgroCloud Management iOS app (unsigned)\n\nBuilt from %s on %s.\nInstall with Sideloadly or AltStore and your Apple ID.\n' "$GITHUB_SHA" "$(date -u +%Y-%m-%dT%H:%MZ)" > README.md
+          git add AgroCloud.ipa README.md
+          git commit -qm "IPA from ${GITHUB_SHA::7}"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" ios
