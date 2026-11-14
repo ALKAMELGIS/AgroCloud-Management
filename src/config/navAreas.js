@@ -29,7 +29,7 @@ export const GENERAL_SECTION = {
     { text: 'Summary & Contents', path: '/summary' },
     { text: 'Daily Brief', path: '/daily-brief' },
     { text: 'Dashboard', path: '/dashboard' },
-    { text: 'AI Assistant', path: '/assistant' },
+    { text: 'Assistant', path: '/assistant' },
   ],
 };
 

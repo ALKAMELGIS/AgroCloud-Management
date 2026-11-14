@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Box, Drawer, IconButton, Tooltip, Typography } from '@mui/material';
 import {
-  AutoAwesomeOutlined as SparkIcon, CloseRounded as CloseIcon, AddCommentOutlined as NewIcon, OpenInFullRounded as FullIcon,
+  ForumOutlined as ChatIcon, CloseRounded as CloseIcon, AddCommentOutlined as NewIcon, OpenInFullRounded as FullIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import AssistantChat from './AssistantChat';
@@ -21,9 +21,9 @@ export default function AssistantPanel() {
 
   return (
     <>
-      <Tooltip title="AI Assistant">
-        <IconButton aria-label="AI Assistant" onClick={() => setOpen(true)} sx={{ color: 'primary.main' }}>
-          <SparkIcon fontSize="small" />
+      <Tooltip title="Assistant">
+        <IconButton aria-label="Assistant" onClick={() => setOpen(true)}>
+          <ChatIcon fontSize="small" />
         </IconButton>
       </Tooltip>
       <Drawer
@@ -31,8 +31,7 @@ export default function AssistantPanel() {
         slotProps={{ paper: { sx: { width: { xs: '100%', sm: 440 }, display: 'flex', flexDirection: 'column' } } }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, px: 1.5, height: 56, borderBottom: 1, borderColor: 'divider', flexShrink: 0 }}>
-          <SparkIcon color="primary" fontSize="small" />
-          <Typography component="h2" sx={{ fontWeight: 600, fontSize: '0.9375rem', flex: 1, ms: 0.5, ml: 0.5 }}>AI Assistant</Typography>
+          <Typography component="h2" sx={{ fontWeight: 600, fontSize: '0.9375rem', flex: 1, ms: 0.5, ml: 0.5 }}>Assistant</Typography>
           <Tooltip title="New chat">
             <IconButton aria-label="New chat" onClick={() => setConv(null)}><NewIcon fontSize="small" /></IconButton>
           </Tooltip>

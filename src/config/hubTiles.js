@@ -1,7 +1,7 @@
 import {
   DashboardOutlined as DashboardIcon,
   AssessmentOutlined as AssessmentIcon,
-  AutoAwesomeOutlined as AssistantIcon,
+  ForumOutlined as AssistantIcon,
   MapOutlined as MapIcon,
   NotificationsOutlined as NotificationsIcon,
   ScienceOutlined as ScienceIcon,

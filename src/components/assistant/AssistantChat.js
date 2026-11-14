@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  Alert, Avatar, Box, ButtonBase, Chip, CircularProgress, IconButton, InputAdornment, Stack, TextField, Tooltip, Typography,
+  Alert, Box, ButtonBase, Chip, CircularProgress, IconButton, InputAdornment, Stack, TextField, Tooltip, Typography,
 } from '@mui/material';
 import { alpha, useTheme } from '@mui/material/styles';
 import {
-  ArrowUpwardRounded as SendIcon, AutoAwesomeOutlined as SparkIcon, DescriptionOutlined as FormIcon,
+  ArrowUpwardRounded as SendIcon, DescriptionOutlined as FormIcon,
   BarChartRounded as ChartIcon, WarningAmberRounded as PhiIcon, PaidOutlined as CostIcon, HelpOutlineRounded as HowIcon,
 } from '@mui/icons-material';
 import { Link as RouterLink } from 'react-router-dom';
@@ -30,9 +30,6 @@ function Message({ m, ar }) {
   const mine = m.role === 'user';
   return (
     <Box sx={{ display: 'flex', gap: 1, justifyContent: mine ? 'flex-end' : 'flex-start', alignItems: 'flex-start' }}>
-      {!mine && (
-        <Avatar sx={{ width: 26, height: 26, bgcolor: 'primary.main', mt: 0.25 }}><SparkIcon sx={{ fontSize: 15 }} /></Avatar>
-      )}
       <Box sx={{ maxWidth: mine ? '85%' : '100%', minWidth: 0, flex: mine ? '0 1 auto' : 1 }}>
         <Box sx={(t) => ({
           px: mine ? 1.5 : 0, py: mine ? 1 : 0.25, borderRadius: 2,
@@ -125,7 +122,6 @@ export default function AssistantChat({ conversationId, onConversation, compact 
           {messages.length === 0 && !busy ? (
             <Box sx={{ pt: compact ? 2 : { xs: 3, md: 8 }, px: { xs: 0, sm: 1 } }}>
               <Box sx={{ textAlign: 'center', mb: { xs: 2.5, md: 3.5 } }}>
-                <Avatar sx={{ width: 40, height: 40, bgcolor: 'primary.main', mx: 'auto', mb: 1.25 }}><SparkIcon sx={{ fontSize: 20 }} /></Avatar>
                 <Typography component="h2" sx={{ fontWeight: 600, fontSize: { xs: '1.0625rem', md: '1.25rem' }, letterSpacing: '-0.01em' }}>How can I help?</Typography>
               </Box>
               <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: compact ? '1fr' : '1fr 1fr' }, gap: 1, maxWidth: 680, mx: 'auto' }}>

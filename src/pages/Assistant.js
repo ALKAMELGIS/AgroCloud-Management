@@ -6,7 +6,6 @@ import {
 import { alpha } from '@mui/material/styles';
 import {
   AddCommentOutlined as NewIcon, DeleteOutlineRounded as DeleteIcon, HistoryRounded as HistoryIcon,
-  AutoAwesomeOutlined as SparkIcon,
 } from '@mui/icons-material';
 import HelpTip from '../components/HelpTip';
 import AssistantChat from '../components/assistant/AssistantChat';
@@ -132,9 +131,8 @@ export default function Assistant() {
               <IconButton aria-label="Chats" onClick={() => setHistoryOpen(true)} size="small"><HistoryIcon fontSize="small" /></IconButton>
             </Tooltip>
           )}
-          <SparkIcon color="primary" sx={{ fontSize: 18 }} />
           <Typography component="h1" className="page-title" noWrap sx={{ fontSize: '0.9375rem', fontWeight: 600, letterSpacing: '-0.01em', m: 0 }}>
-            AI Assistant
+            Assistant
           </Typography>
           <HelpTip size={20}>
             Answers come only from this system&apos;s database, limited to what you are allowed to see. Lists and reports open as tables you can export to Excel or PDF. The assistant reads only; it does not change data.

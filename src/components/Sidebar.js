@@ -63,7 +63,7 @@ import {
   EditNoteOutlined as ChangeRequestIcon,
   EventNoteOutlined as ActivitySheetIcon,
   ChevronRightRounded as ChevronIcon,
-  AutoAwesomeOutlined as AssistantIcon,
+  ForumOutlined as AssistantIcon,
   LogoutOutlined as LogoutIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';

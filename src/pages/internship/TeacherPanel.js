@@ -8,7 +8,7 @@ import {
   Switch, FormControlLabel, Divider, CircularProgress, Backdrop, Radio, Checkbox, ListItemText,
 } from '@mui/material';
 import {
-  AddOutlined as Add, DeleteOutlined as Delete, EditOutlined as Edit, AutoAwesomeOutlined as AutoAwesome, MenuBookOutlined as MenuBook, QuizOutlined as Quiz,
+  AddOutlined as Add, DeleteOutlined as Delete, EditOutlined as Edit, EditNoteOutlined as AutoAwesome, MenuBookOutlined as MenuBook, QuizOutlined as Quiz,
   SchoolOutlined as School, AssessmentOutlined as Assessment, UploadFileOutlined as UploadFile, CloseOutlined as Close, SendOutlined as Send, ChatOutlined as Chat,
 } from '@mui/icons-material';
 import { apiRequest } from '../../utils/api';

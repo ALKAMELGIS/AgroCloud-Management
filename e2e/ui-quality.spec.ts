@@ -983,7 +983,7 @@ test.describe('AI assistant', () => {
     await page.route(/\/api\/v1\/ai\/status/, (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, data: { configured: true } }) }));
     await page.goto('/harvest/dashboard');
     await settle(page);
-    await page.getByRole('banner').getByRole('button', { name: 'AI Assistant' }).click();
+    await page.getByRole('banner').getByRole('button', { name: 'Assistant' }).click();
     await expect(page.getByRole('textbox', { name: 'Ask about your data…' })).toBeVisible();
     await expect(page.getByText('Total harvest this month per field?')).toBeVisible();
   });
