@@ -594,3 +594,4 @@ Pages:
 ## Round 57 — Company logo
 - The company's own mark (green ring and leaves), unchanged, replaces the leaf icon in the sidebar and on the sign-in page (`components/BrandLogo`, `public/brand-logo.png` with a transparent background).
 - favicon.ico (16/32/48), logo192.png and logo512.png (app / home-screen icons) made from the same mark. An organisation logo uploaded in the sidebar still takes its place.
+- Phone apps (round 57): android-app/assets now holds the company mark on white (icon, adaptive foreground/background, splash); the APK and iOS workflows generate icons on a white background instead of dark green.

@@ -52,7 +52,7 @@ jobs:
       - name: App icon
         working-directory: android-app
         continue-on-error: true
-        run: npx @capacitor/assets generate --android --iconBackgroundColor '#1d5a3c' --splashBackgroundColor '#1d5a3c'
+        run: npx @capacitor/assets generate --android --iconBackgroundColor '#ffffff' --splashBackgroundColor '#ffffff'
 
       - name: Build APK
         working-directory: android-app/android
