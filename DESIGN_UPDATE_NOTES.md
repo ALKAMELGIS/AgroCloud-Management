@@ -590,3 +590,7 @@ Pages:
 - Phone EC/PH records: list grouped by day (field, time, EC in→out, pH in→out) and a bottom sheet with every value, edit, delete, previous/next.
 - Tablet: the records table freezes only the tick box and date (five frozen columns covered the screen); the entry sheet has grouped headers (EC · pH · Volume · Water) with In/Out under them.
 - Data feeds: explanation text removed (intro cards, relationship paragraph → "?" tooltip, footer shows the record count only); phone rows show name, path, copy and manage.
+
+## Round 57 — Company logo
+- The company's own mark (green ring and leaves), unchanged, replaces the leaf icon in the sidebar and on the sign-in page (`components/BrandLogo`, `public/brand-logo.png` with a transparent background).
+- favicon.ico (16/32/48), logo192.png and logo512.png (app / home-screen icons) made from the same mark. An organisation logo uploaded in the sidebar still takes its place.

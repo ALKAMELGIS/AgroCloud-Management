@@ -77,6 +77,7 @@ import usePhiAuditBadgeCount from '../hooks/usePhiAuditBadgeCount';
 import useOperatorWorkOrderBadgeCount from '../hooks/useOperatorWorkOrderBadgeCount';
 import useChangeRequestBadgeCount from '../hooks/useChangeRequestBadgeCount';
 import useManpowerApprovalBadgeCount from '../hooks/useManpowerApprovalBadgeCount';
+import BrandLogo from './BrandLogo';
 import useOrganizationLogo from '../hooks/useOrganizationLogo';
 import { canUploadOrgLogo, uploadOrganizationLogo } from '../utils/organizationLogo';
 import { useNotification } from '../contexts/NotificationContext';
@@ -322,9 +323,7 @@ function Sidebar({ open, mobileOpen, onMobileClose, activeNavArea }) {
               width: 34,
               height: 34,
               borderRadius: 1.25,
-              bgcolor: logoUrl && !logoUploading ? 'transparent' : 'primary.main',
-              backgroundImage: logoUrl && !logoUploading ? 'none' : (t) => `linear-gradient(145deg, ${t.palette.primary.light}, ${t.palette.primary.dark})`,
-              boxShadow: (t) => `inset 0 1px 0 rgba(255,255,255,0.18), 0 1px 2px ${t.palette.mode === 'dark' ? 'rgba(0,0,0,0.5)' : 'rgba(22,92,58,0.25)'}`,
+              bgcolor: logoUploading ? 'primary.main' : logoUrl ? 'transparent' : '#fff',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -344,7 +343,7 @@ function Sidebar({ open, mobileOpen, onMobileClose, activeNavArea }) {
                 sx={{ width: 34, height: 34, objectFit: 'cover', display: 'block' }}
               />
             ) : (
-              <EcoIcon sx={{ fontSize: 20 }} />
+              <BrandLogo size={32} />
             )}
           </Box>
         </Tooltip>

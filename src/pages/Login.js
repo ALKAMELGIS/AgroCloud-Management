@@ -14,7 +14,8 @@ import {
   useMediaQuery,
   useTheme,
 } from '@mui/material';
-import { SpaOutlined as EcoIcon, LanguageOutlined as LanguageIcon } from '@mui/icons-material';
+import { LanguageOutlined as LanguageIcon } from '@mui/icons-material';
+import BrandLogo from '../components/BrandLogo';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
 import { getFriendlyError } from '../utils/errorMessages';
@@ -246,13 +247,13 @@ function Login() {
                 width: 40,
                 height: 40,
                 borderRadius: 1.25,
-                bgcolor: 'rgba(255,255,255,0.12)',
+                bgcolor: '#fff',
                 border: '1px solid rgba(255,255,255,0.18)',
                 display: 'grid',
                 placeItems: 'center',
               }}
             >
-              <EcoIcon sx={{ fontSize: 20, color: '#fff' }} />
+              <BrandLogo size={30} />
             </Box>
             <Typography sx={{ fontWeight: 600, fontSize: '1rem', color: '#fff', letterSpacing: '-0.01em' }}>
               {tr('Elite Agro Cloud')}
@@ -323,12 +324,12 @@ function Login() {
                   width: 38,
                   height: 38,
                   borderRadius: 1.25,
-                  backgroundImage: (t) => `linear-gradient(145deg, ${t.palette.primary.light}, ${t.palette.primary.dark})`,
+                  bgcolor: '#fff',
                   display: 'grid',
                   placeItems: 'center',
                 }}
               >
-                <EcoIcon sx={{ fontSize: 20, color: '#fff' }} />
+                <BrandLogo size={30} />
               </Box>
               <Typography sx={{ fontWeight: 600, fontSize: '1rem', color: 'text.primary', letterSpacing: '-0.01em' }}>
                 {tr('Elite Agro Cloud')}
