@@ -61,13 +61,15 @@ function FitMap({ bounds, fitKey }) {
   return null;
 }
 
-/** Map of the candidate fields; clicking a shape (or a row in the Fields panel) picks that field. */
-export function FieldMapDialog({ open, onClose, fields, value, onPick }) {
+/**
+ * Map of the candidate fields with its tools (fields list, legend, basemap,
+ * show all, my location). Clicking a shape or a row picks that field. Used
+ * inline in the forms, and in a dialog where a form has no room for it.
+ */
+export function FieldMapView({ fields, value, onPick, height = 380, inline = false }) {
   const isAr = useIsArabic();
-  const theme = useTheme();
-  const isPhone = useMediaQuery(theme.breakpoints.down('sm'));
   const geo = useGeo();
-  const ws = useMapWorkspace('fieldpick.workspace', 'fields');
+  const ws = useMapWorkspace(inline ? 'fieldpick.inline' : 'fieldpick.workspace', inline ? null : 'fields');
   const [basemap, setBasemap] = useBasemap('fieldpick.basemap', 'satellite');
   const [query, setQuery] = useState('');
   const [hover, setHover] = useState(null);
@@ -86,7 +88,8 @@ export function FieldMapDialog({ open, onClose, fields, value, onPick }) {
     });
     return b;
   }, [fc]);
-  useEffect(() => { if (open && allBounds) setFit((v) => ({ key: v.key + 1, bounds: allBounds })); }, [open, allBounds]);
+  const fitSig = fc.features.map((f) => f.properties.id).join(',');
+  useEffect(() => { if (allBounds) setFit((v) => ({ key: v.key + 1, bounds: allBounds })); }, [fitSig]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const typeName = (st) => (st ? (isAr ? (st.name_ar || AR_TYPES[st.name_en] || st.name_en) : st.name_en) : (isAr ? 'بدون نوع' : 'No type'));
   const legend = useMemo(() => {
@@ -100,7 +103,7 @@ export function FieldMapDialog({ open, onClose, fields, value, onPick }) {
 
   const q = query.trim().toLowerCase();
   const list = fields.filter((f) => !q || f.name.toLowerCase().includes(q) || String(geo?.byId[f.id]?.key_id || '').toLowerCase().includes(q));
-  const pick = (id) => { onPick(id); onClose(); };
+  const pick = (id) => onPick(id);
   const fieldsPanel = (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
       <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
@@ -132,66 +135,80 @@ export function FieldMapDialog({ open, onClose, fields, value, onPick }) {
 
   const bm = BASEMAPS[basemap] || BASEMAPS.satellite;
   return (
+    <>
+    {!geo ? (
+      <Typography sx={{ p: 3, fontSize: '0.875rem', color: 'text.secondary' }}>{isAr ? 'جارٍ التحميل…' : 'Loading…'}</Typography>
+    ) : !shaped.length ? (
+      <Typography sx={{ p: 3, fontSize: '0.875rem', color: 'text.secondary' }}>
+        {isAr ? 'لا أشكال لهذه الحقول بعد. ارسمها أو استوردها من ArcGIS في المناطق والمواقع ← الخريطة.' : 'These fields have no shapes yet. Draw or import them in Zones & Sites → Map.'}
+      </Typography>
+    ) : (
+      <MapWorkspace
+        id={inline ? 'fieldpick-inline' : 'fieldpick'}
+        height={height}
+        workspace={ws}
+        label={isAr ? 'أدوات الخريطة' : 'Map tools'}
+        tools={[
+          { key: 'fields', label: isAr ? 'الحقول' : 'Fields', title: isAr ? 'حقول منطقة المزرعة' : 'Fields of the farm area', icon: <ListIcon />, content: fieldsPanel },
+          { key: 'legend', label: isAr ? 'المفتاح' : 'Legend', title: isAr ? 'مفتاح الخريطة' : 'Legend', icon: <LegendIcon />, content: <MapLegend sections={legend} /> },
+          { key: 'basemap', label: isAr ? 'خريطة الأساس' : 'Basemap', title: isAr ? 'خريطة الأساس' : 'Basemap', icon: <BasemapIcon />, content: <BasemapList value={basemap} onChange={setBasemap} /> },
+          { divider: true, key: 'd1' },
+          { key: 'all', label: isAr ? 'عرض الكل' : 'Show all', icon: <FitIcon />, onClick: () => setFit((v) => ({ key: v.key + 1, bounds: allBounds })) },
+          ...(typeof navigator !== 'undefined' && navigator.geolocation ? [{
+            key: 'locate', label: isAr ? 'موقعي' : 'My location', icon: <LocateIcon />, pressed: !!me,
+            onClick: () => navigator.geolocation.getCurrentPosition(
+              (pos) => { const p0 = [pos.coords.latitude, pos.coords.longitude]; setMe(p0); setFit((v) => ({ key: v.key + 1, bounds: [[p0[0] - 0.0015, p0[1] - 0.0015], [p0[0] + 0.0015, p0[1] + 0.0015]] })); },
+              () => setMe(null), { enableHighAccuracy: true, timeout: 10000 },
+            ),
+          }] : []),
+        ]}
+      >
+        <MapContainer bounds={allBounds} boundsOptions={{ padding: [24, 24], maxZoom: 18 }} attributionControl={false} style={{ height: '100%', width: '100%' }}>
+          <MapLifecycle />
+          <TileLayer key={basemap} url={bm.url} maxZoom={20} />
+          <FitMap bounds={fit.bounds} fitKey={fit.key} />
+          {me && <CircleMarker center={me} radius={7} pathOptions={{ color: '#ffffff', weight: 2, fillColor: '#1a73e8', fillOpacity: 1 }} />}
+          <GeoJSON
+            key={`${value}-${hover}-${fc.features.length}`}
+            data={fc}
+            style={(f) => {
+              const st = subtypeOf(geo, f.properties.sub);
+              const sel = f.properties.id === value;
+              const hot = f.properties.id === hover;
+              return { color: sel ? '#f2c94c' : hot ? '#ffffff' : (st?.line_color || '#1f7a4d'), weight: sel || hot ? 3 : 1.5, fillColor: st?.fill_color || '#e8f2ec', fillOpacity: sel ? 0.55 : hot ? 0.45 : 0.3 };
+            }}
+            onEachFeature={(f, lyr) => {
+              lyr.bindTooltip(`${f.properties.key || ''} · ${f.properties.name}`, { sticky: true, direction: 'top' });
+              lyr.on('click', () => pick(f.properties.id));
+            }}
+          />
+        </MapContainer>
+      </MapWorkspace>
+    )}
+    </>
+  );
+}
+
+/** The same map in a dialog (forms without room for an inline map). */
+export function FieldMapDialog({ open, onClose, fields, value, onPick }) {
+  const isAr = useIsArabic();
+  const theme = useTheme();
+  const isPhone = useMediaQuery(theme.breakpoints.down('sm'));
+  const geo = useGeo();
+  const shaped = geo ? fields.filter((f) => geo.byId[f.id]?.geometry).length : 0;
+  return (
     <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth fullScreen={isPhone}>
       <DialogTitle sx={{ fontSize: '1rem', display: 'flex', alignItems: 'center', gap: 2 }}>
         <Box component="span" sx={{ flex: 1 }}>{isAr ? 'اختر الحقل من الخريطة' : 'Pick the field on the map'}</Box>
-        {geo && shaped.length ? (
+        {shaped ? (
           <Typography component="span" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
-            {isAr ? `${shaped.length} من ${fields.length} حقل على الخريطة` : `${shaped.length} of ${fields.length} fields on the map`}
+            {isAr ? `${shaped} من ${fields.length} حقل على الخريطة` : `${shaped} of ${fields.length} fields on the map`}
           </Typography>
         ) : null}
         <IconButton size="small" onClick={onClose} aria-label={isAr ? 'إغلاق' : 'Close'}><CloseIcon fontSize="small" /></IconButton>
       </DialogTitle>
       <DialogContent sx={{ p: 0, height: isPhone ? 'auto' : 600, display: 'flex', flexDirection: 'column' }}>
-        {!geo ? (
-          <Typography sx={{ p: 3, fontSize: '0.875rem', color: 'text.secondary' }}>{isAr ? 'جارٍ التحميل…' : 'Loading…'}</Typography>
-        ) : !shaped.length ? (
-          <Typography sx={{ p: 3, fontSize: '0.875rem', color: 'text.secondary' }}>
-            {isAr ? 'لا أشكال لهذه الحقول بعد. ارسمها أو استوردها من ArcGIS في المناطق والمواقع ← الخريطة.' : 'These fields have no shapes yet. Draw or import them in Zones & Sites → Map.'}
-          </Typography>
-        ) : (
-          <MapWorkspace
-            id="fieldpick"
-            height={isPhone ? 'calc(100vh - 64px)' : 600}
-            workspace={ws}
-            label={isAr ? 'أدوات الخريطة' : 'Map tools'}
-            tools={[
-              { key: 'fields', label: isAr ? 'الحقول' : 'Fields', title: isAr ? 'حقول منطقة المزرعة' : 'Fields of the farm area', icon: <ListIcon />, content: fieldsPanel },
-              { key: 'legend', label: isAr ? 'المفتاح' : 'Legend', title: isAr ? 'مفتاح الخريطة' : 'Legend', icon: <LegendIcon />, content: <MapLegend sections={legend} /> },
-              { key: 'basemap', label: isAr ? 'خريطة الأساس' : 'Basemap', title: isAr ? 'خريطة الأساس' : 'Basemap', icon: <BasemapIcon />, content: <BasemapList value={basemap} onChange={setBasemap} /> },
-              { divider: true, key: 'd1' },
-              { key: 'all', label: isAr ? 'عرض الكل' : 'Show all', icon: <FitIcon />, onClick: () => setFit((v) => ({ key: v.key + 1, bounds: allBounds })) },
-              ...(typeof navigator !== 'undefined' && navigator.geolocation ? [{
-                key: 'locate', label: isAr ? 'موقعي' : 'My location', icon: <LocateIcon />, pressed: !!me,
-                onClick: () => navigator.geolocation.getCurrentPosition(
-                  (pos) => { const p0 = [pos.coords.latitude, pos.coords.longitude]; setMe(p0); setFit((v) => ({ key: v.key + 1, bounds: [[p0[0] - 0.0015, p0[1] - 0.0015], [p0[0] + 0.0015, p0[1] + 0.0015]] })); },
-                  () => setMe(null), { enableHighAccuracy: true, timeout: 10000 },
-                ),
-              }] : []),
-            ]}
-          >
-            <MapContainer bounds={allBounds} boundsOptions={{ padding: [24, 24], maxZoom: 18 }} attributionControl={false} style={{ height: '100%', width: '100%' }}>
-              <MapLifecycle />
-              <TileLayer key={basemap} url={bm.url} maxZoom={20} />
-              <FitMap bounds={fit.bounds} fitKey={fit.key} />
-              {me && <CircleMarker center={me} radius={7} pathOptions={{ color: '#ffffff', weight: 2, fillColor: '#1a73e8', fillOpacity: 1 }} />}
-              <GeoJSON
-                key={`${value}-${hover}-${fc.features.length}`}
-                data={fc}
-                style={(f) => {
-                  const st = subtypeOf(geo, f.properties.sub);
-                  const sel = f.properties.id === value;
-                  const hot = f.properties.id === hover;
-                  return { color: sel ? '#f2c94c' : hot ? '#ffffff' : (st?.line_color || '#1f7a4d'), weight: sel || hot ? 3 : 1.5, fillColor: st?.fill_color || '#e8f2ec', fillOpacity: sel ? 0.55 : hot ? 0.45 : 0.3 };
-                }}
-                onEachFeature={(f, lyr) => {
-                  lyr.bindTooltip(`${f.properties.key || ''} · ${f.properties.name}`, { sticky: true, direction: 'top' });
-                  lyr.on('click', () => pick(f.properties.id));
-                }}
-              />
-            </MapContainer>
-          </MapWorkspace>
-        )}
+        <FieldMapView fields={fields} value={value} onPick={(id) => { onPick(id); onClose(); }} height={isPhone ? 'calc(100vh - 64px)' : 600} />
       </DialogContent>
     </Dialog>
   );
@@ -202,7 +219,7 @@ export function FieldMapDialog({ open, onClose, fields, value, onPick }) {
  * onChange, error, helperText, label, sx…) plus `fields` (the candidates).
  */
 export default function FieldSelect({
-  fields = [], value, onChange, name = 'field', label, error, helperText, disabled, sx, placeholder, onBlur, ...rest
+  fields = [], value, onChange, name = 'field', label, error, helperText, disabled, sx, placeholder, onBlur, mapButton = true, ...rest
 }) {
   const isAr = useIsArabic();
   const geo = useGeo();
@@ -212,7 +229,7 @@ export default function FieldSelect({
   const st = subtypeOf(geo, g?.subtype_code ?? current?.subtypeCode);
   const typeName = st ? (isAr ? (st.name_ar || AR_TYPES[st.name_en] || st.name_en) : st.name_en) : (current?.type || null);
   const key = g?.key_id || current?.keyId || null;
-  const anyShape = !!geo && fields.some((f) => geo.byId[f.id]?.geometry);
+  const anyShape = mapButton && !!geo && fields.some((f) => geo.byId[f.id]?.geometry);
   const emit = (id) => onChange?.({ target: { name, value: id } });
 
   const keyLine = current && (key || typeName) ? (

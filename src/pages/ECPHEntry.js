@@ -26,7 +26,7 @@ import { Formik, Form } from 'formik';
 import { getCropDripperCount, getCropDripTestCount } from '../utils/masterDataUtils';
 import { useMasterData } from '../utils/useMasterData';
 import { createEcph } from '../utils/backendApi';
-import FieldSelect from '../components/geo/FieldSelect';
+import FieldSelect, { FieldMapView } from '../components/geo/FieldSelect';
 import { useNotification } from '../contexts/NotificationContext';
 import { queueEntry } from '../utils/offlineQueue';
 import { validationSchema, calculateValveMetrics } from './ecph/ecphUtils';
@@ -529,6 +529,7 @@ function ECPHEntry() {
                         error={touched.field && !!errors.field}
                         helperText={touched.field && errors.field}
                         fields={allFields.filter(f => !values.farmArea || f.farmAreaId === values.farmArea)}
+                        mapButton={false}
                         sx={{ ...SELECT_SX, ...span({ xs: 2, md: 2 }) }}
                       />
                       <TextField
@@ -571,6 +572,18 @@ function ECPHEntry() {
                           ? ` · ${dripperCount.toLocaleString()} drippers`
                           : ' · no drip calculation, uses total water qty'}
                       </Typography>
+                    )}
+                    {/* The farm area's fields on the map: a click on a shape chooses the field. */}
+                    {values.farmArea && (
+                      <Box sx={{ mt: 3, border: 1, borderColor: 'divider' }}>
+                        <FieldMapView
+                          inline
+                          height={360}
+                          fields={allFields.filter(f => f.farmAreaId === values.farmArea)}
+                          value={values.field}
+                          onPick={(id) => setFieldValue('field', id)}
+                        />
+                      </Box>
                     )}
                   </FormSection>
                   </FormStep>
