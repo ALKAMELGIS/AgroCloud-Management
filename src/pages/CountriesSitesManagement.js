@@ -270,7 +270,7 @@ function CountriesSitesManagement() {
           {canConfigureGis && <Tab value="gis" label="GIS configuration" />}
         </Tabs>
 
-        {tab === 'map' ? <GeoEditor canEdit={isCeo || isFarmManager} /> : tab === 'gis' ? <GisRelationshipConfig /> : (<>
+        {tab === 'map' ? <GeoEditor canEdit={isCeo || isFarmManager} canImport={isCeo} /> : tab === 'gis' ? <GisRelationshipConfig /> : (<>
 
         {scopeNote ? (
           <InfoNote mode="line" severity="info" sx={{ mb: 2 }}>{scopeNote}</InfoNote>

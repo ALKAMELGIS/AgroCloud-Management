@@ -122,6 +122,34 @@
     var q={}; (url.split('?')[1]||'').split('&').forEach(function(p){var kv=p.split('='); if(kv[0]) q[decodeURIComponent(kv[0])]=decodeURIComponent(kv[1]||'');});
     if(path==='/geo/model') return ok({subtypes:GEO_SUB,domains:GEO_DOM});
     if(path==='/geo/layers') return ok(geoItems());
+    if(path==='/geo/import/arcgis'){
+      var io=reqBody||{}, ist=JSON.parse(JSON.stringify(geoStore())), inow=new Date().toISOString();
+      var SUBC=function(t){ t=String(t||'').toLowerCase(); return /pivot/.test(t)?4:/nurs/.test(t)?5:/net|shade/.test(t)?2:/open|field/.test(t)?3:/green|glass|tunnel/.test(t)?1:null; };
+      var rep={dryRun:!!io.dryRun,candidates:0,imported:0,skippedExisting:0,repaired:0,bySubtype:{},parents:{farm_area:0,site:0,zone:0},overlaps:[]};
+      (DEMOFC.features||[]).forEach(function(ft){ var pr=ft.properties||{};
+        var fl=fields.filter(function(f){ return f.gis_zone_id===pr.ZONE_ID&&f.gis_farm_code===pr.Farm_Code; })[0]; if(!fl) return;
+        rep.candidates++; ist[fl.id]=ist[fl.id]||{history:[]};
+        if(ist[fl.id].geometry&&!io.overwrite){ rep.skippedExisting++; return; }
+        var code=SUBC(pr.Structure_Type); rep.bySubtype[code||'none']=(rep.bySubtype[code||'none']||0)+1;
+        ist[fl.id].geometry={type:'MultiPolygon',coordinates:[ft.geometry.coordinates]}; if(code) ist[fl.id].subtype=code; ist[fl.id].at=inow;
+        (ist[fl.id].history=ist[fl.id].history||[]).push({id:Date.now()+rep.imported,operation:'import',edited_at:inow,edited_by_name:'Demo Manager',area_ha:geoArea(ist[fl.id].geometry)});
+        rep.imported++; });
+      if(io.buildParents){
+        var pad={farm_area:0.00003,site:0.0001,zone:0.0002};
+        [['farm_area',areas,function(a){return fields.filter(function(f){return f.farmAreaId===a.id;});}],
+         ['site',sites,function(x){return areas.filter(function(a){return a.siteId===x.id;});}],
+         ['zone',countries,function(c){return sites.filter(function(x){return x.countryId===c.id;});}]].forEach(function(step){
+          step[1].forEach(function(par){ if(ist[par.id]&&ist[par.id].geometry) return;
+            var kids=step[2](par).map(function(k){return ist[k.id]&&ist[k.id].geometry;}).filter(Boolean); if(!kids.length) return;
+            var bb=[180,90,-180,-90]; kids.forEach(function(g){ var b=geoBBox(g); bb=[Math.min(bb[0],b[0]),Math.min(bb[1],b[1]),Math.max(bb[2],b[2]),Math.max(bb[3],b[3])]; });
+            var d=pad[step[0]]; ist[par.id]=ist[par.id]||{history:[]};
+            ist[par.id].geometry=geoRect(bb[0]-d,bb[1]-d,bb[2]-bb[0]+2*d,bb[3]-bb[1]+2*d); ist[par.id].at=inow;
+            (ist[par.id].history=ist[par.id].history||[]).push({id:Date.now(),operation:'import',edited_at:inow,edited_by_name:'Demo Manager',area_ha:geoArea(ist[par.id].geometry)});
+            rep.parents[step[0]]++; }); });
+      }
+      if(!io.dryRun) geoSave(ist);
+      return ok(rep);
+    }
     var gm=path.match(/^\/geo\/(zone|site|farm_area|field)\/([^/]+)\/(validate|geometry|subtype|history)$/);
     if(gm){
       var gcls=gm[1], gid=gm[2], gop=gm[3], gst=geoStore(), now=new Date().toISOString();

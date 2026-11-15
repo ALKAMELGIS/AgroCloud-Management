@@ -23,6 +23,7 @@ import useFillHeight from '../../hooks/useFillHeight';
 import { apiRequest } from '../../utils/api';
 import { useNotification } from '../../contexts/NotificationContext';
 import { useIsArabic } from '../../i18n/shellLabels';
+import ArcgisImportDialog from './ArcgisImportDialog';
 import { areaHa, boundsOf, circlePolygon, readBoundaryFile, toMultiPolygon, GEO_CLASSES } from './geoUtils';
 
 /**
@@ -116,7 +117,7 @@ function FitTo({ bounds, fitKey, bottomPad }) {
   return null;
 }
 
-export default function GeoEditor({ canEdit }) {
+export default function GeoEditor({ canEdit, canImport = false }) {
   const notify = useNotification();
   const isAr = useIsArabic();
   const theme = useTheme();
@@ -139,13 +140,14 @@ export default function GeoEditor({ canEdit }) {
   const [history, setHistory] = useState(null);
   const [fit, setFit] = useState({ key: 0, bounds: null });
   const fileRef = useRef(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   const load = useCallback(async () => {
     const [l, m] = await Promise.all([apiRequest('/geo/layers'), apiRequest('/geo/model')]);
     setLayers(l); setModel(m || { subtypes: [], domains: [] });
     return l;
   }, []);
-  useEffect(() => {
+  const loadAndFit = useCallback(() => {
     load().then((l) => {
       const all = GEO_CLASSES.flatMap((c) => l[c.list] || []).filter((x) => x.geometry);
       if (!all.length) return;
@@ -160,6 +162,7 @@ export default function GeoEditor({ canEdit }) {
       setFit((f) => ({ key: f.key + 1, bounds: b }));
     }).catch((e) => notify.error(e.message));
   }, [load]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { loadAndFit(); }, [loadAndFit]);
 
   const byId = useMemo(() => {
     const m = {};
@@ -350,9 +353,16 @@ export default function GeoEditor({ canEdit }) {
               label={c.label} />
           ))}
         </Box>
-        <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
-          {isAr ? `${counts.drawn} مرسوم من ${counts.total}` : `${counts.drawn} of ${counts.total} drawn`}
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
+          <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+            {isAr ? `${counts.drawn} مرسوم من ${counts.total}` : `${counts.drawn} of ${counts.total} drawn`}
+          </Typography>
+          {canImport && (
+            <Button size="small" startIcon={<ImportIcon />} onClick={() => setImportOpen(true)} disabled={editing}>
+              {isAr ? 'استيراد من ArcGIS' : 'Import from ArcGIS'}
+            </Button>
+          )}
+        </Box>
       </Box>
       <Box role="tree" aria-label="Zones, sites, farm areas and fields" sx={{ flex: 1, minHeight: 0, overflow: 'auto', py: 1 }}>
         {!layers ? <Box sx={{ p: 3 }}><CircularProgress size={20} /></Box> : tree.map(renderNode)}
@@ -534,6 +544,7 @@ export default function GeoEditor({ canEdit }) {
           )}
         </Box>
       </MapWorkspace>
+      {canImport && <ArcgisImportDialog open={importOpen} onClose={() => setImportOpen(false)} onDone={loadAndFit} />}
       <input ref={fileRef} type="file" accept=".geojson,.json,.kml,.zip" hidden onChange={(e) => { importFile(e.target.files?.[0]); e.target.value = ''; }} />
     </Box>
   );

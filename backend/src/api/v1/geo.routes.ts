@@ -63,3 +63,10 @@ geoRouter.patch('/:cls/:id/subtype', requireWriter, validate({ body: z.object({ 
 geoRouter.get('/:cls/:id/history', requireReader, asyncHandler(async (req: AuthRequest, res: Response) => {
   res.json({ success: true, data: await geo.history(requireOrgId(req), classParam(req.params.cls), req.params.id) });
 }));
+
+/** One-time copy of the linked ArcGIS shapes into AgroCloud (CEO only). dryRun reports without saving. */
+geoRouter.post('/import/arcgis', authorize('ceo'),
+  validate({ body: z.object({ dryRun: z.boolean().optional(), overwrite: z.boolean().optional(), buildParents: z.boolean().optional() }) }),
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    res.json({ success: true, data: await geo.importFromLinkedLayer(requireOrgId(req), actorOf(req), req.body) });
+  }));
