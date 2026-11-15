@@ -572,3 +572,15 @@ Pages:
 - When on, the live index shows inside the drawn area AND inside PIVOT 1006 / Farm Plots 1007 (each type can be ticked off). Both are clipped inside each tile (the drawn area joins the field shapes), so no server GEOMETRY cut hides the fields.
 - With the switch on, the fields show their index even before an area is drawn; the legend stays visible.
 - Area facts (BSI/NDVI stats) stay those of the drawn area. Metadata "Clip" reads "My area + Agro_Structures · 1006, 1007".
+
+## Round 54 — A data path for each form (ArcGIS · Power BI)
+- Each form has its own Path: `/api/v1/feeds/<form>.csv|geojson|json` (ecph, fertigation, irrigation, harvest, crop-rotation, pump-room), optional `?keyid=` and `?since=YYYY-MM-DD`.
+- Read keys are per form (`X-API-Key`, shown once, SHA-256 stored, revocable). A key opens only its own form of its own organisation. Staff names are left out unless turned on.
+- All forms are 1 : N with Agro_Structures (records are saved one per field; fertigation/irrigation groups are only for entry), linked by GlobalID → STRUCT_GLOBALID (pump room: Site KeyID → SITE_KEYID). No bridge table needed.
+- ArcGIS: "Create table in ArcGIS" adds a hosted table to the Agro_Structures service (needs an owner/admin token); sync replaces the table's rows every 5 min / hourly / daily. Layer 21 is never written. Relationship class: created once in ArcGIS Pro (origin GlobalID, destination STRUCT_GLOBALID, one to many).
+- UI: "Path" button on EC/PH, Fertigation, Irrigation, Harvest, Crop Rotation, Pump Room; new "Data feeds" tab in Zones & Sites Management.
+- Migration 179 (form_feeds, feed_keys). Tests: 12 (SQL of every form runs on PostGIS).
+
+## Round 55 — Frozen Field column
+- EC/PH and Fertigation sheets: the Field header was static while its cells were sticky, so scrolling sideways left the cells covering Valve/Time. The header is sticky again.
+- Phone/tablet redesign of the record tables shown in design (field cards on phone, records list + record sheet, tablet sheet with grouped headers); waiting for approval.
