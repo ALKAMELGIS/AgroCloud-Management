@@ -165,11 +165,11 @@
 
     if(path==='/gis/layers'&&method==='GET') return ok([{id:'demo-struct',name:'Agro_Structures (GCC)',sourceType:'arcgis_feature_service',featureCount:0,isVisible:true,style:{color:'#1f7a4d',fillOpacity:0.25}}]);
     if(path==='/gis/layers/demo-struct/features') return ok(EMPTYFC);
-    if(path==='/satellite/status'){ var dc=window.__devSat&&window.__devSat.cfg(); return ok(dc?{configured:true,service:dc.service,label:(dc.label||'Sentinel-2')+' · live on this device'}:{configured:true,service:'sentinel-hub',label:'Sample imagery (save your configuration ID in Settings → API keys)'}); }
+    if(path==='/satellite/status'){ var dc=window.__devSat&&window.__devSat.cfg(); return ok(dc?{configured:true,service:dc.service,label:(dc.label||'Sentinel-2')+' · live on this device'}:{configured:false,service:'sentinel-hub',label:null}); }
     if(path==='/satellite/indices') return ok(SATCAT);
     if(path==='/satellite/tile-key') return ok({key:'demo.key',expiresAt:new Date(Date.now()+12*3600e3).toISOString()});
-    if(path==='/satellite/scenes'){ var sc=[],d0=new Date(q.to||Date.now()); for(var si=0;si<8;si++){ var dd=new Date(d0.getTime()-si*5*864e5); var cc=[3,12,0,27,8,41,5,16][si]; if(cc<=Number(q.maxcc||100)) sc.push({date:dd.toISOString().slice(0,10),cloud:cc,tiles:2,time:null}); } return ok(sc); }
-    if(path==='/satellite/stats'){ var st=[],a=new Date(reqBody.from),b=new Date(reqBody.to); for(var tt=a.getTime(),n=0;tt<=b.getTime();tt+=5*864e5,n++){ var base={NDVI:0.55,SAVI:0.4,NDWI:-0.45,NDMI:0.18,NDII:0.18,MSI:0.8,BSI:-0.1}[reqBody.index]||0.3; var m=base+0.08*Math.sin(n/2)+0.02*((n*7)%3-1); st.push({date:new Date(tt).toISOString().slice(0,10),mean:Math.round(m*1000)/1000,min:Math.round((m-0.25)*1000)/1000,max:Math.round((m+0.2)*1000)/1000}); } return ok(st); }
+    if(path==='/satellite/scenes') return ok([]);
+    if(path==='/satellite/stats') return ok([]);
     if(path==='/settings/sentinelhub'&&method==='GET'){ var c2=window.__devSat&&window.__devSat.cfg(); return ok(c2?{configured:true,idMasked:c2.id.slice(0,4)+'••••-••••-'+c2.id.slice(-4),service:c2.service,label:c2.label||null}:{configured:false,idMasked:null,service:'sentinel-hub',label:null}); }
     if(path==='/ai/status') return ok({configured:true,provider:'demo',model:'demo'});
     if(path==='/ai/conversations') return ok(AICONV);
@@ -339,6 +339,33 @@
   }
   function pickLayer(ls){ var ids=ls.map(function(l){return l.id;});
     return ids.filter(function(x){return /^TRUE[_-]?COLOR$/i.test(x);})[0]||ids.filter(function(x){return /TRUE|NATURAL|L2A|NDVI/i.test(x);})[0]||ids[0]||'TRUE_COLOR'; }
+  /* Index range encoded in the PNG for the time series (value = lo + (hi-lo) * R/255). */
+  var SERIES_RANGE={NDVI:[-1,1],SAVI:[-1,1],NDWI:[-1,1],NDMI:[-1,1],NDII:[-1,1],BSI:[-1,1],MSI:[0,3]};
+  function satSeries(b){
+    var c=satCfg(), idx=IDX[b.index]; if(!idx||idx.rgb) return Promise.resolve([]);
+    var m=String(b.geometry||'').match(/-?\d+(\.\d+)?\s+-?\d+(\.\d+)?/g)||[]; if(!m.length) return Promise.resolve([]);
+    var xs=[],ys=[]; m.forEach(function(t){ var a=t.trim().split(/\s+/).map(Number); xs.push(a[0]); ys.push(a[1]); });
+    var bbox=[Math.min.apply(null,xs),Math.min.apply(null,ys),Math.max.apply(null,xs),Math.max.apply(null,ys)];
+    var rg=SERIES_RANGE[b.index]||[-1,1];
+    var script='//VERSION=3\nfunction setup(){return{input:'+JSON.stringify(idx.b.concat('dataMask'))+',output:{bands:4}}}\nfunction evaluatePixel(s){const v='+idx.e+'; if(!isFinite(v)||!s.dataMask) return [0,0,0,0]; const t=Math.max(0,Math.min(1,(v-('+rg[0]+'))/('+(rg[1]-rg[0])+'))); return [t,t,t,1];}';
+    var base=SAT_URL[c.service||'sentinel-hub'];
+    var wfs=base+'wfs/'+c.id+'?SERVICE=WFS&REQUEST=GetFeature&TYPENAMES=DSS2&OUTPUTFORMAT=application/json&SRSNAME=EPSG:3857&MAXFEATURES=200&BBOX='+bbox.join(',')+'&TIME='+b.from+'/'+b.to+'&MAXCC='+(b.maxcc||30);
+    return of(wfs).then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }).then(function(g){
+      var dates={}; (g.features||[]).forEach(function(f){ var d=String((f.properties||{}).date||'').slice(0,10); if(d) dates[d]=1; });
+      var list=Object.keys(dates).sort(); if(list.length>36){ var st=list.length/36, pick=[]; for(var i=0;i<36;i++) pick.push(list[Math.floor(i*st)]); list=pick; }
+      return Promise.all(list.map(function(d){
+        var o={SERVICE:'WMS',REQUEST:'GetMap',VERSION:'1.3.0',LAYERS:c.layer||'TRUE_COLOR',STYLES:'',FORMAT:'image/png',TRANSPARENT:'true',WIDTH:'96',HEIGHT:'96',
+          CRS:'EPSG:3857',BBOX:bbox.join(','),TIME:d+'/'+d,MAXCC:String(b.maxcc||30),GEOMETRY:b.geometry,SHOWLOGO:'false',EVALSCRIPT:b64(script)};
+        var u=base+'wms/'+c.id+'?'+Object.keys(o).map(function(k){return k+'='+encodeURIComponent(o[k]);}).join('&');
+        return of(u).then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.blob(); }).then(function(bl){ return createImageBitmap(bl); }).then(function(im){
+          var cv=typeof OffscreenCanvas!=='undefined'?new OffscreenCanvas(im.width,im.height):Object.assign(document.createElement('canvas'),{width:im.width,height:im.height}); var cx=cv.getContext('2d'); cx.drawImage(im,0,0);
+          var px=cx.getImageData(0,0,im.width,im.height).data, n=0, sum=0, mn=Infinity, mx=-Infinity;
+          for(var k=0;k<px.length;k+=4){ if(px[k+3]<200) continue; var v=rg[0]+(rg[1]-rg[0])*px[k]/255; n++; sum+=v; if(v<mn) mn=v; if(v>mx) mx=v; }
+          return n?{date:d,mean:Math.round(sum/n*1000)/1000,min:Math.round(mn*1000)/1000,max:Math.round(mx*1000)/1000,pixels:n}:null;
+        }).catch(function(){ return null; });
+      })).then(function(rows){ return rows.filter(Boolean); });
+    });
+  }
   window.__devSat={cfg:satCfg,tileUrl:satTileUrl};
   /* Full import of Agro_Structures on this device (same rules as the server):
      ZONE_ID → zone, ZONE_ID + Site_Code / SITE → site ("Not Applicable" → Unassigned),
@@ -428,6 +455,11 @@
         var c3=satCfg(); return jsonRes(ok({configured:true,idMasked:c3.id.slice(0,4)+'••••-••••-'+c3.id.slice(-4),service:c3.service,label:c3.label,layers:t.layers}));
       });
     }
+    if(isApi(url)&&/\/satellite\/stats(\?|$)/.test(url)&&satCfg()){
+      /* Real time series: the index over the area for each acquisition date, computed on this device from Sentinel-2 (WMS, clipped to the area). */
+      var sb2={}; try{ sb2=init&&init.body?JSON.parse(init.body):{}; }catch(e){}
+      return satSeries(sb2).then(function(rows){ return jsonRes(ok(rows)); }).catch(function(e){ return new Response(JSON.stringify({success:false,error:{message:'Sentinel-2: '+(e.message||'not reachable')}}),{status:502,headers:{'Content-Type':'application/json'}}); });
+    }
     if(isApi(url)&&/\/satellite\/scenes(\?|$)/.test(url)&&satCfg()){
       /* Real acquisition dates from the catalogue (WFS); the sample list if it does not answer. */
       var c4=satCfg(), qq={}; (url.split('?')[1]||'').split('&').forEach(function(kv){ var a2=kv.split('='); if(a2[0]) qq[a2[0]]=decodeURIComponent(a2[1]||''); });
@@ -493,24 +525,9 @@
   function hex(c){ return [parseInt(c.slice(1,3),16),parseInt(c.slice(3,5),16),parseInt(c.slice(5,7),16)]; }
   function ramp(leg,v){ if(v<=leg[0].value) return hex(leg[0].color); for(var i=1;i<leg.length;i++){ if(v<=leg[i].value){ var t=(v-leg[i-1].value)/(leg[i].value-leg[i-1].value); var a=hex(leg[i-1].color),b=hex(leg[i].color); return [a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t]; } } return hex(leg[leg.length-1].color); }
   var RANGE={NDVI:[-0.1,0.85],SAVI:[-0.1,0.7],NDWI:[-0.7,0.3],NDMI:[-0.4,0.5],NDII:[-0.4,0.5],MSI:[0.3,1.8],BSI:[-0.4,0.4]};
-  function tile(url){
-    var p={}; url.split('?')[1].split('&').forEach(function(kv){ var a=kv.split('='); p[decodeURIComponent(a[0]).toUpperCase()]=decodeURIComponent(a[1]||''); });
-    var w=Number(p.WIDTH||256),hh=Number(p.HEIGHT||256),bb=(p.BBOX||'0,0,1,1').split(',').map(Number),idx=p.INDEX||'NDVI';
-    var seed=0; (p.TIME||'').split('').forEach(function(ch){ seed=(seed*31+ch.charCodeAt(0))%997; }); seed=seed/97;
-    var c=document.createElement('canvas'); c.width=w; c.height=hh; var g=c.getContext('2d'), img=g.createImageData(w,hh);
-    var list=window.__SATCAT||[], def=null; for(var i=0;i<list.length;i++) if(list[i].key===idx) def=list[i];
-    var step=Math.max(1,Math.round(w/256));
-    for(var y=0;y<hh;y+=step){ for(var x=0;x<w;x+=step){
-      var mx=bb[0]+(bb[2]-bb[0])*(x/w), my=bb[3]-(bb[3]-bb[1])*(y/hh);
-      var f=field(mx,my,seed*0.15,(bb[2]-bb[0])/w), rgb;
-      if(def&&def.legend){ var r=RANGE[idx]||[-1,1]; rgb=ramp(def.legend, r[0]+(r[1]-r[0])*f); }
-      else if(idx==='FALSE_COLOR'){ rgb=[120+120*f,40+40*(1-f),50+40*(1-f)]; }
-      else if(idx==='SWIR'){ rgb=[150+80*(1-f),120+90*f,90+60*(1-f)]; }
-      else { rgb=[90+90*(1-f),110+60*f,70+50*(1-f)]; }
-      for(var dy=0;dy<step;dy++) for(var dx=0;dx<step;dx++){ var o=((y+dy)*w+(x+dx))*4; img.data[o]=rgb[0]; img.data[o+1]=rgb[1]; img.data[o+2]=rgb[2]; img.data[o+3]=255; }
-    } }
-    g.putImageData(img,0,0); return c.toDataURL('image/png');
-  }
+  /* No configuration ID on this device: an empty (transparent) tile, never invented imagery. */
+  var BLANK='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+  function tile(){ return BLANK; }
   window.__SATCAT=[{"key":"TRUE_COLOR","label":"True color","group":"visual","formula":"B04, B03, B02","description":"Natural colours, as the eye sees them.","legend":null,"visual":true},{"key":"FALSE_COLOR","label":"Color infrared (vegetation)","group":"visual","formula":"B08, B04, B03","description":"Healthy vegetation in bright red.","legend":null,"visual":true},{"key":"SWIR","label":"SWIR (soil & moisture)","group":"visual","formula":"B12, B8A, B04","description":"Wet soil dark, dry soil and bare ground bright.","legend":null,"visual":true},{"key":"NDVI","label":"NDVI","group":"vegetation","formula":"(B08 − B04) / (B08 + B04)","description":"Vegetation health and density.","legend":[{"value":-0.2,"color":"#a50026"},{"value":0,"color":"#d73027"},{"value":0.1,"color":"#f46d43"},{"value":0.2,"color":"#fdae61"},{"value":0.3,"color":"#fee08b"},{"value":0.4,"color":"#d9ef8b"},{"value":0.5,"color":"#a6d96a"},{"value":0.6,"color":"#66bd63"},{"value":0.7,"color":"#1a9850"},{"value":0.9,"color":"#006837"}],"visual":false},{"key":"SAVI","label":"SAVI","group":"vegetation","formula":"1.5 × (B08 − B04) / (B08 + B04 + 0.5)","description":"NDVI corrected for bright soil; better for young crops.","legend":[{"value":-0.2,"color":"#a50026"},{"value":0,"color":"#d73027"},{"value":0.1,"color":"#f46d43"},{"value":0.2,"color":"#fdae61"},{"value":0.3,"color":"#fee08b"},{"value":0.4,"color":"#d9ef8b"},{"value":0.5,"color":"#a6d96a"},{"value":0.6,"color":"#66bd63"},{"value":0.7,"color":"#1a9850"},{"value":0.9,"color":"#006837"}],"visual":false},{"key":"NDWI","label":"NDWI","group":"water","formula":"(B03 − B08) / (B03 + B08)","description":"Open water and water bodies.","legend":[{"value":-0.8,"color":"#8c510a"},{"value":-0.4,"color":"#d8b365"},{"value":-0.1,"color":"#f6e8c3"},{"value":0,"color":"#c7eae5"},{"value":0.2,"color":"#5ab4ac"},{"value":0.5,"color":"#01665e"},{"value":0.8,"color":"#003c30"}],"visual":false},{"key":"NDMI","label":"NDMI","group":"water","formula":"(B08 − B11) / (B08 + B11)","description":"Moisture in the crop canopy.","legend":[{"value":-0.6,"color":"#8c2d04"},{"value":-0.3,"color":"#cc4c02"},{"value":-0.1,"color":"#fe9929"},{"value":0,"color":"#fee391"},{"value":0.1,"color":"#c7e9b4"},{"value":0.2,"color":"#7fcdbb"},{"value":0.4,"color":"#2c7fb8"},{"value":0.6,"color":"#253494"}],"visual":false},{"key":"NDII","label":"NDII","group":"water","formula":"(B08 − B11) / (B08 + B11)","description":"Infrared water-content index (same Sentinel-2 bands as NDMI).","legend":[{"value":-0.6,"color":"#8c2d04"},{"value":-0.3,"color":"#cc4c02"},{"value":-0.1,"color":"#fe9929"},{"value":0,"color":"#fee391"},{"value":0.1,"color":"#c7e9b4"},{"value":0.2,"color":"#7fcdbb"},{"value":0.4,"color":"#2c7fb8"},{"value":0.6,"color":"#253494"}],"visual":false},{"key":"MSI","label":"Moisture stress (MSI)","group":"water","formula":"B11 / B08","description":"Higher values mean drier, stressed plants.","legend":[{"value":0.2,"color":"#253494"},{"value":0.6,"color":"#41b6c4"},{"value":1,"color":"#ffffcc"},{"value":1.4,"color":"#fd8d3c"},{"value":2,"color":"#bd0026"}],"visual":false},{"key":"BSI","label":"Bare soil (BSI)","group":"soil","formula":"((B11 + B04) − (B08 + B02)) / ((B11 + B04) + (B08 + B02))","description":"Bare and exposed soil.","legend":[{"value":-0.6,"color":"#1a9850"},{"value":-0.2,"color":"#91cf60"},{"value":0,"color":"#fee08b"},{"value":0.15,"color":"#fc8d59"},{"value":0.3,"color":"#d73027"},{"value":0.6,"color":"#7f0000"}],"visual":false}];
   var d=Object.getOwnPropertyDescriptor(HTMLImageElement.prototype,'src');
   Object.defineProperty(HTMLImageElement.prototype,'src',{configurable:true,enumerable:true,
