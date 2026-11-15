@@ -23,7 +23,7 @@ const TABLE: Record<GeoClass, { table: string; geom: string }> = {
 };
 
 const MARGIN_M = 5;     // tolerance for "inside the parent"
-const MIN_OVERLAP_M2 = 1;
+export const MIN_OVERLAP_M2 = 1;
 
 export function isGeoClass(v: string): v is GeoClass {
   return v === 'zone' || v === 'site' || v === 'farm_area' || v === 'field';
@@ -186,7 +186,7 @@ export async function saveGeometry(orgId: string, actor: Actor, cls: GeoClass, i
       : '';
     await client.query(
       `UPDATE ${t.table} SET ${t.geom} = ST_Multi(ST_SetSRID(ST_GeomFromGeoJSON($1), 4326)),
-              geom_updated_at = NOW(), updated_at = NOW()
+              geom_updated_at = NOW(), updated_at = NOW(), geom_source = 'agrocloud'
               ${opts.subtypeCode !== undefined ? ', subtype_code = $3' : ''}${extra}
         WHERE id = $2`,
       opts.subtypeCode !== undefined ? [JSON.stringify(geometry), id, opts.subtypeCode] : [JSON.stringify(geometry), id],
@@ -217,7 +217,7 @@ export async function deleteGeometry(orgId: string, actor: Actor, cls: GeoClass,
      SELECT $1, $2, id, key_id, 'delete', ${t.geom}, $4 FROM ${t.table} WHERE id = $3`,
     [orgId, cls, id, actor.userId],
   );
-  await dbPool.query(`UPDATE ${t.table} SET ${t.geom} = NULL, geom_updated_at = NOW() WHERE id = $1`, [id]);
+  await dbPool.query(`UPDATE ${t.table} SET ${t.geom} = NULL, geom_updated_at = NOW(), geom_source = 'agrocloud' WHERE id = $1`, [id]);
   return readItem(cls, id);
 }
 
@@ -252,121 +252,3 @@ export async function history(orgId: string, cls: GeoClass, id: string) {
   return r.rows;
 }
 
-/* ---- One-time import from the linked ArcGIS layer ------------------------------
- * Copies the synced shapes of linked ArcGIS features (gis_features.linked_field_id)
- * into the fields, so AgroCloud owns them from then on. Optionally builds outlines
- * for farm areas, sites and zones that have no shape yet from what lies inside them.
- * Runs in one transaction; a dry run rolls it back and only reports.
- */
-type ImportOpts = { dryRun?: boolean; overwrite?: boolean; buildParents?: boolean };
-
-/** Structure type text (or coded value label) → field subtype code. */
-export function subtypeFromStructure(v: unknown): number | null {
-  const s = String(v ?? '').toLowerCase();
-  if (!s) return null;
-  if (/pivot/.test(s)) return 4;
-  if (/nurs/.test(s)) return 5;
-  if (/net|shade/.test(s)) return 2;
-  if (/open|field|outdoor/.test(s)) return 3;
-  if (/green|glass|tunnel|poly|cravo/.test(s)) return 1;
-  return null;
-}
-
-const PARENT_STEPS: Array<{ cls: GeoClass; table: string; child: string; key: string; bufferM: number }> = [
-  { cls: 'farm_area', table: 'farm_areas', child: `SELECT f.farm_area_id AS pid, f.polygon AS g FROM fields f WHERE f.deleted_at IS NULL AND f.polygon IS NOT NULL`, key: 'farm_area_id', bufferM: 3 },
-  { cls: 'site', table: 'sites', child: `SELECT fa.site_id AS pid, fa.geom AS g FROM farm_areas fa WHERE fa.deleted_at IS NULL AND fa.geom IS NOT NULL`, key: 'site_id', bufferM: 10 },
-  { cls: 'zone', table: 'countries', child: `SELECT s.country_id AS pid, s.geom AS g FROM sites s WHERE s.deleted_at IS NULL AND s.geom IS NOT NULL`, key: 'country_id', bufferM: 20 },
-];
-
-export async function importFromLinkedLayer(orgId: string, actor: Actor, opts: ImportOpts = {}) {
-  const client = await dbPool.connect();
-  const report = {
-    dryRun: !!opts.dryRun, candidates: 0, imported: 0, skippedExisting: 0, repaired: 0,
-    bySubtype: {} as Record<string, number>, parents: { farm_area: 0, site: 0, zone: 0 }, overlaps: [] as string[],
-  };
-  try {
-    await client.query('BEGIN');
-    // One shape per linked field: the most recently synced polygonal feature.
-    const cand = await client.query(
-      `SELECT DISTINCT ON (f.id) f.id AS field_id, f.key_id, (f.polygon IS NOT NULL) AS has_shape,
-              ST_IsValid(g.geometry) AS valid,
-              g.properties ->> COALESCE(l.attribute_mapping ->> 'structureType', 'Structure_Type') AS structure
-         FROM gis_features g
-         JOIN gis_layers l ON l.id = g.layer_id
-         JOIN fields f ON f.id = g.linked_field_id AND f.deleted_at IS NULL
-         JOIN farm_areas fa ON fa.id = f.farm_area_id JOIN sites s ON s.id = fa.site_id
-        WHERE s.organization_id = $1 AND GeometryType(g.geometry) IN ('POLYGON', 'MULTIPOLYGON')
-        ORDER BY f.id, g.updated_at DESC NULLS LAST`,
-      [orgId],
-    );
-    report.candidates = cand.rowCount || 0;
-    for (const c of cand.rows) {
-      if (c.has_shape && !opts.overwrite) { report.skippedExisting += 1; continue; }
-      if (!c.valid) report.repaired += 1;
-      const code = subtypeFromStructure(c.structure);
-      report.bySubtype[code ?? 'none'] = (report.bySubtype[code ?? 'none'] || 0) + 1;
-      // eslint-disable-next-line no-await-in-loop
-      await client.query(
-        `WITH src AS (
-           SELECT ST_Multi(ST_CollectionExtract(ST_MakeValid(g.geometry), 3)) AS g
-             FROM gis_features g WHERE g.linked_field_id = $1 AND GeometryType(g.geometry) IN ('POLYGON', 'MULTIPOLYGON')
-            ORDER BY g.updated_at DESC NULLS LAST LIMIT 1),
-         old AS (SELECT polygon FROM fields WHERE id = $1),
-         h AS (INSERT INTO geo_edit_history (organization_id, class_key, feature_id, key_id, operation, geom_before, geom_after, attrs, edited_by)
-               SELECT $2, 'field', $1, $3, 'import', old.polygon, src.g, $4, $5 FROM src, old)
-         UPDATE fields f SET polygon = src.g, geom_updated_at = NOW(), updated_at = NOW(),
-                subtype_code = COALESCE($6, f.subtype_code),
-                latitude = ST_Y(ST_PointOnSurface(src.g)), longitude = ST_X(ST_PointOnSurface(src.g))
-           FROM src WHERE f.id = $1`,
-        [c.field_id, orgId, c.key_id, JSON.stringify({ source: 'arcgis', structure: c.structure ?? null }), actor.userId, code],
-      );
-      report.imported += 1;
-    }
-
-    if (opts.buildParents) {
-      for (const step of PARENT_STEPS) {
-        const orgFilter = step.cls === 'zone' ? 'p.organization_id = $1'
-          : step.cls === 'site' ? 'p.organization_id = $1'
-            : 'p.site_id IN (SELECT id FROM sites WHERE organization_id = $1)';
-        // eslint-disable-next-line no-await-in-loop
-        const r = await client.query(
-          `WITH kids AS (${step.child}),
-                outl AS (
-                  SELECT k.pid, ST_Multi(ST_CollectionExtract(ST_MakeValid(
-                           ST_Buffer(ST_ConvexHull(ST_Collect(k.g))::geography, ${step.bufferM})::geometry), 3)) AS g
-                    FROM kids k GROUP BY k.pid),
-                upd AS (
-                  UPDATE ${step.table} p SET geom = outl.g, geom_updated_at = NOW()
-                    FROM outl WHERE p.id = outl.pid AND p.geom IS NULL AND p.deleted_at IS NULL AND ${orgFilter}
-                  RETURNING p.id, p.key_id, p.geom)
-           INSERT INTO geo_edit_history (organization_id, class_key, feature_id, key_id, operation, geom_after, attrs, edited_by)
-           SELECT $1, '${step.cls}', id, key_id, 'import', geom, '{"source":"built from contents"}'::jsonb, $2 FROM upd
-           RETURNING key_id`,
-          [orgId, actor.userId],
-        );
-        report.parents[step.cls as 'farm_area' | 'site' | 'zone'] = r.rowCount || 0;
-      }
-      // Outlines built from hulls can overlap a neighbour: list them so they can be fixed in the editor.
-      const ov = await client.query(
-        `SELECT a.key_id || ' × ' || b.key_id AS pair FROM farm_areas a JOIN farm_areas b ON a.site_id = b.site_id AND a.id < b.id
-          WHERE a.geom IS NOT NULL AND b.geom IS NOT NULL AND a.deleted_at IS NULL AND b.deleted_at IS NULL
-            AND a.site_id IN (SELECT id FROM sites WHERE organization_id = $1)
-            AND ST_Area(ST_Intersection(a.geom, b.geom)::geography) > ${MIN_OVERLAP_M2}
-         UNION ALL
-         SELECT a.key_id || ' × ' || b.key_id FROM sites a JOIN sites b ON a.country_id = b.country_id AND a.id < b.id
-          WHERE a.organization_id = $1 AND a.geom IS NOT NULL AND b.geom IS NOT NULL AND a.deleted_at IS NULL AND b.deleted_at IS NULL
-            AND ST_Area(ST_Intersection(a.geom, b.geom)::geography) > ${MIN_OVERLAP_M2}
-         LIMIT 50`,
-        [orgId],
-      );
-      report.overlaps = ov.rows.map((x: any) => x.pair);
-    }
-    await client.query(opts.dryRun ? 'ROLLBACK' : 'COMMIT');
-  } catch (e) {
-    await client.query('ROLLBACK');
-    throw e;
-  } finally {
-    client.release();
-  }
-  return report;
-}

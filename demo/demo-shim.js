@@ -28,10 +28,17 @@
       var sid=cid+'s'+si; sites.push({id:sid,name:sn,countryId:cid,country_id:cid,location:z[0]});
       ['Greenhouse','Nethouse'].forEach(function(an,ai){
         var aid=sid+'a'+ai; areas.push({id:aid,name:an,siteId:sid,site_id:sid});
-        for(var k=1;k<=3;k++){ var fid=aid+'f'+k; fields.push({id:fid,name:(ai?'NH-0':'GH-0')+k,farmAreaId:aid,farm_area_id:aid,area:1.2,gis_zone_id:z[0],gis_farm_code:z[0]+'-'+(ai?'NH':'GH')+'-0'+k}); }
+        for(var k=1;k<=3;k++){ var fid=aid+'f'+k; fields.push({id:fid,name:(ai?'NH-0':'GH-0')+k,farmAreaId:aid,farm_area_id:aid,area:1.2,gis_zone_id:z[0],gis_farm_code:z[0]+'-'+(si===z[1].length-1?'':'S'+si+'-')+(ai?'NH':'GH')+'-0'+k}); }
       });
     });
   });
+  /* Zones, sites, farm areas and fields created by "Import from ArcGIS" on this device. */
+  var IMP_KEY='agro_demo_import_v1';
+  (function(){ var im=null; try{ im=JSON.parse(localStorage.getItem(IMP_KEY)||'null'); }catch(e){} if(!im) return;
+    (im.countries||[]).forEach(function(x){countries.push(x);}); (im.sites||[]).forEach(function(x){sites.push(x);});
+    (im.areas||[]).forEach(function(x){areas.push(x);}); (im.fields||[]).forEach(function(x){fields.push(x);});
+    var mv=im.moves||{}; fields.forEach(function(f){ if(mv[f.id]){ f.farmAreaId=mv[f.id]; f.farm_area_id=mv[f.id]; } });
+  })();
   var CROPS=['Tomato','Cucumber','Pepper','Lettuce','Strawberry','Eggplant','Zucchini','Melon'];
   var NAMES=['GH-01','GH-02','GH-03','NH-01','NH-02','NH-03','GH-01','GH-02'];
   var ST=['approved','pending','approved','rejected','approved','pending','approved','approved'];
@@ -61,9 +68,7 @@
      MH · Site 1 starts with drawn greenhouse and nethouse fields; the rest is empty,
      ready to draw. Same rules as the server: valid, inside the parent, no overlap. */
   var GEO_KEY='agro_demo_geo_v1';
-  var GEO_SUB=[['zone',1,'Region','منطقة','#e8f2ec','#165c3a'],['site',1,'Farm site','موقع مزرعة','#e8f2ec','#1f7a4d'],['site',2,'Nursery site','موقع مشتل','#f1f7e8','#4d7c0f'],['site',9,'Not applicable','غير مطبق','#f3f5f2','#6b746e'],
-    ['farm_area',1,'Greenhouse','بيت محمي','#ffffff','#267300'],['farm_area',2,'Nethouse','بيت شبكي','#e6f4ff','#005ce6'],['farm_area',3,'Open field','حقل مفتوح','#fff4d6','#a87000'],['farm_area',4,'Pivot','محوري','#e6ffd9','#38a800'],
-    ['field',1,'Greenhouse','بيت محمي','#ffffff','#267300'],['field',2,'Nethouse','بيت شبكي','#e6f4ff','#005ce6'],['field',3,'Open field','حقل مفتوح','#fff4d6','#a87000'],['field',4,'Pivot','محوري','#e6ffd9','#38a800'],['field',5,'Nursery bed','حوض مشتل','#f1f7e8','#4d7c0f']]
+  var GEO_SUB=[['zone',1,'Region','منطقة','#e8f2ec','#165c3a'],['site',1,'Farm site','موقع مزرعة','#e8f2ec','#1f7a4d'],['site',2,'Nursery site','موقع مشتل','#f1f7e8','#4d7c0f'],['site',9,'Unassigned','غير مخصص','#f3f5f2','#6b746e'],['farm_area',1000,'Greenhouse','بيت محمي','#ffffff','#267300'],['farm_area',1001,'Nethouse','بيت شبكي','#e6f4ff','#005ce6'],['farm_area',1002,'Glasshouse','بيت زجاجي','#eef6f6','#2f7f7f'],['farm_area',1003,'Retractable Roof Houses','بيت بسقف متحرك','#f3ecff','#6a3fb5'],['farm_area',1004,'Cravo','كرافو','#fdeee6','#b5532a'],['farm_area',1005,'Dates Farm','مزرعة نخيل','#f6efdc','#8a6d1d'],['farm_area',1006,'PIVOT','محوري','#e6ffd9','#38a800'],['farm_area',1007,'Farm Plots','قطع زراعية','#fff4d6','#a87000'],['field',1000,'Greenhouse','بيت محمي','#ffffff','#267300'],['field',1001,'Nethouse','بيت شبكي','#e6f4ff','#005ce6'],['field',1002,'Glasshouse','بيت زجاجي','#eef6f6','#2f7f7f'],['field',1003,'Retractable Roof Houses','بيت بسقف متحرك','#f3ecff','#6a3fb5'],['field',1004,'Cravo','كرافو','#fdeee6','#b5532a'],['field',1005,'Dates Farm','مزرعة نخيل','#f6efdc','#8a6d1d'],['field',1006,'PIVOT','محوري','#e6ffd9','#38a800'],['field',1007,'Farm Plots','قطع زراعية','#fff4d6','#a87000']]
     .map(function(a,i){return {class_key:a[0],code:a[1],name_en:a[2],name_ar:a[3],fill_color:a[4],line_color:a[5],sort_order:i};});
   var GEO_DOM=[{key:'irrigation_system',name_en:'Irrigation system',name_ar:'نظام الري',kind:'coded',values:[['drip','Drip','تنقيط'],['sprinkler','Sprinkler','رش'],['pivot','Centre pivot','محوري'],['flood','Flood','غمر'],['hydro','Hydroponic','زراعة مائية']]},
     {key:'soil_type',name_en:'Soil type',name_ar:'نوع التربة',kind:'coded',values:[['sand','Sand','رملية'],['loamy_sand','Loamy sand','رملية طميية'],['loam','Loam','طميية'],['clay','Clay','طينية'],['substrate','Substrate','وسط زراعي']]},
@@ -77,11 +82,11 @@
     var mh=countries.filter(function(c){return c.code==='MH';})[0];
     var s1=sites.filter(function(x){return mh&&x.countryId===mh.id&&x.name==='Site 1';})[0];
     if(s1){
-      st[s1.id]={geometry:geoRect(lon0-0.001,lat0-0.001,0.009,0.0095),subtype:1,history:[]};
+      st[s1.id]={geometry:geoRect(lon0-0.001,lat0-0.001,0.009,0.0095),subtype:1,src:'arcgis',history:[]};
       areas.filter(function(a){return a.siteId===s1.id;}).forEach(function(a,ai){
-        st[a.id]={geometry:ai?geoRect(lon0-0.0005,lat0+0.004,0.0078,0.004):geoRect(lon0-0.0005,lat0-0.0005,0.0102-0.001,0.0045),subtype:ai?2:1,history:[]};
+        st[a.id]={geometry:ai?geoRect(lon0-0.0005,lat0+0.004,0.0078,0.004):geoRect(lon0-0.0005,lat0-0.0005,0.0102-0.001,0.0045),subtype:ai?1001:1000,src:'arcgis',history:[]};
         fields.filter(function(f){return f.farmAreaId===a.id;}).forEach(function(f,k){
-          st[f.id]={geometry:ai?geoRect(lon0+k*0.0024,lat0+0.0045,0.002,0.003):geoRect(lon0+k*0.0016,lat0,0.0012,0.0035),subtype:ai?2:1,history:[]};
+          st[f.id]={geometry:ai?geoRect(lon0+k*0.0024,lat0+0.0045,0.002,0.003):geoRect(lon0+k*0.0016,lat0,0.0012,0.0035),subtype:ai?1001:1000,src:'arcgis',history:[]};
         });
       });
     }
@@ -89,11 +94,12 @@
     return st;
   }
   function geoSave(st){ try{ localStorage.setItem(GEO_KEY,JSON.stringify(st)); }catch(e){} }
+  function geoFieldKey(z,fc){ z=String(z).trim().toUpperCase(); fc=String(fc).trim().toUpperCase(); return (fc.indexOf(z+'-')===0?fc:z+'-'+fc).slice(0,40); }
   function geoKeys(){ var k={};
     countries.forEach(function(c){ k[c.id]=c.code.replace(/\s+/g,''); });
     countries.forEach(function(c){ sites.filter(function(x){return x.countryId===c.id;}).forEach(function(x,i){ k[x.id]=k[c.id]+'-S'+('0'+(i+1)).slice(-2);
       var fn=0; areas.filter(function(a){return a.siteId===x.id;}).forEach(function(a,ai){ k[a.id]=k[x.id]+'-A'+('0'+(ai+1)).slice(-2);
-        fields.filter(function(f){return f.farmAreaId===a.id;}).forEach(function(f){ fn++; k[f.id]=k[x.id]+'-F'+('00'+fn).slice(-3); }); }); }); });
+        fields.filter(function(f){return f.farmAreaId===a.id;}).forEach(function(f){ fn++; k[f.id]=(f.gis_zone_id&&f.gis_farm_code)?geoFieldKey(f.gis_zone_id,f.gis_farm_code):k[x.id]+'-F'+('00'+fn).slice(-3); }); }); }); });
     return k; }
   function geoArea(g){ if(!g) return null; var R=6378137, tot=0;
     (g.type==='Polygon'?[g.coordinates]:g.coordinates).forEach(function(poly){ poly.forEach(function(ring,ri){ var a=0;
@@ -122,34 +128,6 @@
     var q={}; (url.split('?')[1]||'').split('&').forEach(function(p){var kv=p.split('='); if(kv[0]) q[decodeURIComponent(kv[0])]=decodeURIComponent(kv[1]||'');});
     if(path==='/geo/model') return ok({subtypes:GEO_SUB,domains:GEO_DOM});
     if(path==='/geo/layers') return ok(geoItems());
-    if(path==='/geo/import/arcgis'){
-      var io=reqBody||{}, ist=JSON.parse(JSON.stringify(geoStore())), inow=new Date().toISOString();
-      var SUBC=function(t){ t=String(t||'').toLowerCase(); return /pivot/.test(t)?4:/nurs/.test(t)?5:/net|shade/.test(t)?2:/open|field/.test(t)?3:/green|glass|tunnel/.test(t)?1:null; };
-      var rep={dryRun:!!io.dryRun,candidates:0,imported:0,skippedExisting:0,repaired:0,bySubtype:{},parents:{farm_area:0,site:0,zone:0},overlaps:[]};
-      (DEMOFC.features||[]).forEach(function(ft){ var pr=ft.properties||{};
-        var fl=fields.filter(function(f){ return f.gis_zone_id===pr.ZONE_ID&&f.gis_farm_code===pr.Farm_Code; })[0]; if(!fl) return;
-        rep.candidates++; ist[fl.id]=ist[fl.id]||{history:[]};
-        if(ist[fl.id].geometry&&!io.overwrite){ rep.skippedExisting++; return; }
-        var code=SUBC(pr.Structure_Type); rep.bySubtype[code||'none']=(rep.bySubtype[code||'none']||0)+1;
-        ist[fl.id].geometry={type:'MultiPolygon',coordinates:[ft.geometry.coordinates]}; if(code) ist[fl.id].subtype=code; ist[fl.id].at=inow;
-        (ist[fl.id].history=ist[fl.id].history||[]).push({id:Date.now()+rep.imported,operation:'import',edited_at:inow,edited_by_name:'Demo Manager',area_ha:geoArea(ist[fl.id].geometry)});
-        rep.imported++; });
-      if(io.buildParents){
-        var pad={farm_area:0.00003,site:0.0001,zone:0.0002};
-        [['farm_area',areas,function(a){return fields.filter(function(f){return f.farmAreaId===a.id;});}],
-         ['site',sites,function(x){return areas.filter(function(a){return a.siteId===x.id;});}],
-         ['zone',countries,function(c){return sites.filter(function(x){return x.countryId===c.id;});}]].forEach(function(step){
-          step[1].forEach(function(par){ if(ist[par.id]&&ist[par.id].geometry) return;
-            var kids=step[2](par).map(function(k){return ist[k.id]&&ist[k.id].geometry;}).filter(Boolean); if(!kids.length) return;
-            var bb=[180,90,-180,-90]; kids.forEach(function(g){ var b=geoBBox(g); bb=[Math.min(bb[0],b[0]),Math.min(bb[1],b[1]),Math.max(bb[2],b[2]),Math.max(bb[3],b[3])]; });
-            var d=pad[step[0]]; ist[par.id]=ist[par.id]||{history:[]};
-            ist[par.id].geometry=geoRect(bb[0]-d,bb[1]-d,bb[2]-bb[0]+2*d,bb[3]-bb[1]+2*d); ist[par.id].at=inow;
-            (ist[par.id].history=ist[par.id].history||[]).push({id:Date.now(),operation:'import',edited_at:inow,edited_by_name:'Demo Manager',area_ha:geoArea(ist[par.id].geometry)});
-            rep.parents[step[0]]++; }); });
-      }
-      if(!io.dryRun) geoSave(ist);
-      return ok(rep);
-    }
     var gm=path.match(/^\/geo\/(zone|site|farm_area|field)\/([^/]+)\/(validate|geometry|subtype|history)$/);
     if(gm){
       var gcls=gm[1], gid=gm[2], gop=gm[3], gst=geoStore(), now=new Date().toISOString();
@@ -162,7 +140,7 @@
       var gchk=geoValidate(gcls,gid,reqBody&&reqBody.geometry);
       if(!gchk.ok) return {success:false,error:{code:'GEOMETRY_RULE',message:gchk.issues.map(function(i){return i.message;}).join(' '),details:{issues:gchk.issues}}};
       var g0=reqBody.geometry; gst[gid].history.push({id:Date.now(),operation:reqBody.operation||(gst[gid].geometry?'edit':'draw'),edited_at:now,edited_by_name:'Demo Manager',area_ha:geoArea(g0)});
-      gst[gid].geometry=g0.type==='Polygon'?{type:'MultiPolygon',coordinates:[g0.coordinates]}:g0; gst[gid].at=now;
+      gst[gid].geometry=g0.type==='Polygon'?{type:'MultiPolygon',coordinates:[g0.coordinates]}:g0; gst[gid].at=now; gst[gid].src='agrocloud';
       if(reqBody.subtypeCode!==undefined) gst[gid].subtype=reqBody.subtypeCode;
       geoSave(gst); return ok(gfind());
     }
@@ -374,6 +352,73 @@
   function pickLayer(ls){ var ids=ls.map(function(l){return l.id;});
     return ids.filter(function(x){return /^TRUE[_-]?COLOR$/i.test(x);})[0]||ids.filter(function(x){return /TRUE|NATURAL|L2A|NDVI/i.test(x);})[0]||ids[0]||'TRUE_COLOR'; }
   window.__devSat={cfg:satCfg,tileUrl:satTileUrl};
+  /* Full import of Agro_Structures on this device (same rules as the server):
+     ZONE_ID → zone, ZONE_ID + Site_Code / SITE → site ("Not Applicable" → Unassigned),
+     Structure_Type → farm area and subtype, ZONE_ID + Farm_Code → field (KeyID ZONE_ID-Farm_Code). */
+  var ST_TYPES=[[1000,'Greenhouse',/green/],[1001,'Nethouse',/net|shade/],[1002,'Glasshouse',/glass/],[1003,'Retractable Roof Houses',/retract/],[1004,'Cravo',/cravo/],[1005,'Dates Farm',/date|palm/],[1006,'PIVOT',/pivot/],[1007,'Farm Plots',/plot|open|field/]];
+  function stCode(raw,dom){ if(raw===null||raw===undefined||String(raw).trim()==='') return null; var v=String(raw).trim();
+    if(/^\d+$/.test(v)&&ST_TYPES.some(function(t){return t[0]===+v;})) return +v; var l=((dom&&dom[v])||v).toLowerCase();
+    var h=ST_TYPES.filter(function(t){return t[2].test(l);})[0]; return h?h[0]:null; }
+  function codedOf(meta,name){ var m={}; if(!meta) return m; (meta.fields||[]).forEach(function(f){ if(f.name===name&&f.domain) f.domain.forEach(function(c){ m[String(c.code)]=String(c.name); }); });
+    if(meta.typeIdField===name) (meta.types||[]).forEach(function(t){ m[String(t.id)]=String(t.name); }); return m; }
+  function demoImport(fc,meta,opt){
+    var C=JSON.parse(JSON.stringify(countries)),S=JSON.parse(JSON.stringify(sites)),A=JSON.parse(JSON.stringify(areas)),Fl=JSON.parse(JSON.stringify(fields));
+    var st=JSON.parse(JSON.stringify(geoStore())), now=new Date().toISOString(), n=Date.now().toString(36);
+    var im=null; try{ im=JSON.parse(localStorage.getItem(IMP_KEY)||'null'); }catch(e){} im=im||{countries:[],sites:[],areas:[],fields:[],moves:{}};
+    var siteDom=codedOf(meta,'SITE'), stDom=codedOf(meta,'Structure_Type');
+    var rep={dryRun:!!opt.dryRun,layer:{name:'Agro_Structures',id:21,live:!!fc._live},features:0,zones:{created:0,matched:0},sites:{created:0,matched:0},farmAreas:{created:0,matched:0},
+      fields:{created:0,matched:0,adopted:0,moved:0,rekeyed:0},shapes:{imported:0,keptEdited:0,repaired:0},parents:{farm_area:0,site:0,zone:0},bySubtype:{},
+      issues:{missingKeys:0,noGeometry:0,duplicates:[],notApplicable:0,unknownStructure:[]},overlaps:[]};
+    var seen={}, unk={}, cz={}, cs={}, ca={}, seq=0, uid=function(p){ seq++; return 'imp'+p+n+seq; };
+    var hist=function(id,op){ st[id]=st[id]||{history:[]}; (st[id].history=st[id].history||[]).push({id:Date.now()+seq++,operation:op,edited_at:now,edited_by_name:'Demo Manager',area_ha:geoArea(st[id].geometry)}); };
+    (fc.features||[]).forEach(function(ft){
+      var p=ft.properties||{}, g=ft.geometry, zone=String(p.ZONE_ID||'').trim().toUpperCase(), farm=String(p.Farm_Code||'').trim();
+      if(!zone||!farm){ rep.issues.missingKeys++; return; }
+      if(!g||(g.type!=='Polygon'&&g.type!=='MultiPolygon')){ rep.issues.noGeometry++; return; }
+      var key=geoFieldKey(zone,farm); if(seen[key]){ rep.issues.duplicates.push(key); return; } seen[key]=1; rep.features++;
+      var sRaw=p.SITE===null||p.SITE===undefined?'':String(p.SITE).trim(), sLab=siteDom[sRaw]||sRaw, sCode=String(p.Site_Code||'').trim();
+      var un=/not\s*applic|^n\s*\/?\s*a$|^none$/i.test(sLab)||(!sLab&&!sCode); if(un) rep.issues.notApplicable++;
+      var sName=un?'Unassigned':(/^\d+$/.test(sLab)?'Site '+sLab:(sLab||sCode||'Site')), sKey=un?'__U':(sCode||sName).toUpperCase();
+      var sc=stCode(p.Structure_Type,stDom), aName=sc?ST_TYPES.filter(function(t){return t[0]===sc;})[0][1]:((stDom[String(p.Structure_Type)]||p.Structure_Type||'Other')+'');
+      if(p.Structure_Type&&!sc) unk[aName]=1;
+      if(sc){ rep.bySubtype[sc]=rep.bySubtype[sc]||{name:aName,count:0}; rep.bySubtype[sc].count++; }
+      // zone
+      var z=cz[zone]; if(!z){ z=C.filter(function(c){return String(c.code).toUpperCase()===zone;})[0];
+        if(z) rep.zones.matched++; else { z={id:uid('c'),name:zone,code:zone}; C.push(z); im.countries.push(z); rep.zones.created++; } cz[zone]=z; }
+      // site
+      var sk=z.id+'|'+sKey, s=cs[sk]; if(!s){ s=S.filter(function(x){return x.countryId===z.id&&((!un&&x.gis_site_code&&x.gis_site_code.toUpperCase()===sKey)||x.name.toLowerCase()===sName.toLowerCase());})[0];
+        if(s){ rep.sites.matched++; if(!un&&!s.gis_site_code) s.gis_site_code=sKey; } else { s={id:uid('s'),name:sName,countryId:z.id,country_id:z.id,location:zone,gis_site_code:un?null:sKey}; S.push(s); im.sites.push(s); rep.sites.created++; }
+        st[s.id]=st[s.id]||{history:[]}; if(!st[s.id].subtype) st[s.id].subtype=un?9:1; cs[sk]=s; }
+      // farm area
+      var ak=s.id+'|'+(sc||aName), a=ca[ak]; if(!a){ a=A.filter(function(x){return x.siteId===s.id&&((sc&&st[x.id]&&st[x.id].subtype===sc)||x.name.toLowerCase()===aName.toLowerCase());})[0];
+        if(a) rep.farmAreas.matched++; else { a={id:uid('a'),name:aName,siteId:s.id,site_id:s.id}; A.push(a); im.areas.push(a); rep.farmAreas.created++; }
+        st[a.id]=st[a.id]||{history:[]}; if(!st[a.id].subtype) st[a.id].subtype=sc; ca[ak]=a; }
+      // field
+      var f=Fl.filter(function(x){return x.gis_zone_id&&String(x.gis_zone_id).toUpperCase()===zone&&String(x.gis_farm_code||'').toUpperCase()===farm.toUpperCase();})[0];
+      if(f){ rep.fields.matched++; if(f.farmAreaId!==a.id){ f.farmAreaId=a.id; f.farm_area_id=a.id; im.moves[f.id]=a.id; rep.fields.moved++; } }
+      else { var nm=String(p.Farm_Name||farm).trim(); if(Fl.some(function(x){return x.farmAreaId===a.id&&x.name.toLowerCase()===nm.toLowerCase();})) nm=farm;
+        f={id:uid('f'),name:nm,farmAreaId:a.id,farm_area_id:a.id,area:null,gis_zone_id:zone,gis_farm_code:farm}; Fl.push(f); im.fields.push(f); rep.fields.created++; }
+      st[f.id]=st[f.id]||{history:[]}; if(sc) st[f.id].subtype=sc;
+      if(st[f.id].geometry&&st[f.id].src==='agrocloud'&&!opt.overwrite){ rep.shapes.keptEdited++; return; }
+      st[f.id].geometry=g.type==='Polygon'?{type:'MultiPolygon',coordinates:[g.coordinates]}:g; st[f.id].src='arcgis'; st[f.id].at=now; hist(f.id,'import'); rep.shapes.imported++;
+    });
+    rep.issues.unknownStructure=Object.keys(unk);
+    if(opt.buildParents){
+      var pad={farm_area:0.00003,site:0.0001,zone:0.0002};
+      [['farm_area',A,function(x){return Fl.filter(function(f){return f.farmAreaId===x.id;});}],['site',S,function(x){return A.filter(function(a){return a.siteId===x.id;});}],
+       ['zone',C,function(x){return S.filter(function(s){return s.countryId===x.id;});}]].forEach(function(step){
+        step[1].forEach(function(par){ var e=st[par.id]; if(e&&e.geometry&&e.src!=='arcgis') return;
+          var kids=step[2](par).map(function(k){return st[k.id]&&st[k.id].geometry;}).filter(Boolean); if(!kids.length) return;
+          var bb=[180,90,-180,-90]; kids.forEach(function(g){ var b=geoBBox(g); bb=[Math.min(bb[0],b[0]),Math.min(bb[1],b[1]),Math.max(bb[2],b[2]),Math.max(bb[3],b[3])]; });
+          var d=pad[step[0]]; st[par.id]=st[par.id]||{history:[]}; st[par.id].geometry=geoRect(bb[0]-d,bb[1]-d,bb[2]-bb[0]+2*d,bb[3]-bb[1]+2*d); st[par.id].src='arcgis'; st[par.id].at=now;
+          hist(par.id,'import'); rep.parents[step[0]]++; }); });
+    }
+    if(!opt.dryRun){
+      [[countries,C],[sites,S],[areas,A],[fields,Fl]].forEach(function(pr){ pr[0].splice.apply(pr[0],[0,pr[0].length].concat(pr[1])); });
+      geoSave(st); try{ localStorage.setItem(IMP_KEY,JSON.stringify(im)); }catch(e){}
+    }
+    return rep;
+  }
   window.fetch=function(input,init){
     var url=typeof input==='string'?input:(input&&input.url)||'';
     if(isApi(url)&&/\/settings\/sentinelhub(\/test)?(\?|$)/.test(url)&&init&&init.method&&init.method!=='GET'){
@@ -395,6 +440,10 @@
         var by={}; (g.features||[]).forEach(function(f){ var pr=f.properties||{}; var d=String(pr.date||'').slice(0,10); if(!d) return; var cl=Number(pr.cloudCoverPercentage); if(!by[d]) by[d]={date:d,cloud:isFinite(cl)?Math.round(cl):null,tiles:0,time:pr.time||null}; by[d].tiles++; if(isFinite(cl)&&(by[d].cloud===null||cl<by[d].cloud)) by[d].cloud=Math.round(cl); });
         return jsonRes(ok(Object.keys(by).sort().reverse().map(function(k){return by[k];})));
       }).catch(function(){ return jsonRes(body(url,'GET',null)); });
+    }
+    if(isApi(url)&&/\/geo\/import\/arcgis(\?|$)/.test(url)&&init&&init.method==='POST'){
+      var ib={}; try{ ib=init.body?JSON.parse(init.body):{}; }catch(e){}
+      return Promise.all([liveLayer(),liveMeta()]).then(function(r){ return jsonRes(ok(demoImport(r[0]||DEMOFC,r[1]||DEMO_META,ib))); });
     }
     if(isApi(url)&&/\/gis\/layers\/demo-struct\/features(\?|$)/.test(url)){
       return liveLayer().then(function(fc){ return jsonRes(ok(fc)); });

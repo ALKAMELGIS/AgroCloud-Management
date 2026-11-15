@@ -31,6 +31,12 @@ ALTER TABLE sites      ADD COLUMN IF NOT EXISTS geom_updated_at TIMESTAMPTZ;
 ALTER TABLE farm_areas ADD COLUMN IF NOT EXISTS geom_updated_at TIMESTAMPTZ;
 ALTER TABLE fields     ADD COLUMN IF NOT EXISTS geom_updated_at TIMESTAMPTZ;
 
+-- Where the current shape came from: 'arcgis' (imported) or 'agrocloud' (drawn / edited here).
+ALTER TABLE countries  ADD COLUMN IF NOT EXISTS geom_source VARCHAR(12);
+ALTER TABLE sites      ADD COLUMN IF NOT EXISTS geom_source VARCHAR(12);
+ALTER TABLE farm_areas ADD COLUMN IF NOT EXISTS geom_source VARCHAR(12);
+ALTER TABLE fields     ADD COLUMN IF NOT EXISTS geom_source VARCHAR(12);
+
 CREATE INDEX IF NOT EXISTS idx_countries_geom  ON countries  USING GIST (geom);
 CREATE INDEX IF NOT EXISTS idx_sites_geom      ON sites      USING GIST (geom);
 CREATE INDEX IF NOT EXISTS idx_farm_areas_geom ON farm_areas USING GIST (geom);
@@ -49,20 +55,28 @@ CREATE TABLE IF NOT EXISTS geo_subtypes (
   PRIMARY KEY (class_key, code)
 );
 
+-- Field / farm-area subtypes mirror the Structure_Type domain of Agro_Structures (same codes).
 INSERT INTO geo_subtypes (class_key, code, name_en, name_ar, key_prefix, fill_color, line_color, sort_order) VALUES
-  ('zone',      1, 'Region',          'منطقة',          NULL, '#e8f2ec', '#165c3a', 1),
-  ('site',      1, 'Farm site',       'موقع مزرعة',      'S',  '#e8f2ec', '#1f7a4d', 1),
-  ('site',      2, 'Nursery site',    'موقع مشتل',       'S',  '#f1f7e8', '#4d7c0f', 2),
-  ('site',      9, 'Not applicable',  'غير مطبق',        'S',  '#f3f5f2', '#6b746e', 9),
-  ('farm_area', 1, 'Greenhouse',      'بيت محمي',        'A',  '#ffffff', '#267300', 1),
-  ('farm_area', 2, 'Nethouse',        'بيت شبكي',        'A',  '#e6f4ff', '#005ce6', 2),
-  ('farm_area', 3, 'Open field',      'حقل مفتوح',       'A',  '#fff4d6', '#a87000', 3),
-  ('farm_area', 4, 'Pivot',           'محوري',           'A',  '#e6ffd9', '#38a800', 4),
-  ('field',     1, 'Greenhouse',      'بيت محمي',        'F',  '#ffffff', '#267300', 1),
-  ('field',     2, 'Nethouse',        'بيت شبكي',        'F',  '#e6f4ff', '#005ce6', 2),
-  ('field',     3, 'Open field',      'حقل مفتوح',       'F',  '#fff4d6', '#a87000', 3),
-  ('field',     4, 'Pivot',           'محوري',           'F',  '#e6ffd9', '#38a800', 4),
-  ('field',     5, 'Nursery bed',     'حوض مشتل',        'F',  '#f1f7e8', '#4d7c0f', 5)
+  ('zone', 1, 'Region', 'منطقة', NULL, '#e8f2ec', '#165c3a', 1),
+  ('site', 1, 'Farm site', 'موقع مزرعة', 'S', '#e8f2ec', '#1f7a4d', 1),
+  ('site', 2, 'Nursery site', 'موقع مشتل', 'S', '#f1f7e8', '#4d7c0f', 2),
+  ('site', 9, 'Unassigned', 'غير مخصص', 'S', '#f3f5f2', '#6b746e', 9),
+  ('farm_area', 1000, 'Greenhouse', 'بيت محمي', 'A', '#ffffff', '#267300', 1),
+  ('farm_area', 1001, 'Nethouse', 'بيت شبكي', 'A', '#e6f4ff', '#005ce6', 2),
+  ('farm_area', 1002, 'Glasshouse', 'بيت زجاجي', 'A', '#eef6f6', '#2f7f7f', 3),
+  ('farm_area', 1003, 'Retractable Roof Houses', 'بيت بسقف متحرك', 'A', '#f3ecff', '#6a3fb5', 4),
+  ('farm_area', 1004, 'Cravo', 'كرافو', 'A', '#fdeee6', '#b5532a', 5),
+  ('farm_area', 1005, 'Dates Farm', 'مزرعة نخيل', 'A', '#f6efdc', '#8a6d1d', 6),
+  ('farm_area', 1006, 'PIVOT', 'محوري', 'A', '#e6ffd9', '#38a800', 7),
+  ('farm_area', 1007, 'Farm Plots', 'قطع زراعية', 'A', '#fff4d6', '#a87000', 8),
+  ('field', 1000, 'Greenhouse', 'بيت محمي', 'F', '#ffffff', '#267300', 1),
+  ('field', 1001, 'Nethouse', 'بيت شبكي', 'F', '#e6f4ff', '#005ce6', 2),
+  ('field', 1002, 'Glasshouse', 'بيت زجاجي', 'F', '#eef6f6', '#2f7f7f', 3),
+  ('field', 1003, 'Retractable Roof Houses', 'بيت بسقف متحرك', 'F', '#f3ecff', '#6a3fb5', 4),
+  ('field', 1004, 'Cravo', 'كرافو', 'F', '#fdeee6', '#b5532a', 5),
+  ('field', 1005, 'Dates Farm', 'مزرعة نخيل', 'F', '#f6efdc', '#8a6d1d', 6),
+  ('field', 1006, 'PIVOT', 'محوري', 'F', '#e6ffd9', '#38a800', 7),
+  ('field', 1007, 'Farm Plots', 'قطع زراعية', 'F', '#fff4d6', '#a87000', 8)
 ON CONFLICT (class_key, code) DO NOTHING;
 
 -- 3. Domains -------------------------------------------------------------------
@@ -141,6 +155,21 @@ UPDATE farm_areas fa SET key_id = x.k FROM (
   WHERE s.key_id IS NOT NULL
 ) x WHERE x.id = fa.id AND fa.key_id IS NULL;
 
+-- Field: ZONE_ID-Farm_Code when the field carries the ArcGIS business key (Farm_Code
+-- already starting with the zone is used as it is), otherwise SITE-Fnnn.
+CREATE OR REPLACE FUNCTION geo_field_key(zone TEXT, farm TEXT) RETURNS TEXT
+LANGUAGE sql IMMUTABLE AS $$
+  SELECT CASE WHEN NULLIF(TRIM(zone), '') IS NULL OR NULLIF(TRIM(farm), '') IS NULL THEN NULL
+              WHEN UPPER(TRIM(farm)) LIKE UPPER(TRIM(zone)) || '-%' THEN LEFT(UPPER(TRIM(farm)), 40)
+              ELSE LEFT(UPPER(TRIM(zone)) || '-' || UPPER(TRIM(farm)), 40) END
+$$;
+
+UPDATE fields f SET key_id = x.k FROM (
+  SELECT id, geo_field_key(gis_zone_id, gis_farm_code) AS k,
+         ROW_NUMBER() OVER (PARTITION BY organization_id, geo_field_key(gis_zone_id, gis_farm_code) ORDER BY created_at, id) AS n
+    FROM fields WHERE deleted_at IS NULL AND geo_field_key(gis_zone_id, gis_farm_code) IS NOT NULL
+) x WHERE x.id = f.id AND x.n = 1 AND f.key_id IS NULL;
+
 UPDATE fields f SET key_id = x.k FROM (
   SELECT f2.id, s.key_id || '-F' || LPAD(ROW_NUMBER() OVER (PARTITION BY s.id ORDER BY f2.created_at, f2.id)::text, 3, '0') AS k
   FROM fields f2 JOIN farm_areas fa ON fa.id = f2.farm_area_id JOIN sites s ON s.id = fa.site_id
@@ -164,6 +193,14 @@ CREATE OR REPLACE FUNCTION geo_assign_key() RETURNS TRIGGER
 LANGUAGE plpgsql AS $$
 DECLARE parent_key TEXT;
 BEGIN
+  -- One exception: a field numbered by the system (SITE-Fnnn) takes its ArcGIS key
+  -- (ZONE_ID-Farm_Code) once, when it is first linked to the layer. Forms link by id.
+  IF TG_OP = 'UPDATE' AND TG_TABLE_NAME = 'fields' THEN
+    IF OLD.key_id ~ '-F[0-9]{3}$' AND OLD.gis_farm_code IS NULL
+       AND NEW.key_id IS NOT DISTINCT FROM geo_field_key(NEW.gis_zone_id, NEW.gis_farm_code) THEN
+      RETURN NEW;
+    END IF;
+  END IF;
   IF TG_OP = 'UPDATE' AND OLD.key_id IS NOT NULL AND NEW.key_id IS DISTINCT FROM OLD.key_id THEN
     RAISE EXCEPTION 'key_id is permanent and cannot be changed (%).', OLD.key_id USING ERRCODE = 'check_violation';
   END IF;
@@ -182,6 +219,8 @@ BEGIN
       NEW.key_id := geo_next_key(parent_key, '-A', 2, ARRAY(SELECT key_id FROM farm_areas WHERE site_id = NEW.site_id AND key_id IS NOT NULL));
     END IF;
   ELSIF TG_TABLE_NAME = 'fields' THEN
+    NEW.key_id := geo_field_key(NEW.gis_zone_id, NEW.gis_farm_code);
+    IF NEW.key_id IS NOT NULL THEN RETURN NEW; END IF;
     SELECT s.key_id INTO parent_key FROM farm_areas fa JOIN sites s ON s.id = fa.site_id WHERE fa.id = NEW.farm_area_id;
     IF parent_key IS NOT NULL THEN
       NEW.key_id := geo_next_key(parent_key, '-F', 3, ARRAY(
@@ -206,6 +245,9 @@ DO $$ BEGIN
   CREATE UNIQUE INDEX IF NOT EXISTS uq_sites_key_id ON sites (key_id) WHERE key_id IS NOT NULL AND deleted_at IS NULL;
   CREATE UNIQUE INDEX IF NOT EXISTS uq_farm_areas_key_id ON farm_areas (key_id) WHERE key_id IS NOT NULL AND deleted_at IS NULL;
   CREATE UNIQUE INDEX IF NOT EXISTS uq_fields_key_id ON fields (organization_id, key_id) WHERE key_id IS NOT NULL AND deleted_at IS NULL;
+  -- Relationship key with Agro_Structures: one field per ZONE_ID + Farm_Code.
+  CREATE UNIQUE INDEX IF NOT EXISTS uq_fields_gis_key ON fields (organization_id, UPPER(gis_zone_id), UPPER(gis_farm_code))
+    WHERE gis_zone_id IS NOT NULL AND gis_farm_code IS NOT NULL AND deleted_at IS NULL;
 EXCEPTION WHEN unique_violation THEN
   RAISE NOTICE 'Duplicate key_id values found; unique KeyID indexes not created.';
 END $$;

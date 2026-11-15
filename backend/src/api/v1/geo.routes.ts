@@ -6,6 +6,7 @@ import { validate } from '../middleware/validate';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { AppError } from '../../utils/errors';
 import * as geo from '../../services/geoEditor.service';
+import * as geoImport from '../../services/geoImport.service';
 
 /**
  * /api/v1/geo — the map editor for zones, sites, farm areas and fields.
@@ -64,9 +65,17 @@ geoRouter.get('/:cls/:id/history', requireReader, asyncHandler(async (req: AuthR
   res.json({ success: true, data: await geo.history(requireOrgId(req), classParam(req.params.cls), req.params.id) });
 }));
 
-/** One-time copy of the linked ArcGIS shapes into AgroCloud (CEO only). dryRun reports without saving. */
+
+/**
+ * Full import of the ArcGIS layer (Agro_Structures) into the system: zones, sites,
+ * farm areas by Structure_Type, fields keyed by ZONE_ID + Farm_Code. CEO only.
+ * dryRun returns the same report without saving anything.
+ */
 geoRouter.post('/import/arcgis', authorize('ceo'),
-  validate({ body: z.object({ dryRun: z.boolean().optional(), overwrite: z.boolean().optional(), buildParents: z.boolean().optional() }) }),
+  validate({ body: z.object({
+    url: z.string().url().max(500).optional().nullable(),
+    dryRun: z.boolean().optional(), overwrite: z.boolean().optional(), buildParents: z.boolean().optional(),
+  }) }),
   asyncHandler(async (req: AuthRequest, res: Response) => {
-    res.json({ success: true, data: await geo.importFromLinkedLayer(requireOrgId(req), actorOf(req), req.body) });
+    res.json({ success: true, data: await geoImport.importFromArcgis(requireOrgId(req), actorOf(req), req.body) });
   }));

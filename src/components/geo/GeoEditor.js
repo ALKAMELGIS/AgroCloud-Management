@@ -144,7 +144,7 @@ export default function GeoEditor({ canEdit, canImport = false }) {
 
   const load = useCallback(async () => {
     const [l, m] = await Promise.all([apiRequest('/geo/layers'), apiRequest('/geo/model')]);
-    setLayers(l); setModel(m || { subtypes: [], domains: [] });
+    setLayers({ ...l, __v: Date.now() }); setModel(m || { subtypes: [], domains: [] });
     return l;
   }, []);
   const loadAndFit = useCallback(() => {
