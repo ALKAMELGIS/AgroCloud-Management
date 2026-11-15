@@ -26,6 +26,11 @@ export interface Field {
   varietyName?: string;
   valves?: Valve[];
   cropHistory?: CropHistory[];
+  keyId?: string;
+  subtypeCode?: number;
+  gisZoneId?: string;
+  gisFarmCode?: string;
+  gisGlobalId?: string;
 }
 
 export interface GeoJSONPolygon {

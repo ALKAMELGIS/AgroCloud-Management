@@ -71,8 +71,9 @@ export default function FeatureInfoPanel({ feature, styler, onClose, onViewField
   useEffect(() => {
     const qs = new URLSearchParams();
     if (zone && code) { qs.set('zone_id', String(zone.value)); qs.set('farm_code', String(code.value)); }
-    else if (globalId) qs.set('global_id', String(globalId.value));
-    else { setForms({ error: 'none' }); return undefined; }
+    // GlobalID always goes too: features without Farm_Code reach their field through it.
+    if (globalId) qs.set('global_id', String(globalId.value));
+    if (![...qs.keys()].length) { setForms({ error: 'none' }); return undefined; }
     qs.set('records', '3');
     let live = true;
     setForms(null);

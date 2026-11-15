@@ -316,6 +316,15 @@ export async function featureForms(orgId: string, q: FeatureLookup) {
     );
     fieldIds = f.rows.map((r: any) => r.id);
   }
+  // Imported into AgroCloud's own geodatabase: the field keeps the feature's GlobalID.
+  if (!fieldIds.length && q.globalId) {
+    const f = await dbPool.query(
+      `SELECT id FROM fields WHERE organization_id = $1 AND deleted_at IS NULL
+          AND UPPER(TRIM(BOTH '{}' FROM gis_external_id)) = UPPER(TRIM(BOTH '{}' FROM $2))`,
+      [orgId, q.globalId.trim()],
+    );
+    fieldIds = f.rows.map((r: any) => r.id);
+  }
   if (!rows.length && !fieldIds.length) throw new AppError('No feature or field matches these keys', 'NOT_FOUND', 404);
 
   const locations = fieldIds.length

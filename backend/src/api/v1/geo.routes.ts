@@ -30,11 +30,12 @@ const geometrySchema = z.object({
   coordinates: z.array(z.any()).min(1),
 });
 
-geoRouter.get('/model', requireReader, asyncHandler(async (_req: AuthRequest, res: Response) => {
+// Every signed-in user of the organisation may read the shapes (forms pick fields on the map).
+geoRouter.get('/model', asyncHandler(async (_req: AuthRequest, res: Response) => {
   res.json({ success: true, data: await geo.getModel() });
 }));
 
-geoRouter.get('/layers', requireReader, asyncHandler(async (req: AuthRequest, res: Response) => {
+geoRouter.get('/layers', asyncHandler(async (req: AuthRequest, res: Response) => {
   res.json({ success: true, data: await geo.getLayers(requireOrgId(req)) });
 }));
 
@@ -60,6 +61,10 @@ geoRouter.patch('/:cls/:id/subtype', requireWriter, validate({ body: z.object({ 
   asyncHandler(async (req: AuthRequest, res: Response) => {
     res.json({ success: true, data: await geo.setSubtype(requireOrgId(req), actorOf(req), classParam(req.params.cls), req.params.id, req.body.subtypeCode) });
   }));
+
+geoRouter.get('/:cls/:id/forms', requireReader, asyncHandler(async (req: AuthRequest, res: Response) => {
+  res.json({ success: true, data: await geo.formsOf(requireOrgId(req), classParam(req.params.cls), req.params.id, Number(req.query.records ?? 3)) });
+}));
 
 geoRouter.get('/:cls/:id/history', requireReader, asyncHandler(async (req: AuthRequest, res: Response) => {
   res.json({ success: true, data: await geo.history(requireOrgId(req), classParam(req.params.cls), req.params.id) });

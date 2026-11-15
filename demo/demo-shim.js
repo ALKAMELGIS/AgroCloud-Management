@@ -1,15 +1,7 @@
 (function(){
 
-  var DEMOFC=(function(){ var F=[],lon0=55.74,lat0=24.20;
-    function rect(x,y,w,h){ return [[[x,y],[x+w,y],[x+w,y+h],[x,y+h],[x,y]]]; }
-    function circle(cx,cy,r){ var c=[]; for(var i=0;i<=32;i++){ var a=i/32*2*Math.PI; c.push([cx+r*Math.cos(a)/Math.cos(cy*Math.PI/180),cy+r*Math.sin(a)]); } return [c]; }
-    for(var i=0;i<6;i++) F.push({type:'Feature',properties:{Farm_Name:'GH-0'+(i+1),Farm_Code:'MH-GH-0'+(i+1),ZONE_ID:'MH',SITE:1,Structure_Type:'Greenhouse'},geometry:{type:'Polygon',coordinates:rect(lon0+i*0.0016,lat0,0.0012,0.0035)}});
-    for(var j=0;j<3;j++) F.push({type:'Feature',properties:{Farm_Name:'NH-0'+(j+1),Farm_Code:'MH-NH-0'+(j+1),ZONE_ID:'MH',SITE:1,Structure_Type:'NetHouse'},geometry:{type:'Polygon',coordinates:rect(lon0+j*0.0024,lat0+0.0045,0.002,0.003)}});
-    F.push({type:'Feature',properties:{Farm_Name:'OF-01',Farm_Code:'MH-OF-01',ZONE_ID:'MH',SITE:1,Structure_Type:'Open Field'},geometry:{type:'Polygon',coordinates:rect(lon0+0.0105,lat0,0.006,0.0075)}});
-    F.push({type:'Feature',properties:{Farm_Name:'OF-02',Farm_Code:'MH-OF-02',ZONE_ID:'MH',SITE:1,Structure_Type:'Open Field'},geometry:{type:'Polygon',coordinates:rect(lon0,lat0-0.0085,0.0095,0.0065)}});
-    F.push({type:'Feature',properties:{Farm_Name:'PV-01',Farm_Code:'MH-PV-01',ZONE_ID:'MH',SITE:1,Structure_Type:'Pivot'},geometry:{type:'Polygon',coordinates:circle(lon0+0.0145,lat0-0.0055,0.0035)}});
-    F.push({type:'Feature',properties:{Farm_Name:'PV-02',Farm_Code:'MH-PV-02',ZONE_ID:'MH',SITE:1,Structure_Type:'Pivot'},geometry:{type:'Polygon',coordinates:circle(lon0+0.0225,lat0-0.0055,0.0035)}});
-    return {type:'FeatureCollection',features:F}; })();
+  /* No made-up shapes: the map shows the real Agro_Structures layer (live, or the copy shipped with the app). */
+  var EMPTYFC={type:'FeatureCollection',features:[]};
   var SATCAT=[{"key":"TRUE_COLOR","label":"True color","group":"visual","formula":"B04, B03, B02","description":"Natural colours, as the eye sees them.","legend":null,"visual":true},{"key":"FALSE_COLOR","label":"Color infrared (vegetation)","group":"visual","formula":"B08, B04, B03","description":"Healthy vegetation in bright red.","legend":null,"visual":true},{"key":"SWIR","label":"SWIR (soil & moisture)","group":"visual","formula":"B12, B8A, B04","description":"Wet soil dark, dry soil and bare ground bright.","legend":null,"visual":true},{"key":"NDVI","label":"NDVI","group":"vegetation","formula":"(B08 − B04) / (B08 + B04)","description":"Vegetation health and density.","legend":[{"value":-0.2,"color":"#a50026"},{"value":0,"color":"#d73027"},{"value":0.1,"color":"#f46d43"},{"value":0.2,"color":"#fdae61"},{"value":0.3,"color":"#fee08b"},{"value":0.4,"color":"#d9ef8b"},{"value":0.5,"color":"#a6d96a"},{"value":0.6,"color":"#66bd63"},{"value":0.7,"color":"#1a9850"},{"value":0.9,"color":"#006837"}],"visual":false},{"key":"SAVI","label":"SAVI","group":"vegetation","formula":"1.5 × (B08 − B04) / (B08 + B04 + 0.5)","description":"NDVI corrected for bright soil; better for young crops.","legend":[{"value":-0.2,"color":"#a50026"},{"value":0,"color":"#d73027"},{"value":0.1,"color":"#f46d43"},{"value":0.2,"color":"#fdae61"},{"value":0.3,"color":"#fee08b"},{"value":0.4,"color":"#d9ef8b"},{"value":0.5,"color":"#a6d96a"},{"value":0.6,"color":"#66bd63"},{"value":0.7,"color":"#1a9850"},{"value":0.9,"color":"#006837"}],"visual":false},{"key":"NDWI","label":"NDWI","group":"water","formula":"(B03 − B08) / (B03 + B08)","description":"Open water and water bodies.","legend":[{"value":-0.8,"color":"#8c510a"},{"value":-0.4,"color":"#d8b365"},{"value":-0.1,"color":"#f6e8c3"},{"value":0,"color":"#c7eae5"},{"value":0.2,"color":"#5ab4ac"},{"value":0.5,"color":"#01665e"},{"value":0.8,"color":"#003c30"}],"visual":false},{"key":"NDMI","label":"NDMI","group":"water","formula":"(B08 − B11) / (B08 + B11)","description":"Moisture in the crop canopy.","legend":[{"value":-0.6,"color":"#8c2d04"},{"value":-0.3,"color":"#cc4c02"},{"value":-0.1,"color":"#fe9929"},{"value":0,"color":"#fee391"},{"value":0.1,"color":"#c7e9b4"},{"value":0.2,"color":"#7fcdbb"},{"value":0.4,"color":"#2c7fb8"},{"value":0.6,"color":"#253494"}],"visual":false},{"key":"NDII","label":"NDII","group":"water","formula":"(B08 − B11) / (B08 + B11)","description":"Infrared water-content index (same Sentinel-2 bands as NDMI).","legend":[{"value":-0.6,"color":"#8c2d04"},{"value":-0.3,"color":"#cc4c02"},{"value":-0.1,"color":"#fe9929"},{"value":0,"color":"#fee391"},{"value":0.1,"color":"#c7e9b4"},{"value":0.2,"color":"#7fcdbb"},{"value":0.4,"color":"#2c7fb8"},{"value":0.6,"color":"#253494"}],"visual":false},{"key":"MSI","label":"Moisture stress (MSI)","group":"water","formula":"B11 / B08","description":"Higher values mean drier, stressed plants.","legend":[{"value":0.2,"color":"#253494"},{"value":0.6,"color":"#41b6c4"},{"value":1,"color":"#ffffcc"},{"value":1.4,"color":"#fd8d3c"},{"value":2,"color":"#bd0026"}],"visual":false},{"key":"BSI","label":"Bare soil (BSI)","group":"soil","formula":"((B11 + B04) − (B08 + B02)) / ((B11 + B04) + (B08 + B02))","description":"Bare and exposed soil.","legend":[{"value":-0.6,"color":"#1a9850"},{"value":-0.2,"color":"#91cf60"},{"value":0,"color":"#fee08b"},{"value":0.15,"color":"#fc8d59"},{"value":0.3,"color":"#d73027"},{"value":0.6,"color":"#7f0000"}],"visual":false}];
   try {
     var U={id:'u1',name:'Demo Manager',email:'demo@agrocloud.test',role:'ceo',organizationId:'org1'};
@@ -33,7 +25,7 @@
     });
   });
   /* Zones, sites, farm areas and fields created by "Import from ArcGIS" on this device. */
-  var IMP_KEY='agro_demo_import_v1';
+  var IMP_KEY='agro_demo_import_v2';
   (function(){ var im=null; try{ im=JSON.parse(localStorage.getItem(IMP_KEY)||'null'); }catch(e){} if(!im) return;
     (im.countries||[]).forEach(function(x){countries.push(x);}); (im.sites||[]).forEach(function(x){sites.push(x);});
     (im.areas||[]).forEach(function(x){areas.push(x);}); (im.fields||[]).forEach(function(x){fields.push(x);});
@@ -67,7 +59,8 @@
   /* Map editor (/geo): shapes, KeyIDs, subtypes and history kept in this browser.
      MH · Site 1 starts with drawn greenhouse and nethouse fields; the rest is empty,
      ready to draw. Same rules as the server: valid, inside the parent, no overlap. */
-  var GEO_KEY='agro_demo_geo_v1';
+  var GEO_KEY='agro_demo_geo_v2';
+  try{ localStorage.removeItem('agro_demo_geo_v1'); localStorage.removeItem('agro_demo_import_v1'); }catch(e){}
   var GEO_SUB=[['zone',1,'Region','منطقة','#e8f2ec','#165c3a'],['site',1,'Farm site','موقع مزرعة','#e8f2ec','#1f7a4d'],['site',2,'Nursery site','موقع مشتل','#f1f7e8','#4d7c0f'],['site',9,'Unassigned','غير مخصص','#f3f5f2','#6b746e'],['farm_area',1000,'Greenhouse','بيت محمي','#ffffff','#267300'],['farm_area',1001,'Nethouse','بيت شبكي','#e6f4ff','#005ce6'],['farm_area',1002,'Glasshouse','بيت زجاجي','#eef6f6','#2f7f7f'],['farm_area',1003,'Retractable Roof Houses','بيت بسقف متحرك','#f3ecff','#6a3fb5'],['farm_area',1004,'Cravo','كرافو','#fdeee6','#b5532a'],['farm_area',1005,'Dates Farm','مزرعة نخيل','#f6efdc','#8a6d1d'],['farm_area',1006,'PIVOT','محوري','#e6ffd9','#38a800'],['farm_area',1007,'Farm Plots','قطع زراعية','#fff4d6','#a87000'],['field',1000,'Greenhouse','بيت محمي','#ffffff','#267300'],['field',1001,'Nethouse','بيت شبكي','#e6f4ff','#005ce6'],['field',1002,'Glasshouse','بيت زجاجي','#eef6f6','#2f7f7f'],['field',1003,'Retractable Roof Houses','بيت بسقف متحرك','#f3ecff','#6a3fb5'],['field',1004,'Cravo','كرافو','#fdeee6','#b5532a'],['field',1005,'Dates Farm','مزرعة نخيل','#f6efdc','#8a6d1d'],['field',1006,'PIVOT','محوري','#e6ffd9','#38a800'],['field',1007,'Farm Plots','قطع زراعية','#fff4d6','#a87000']]
     .map(function(a,i){return {class_key:a[0],code:a[1],name_en:a[2],name_ar:a[3],fill_color:a[4],line_color:a[5],sort_order:i};});
   var GEO_DOM=[{key:'irrigation_system',name_en:'Irrigation system',name_ar:'نظام الري',kind:'coded',values:[['drip','Drip','تنقيط'],['sprinkler','Sprinkler','رش'],['pivot','Centre pivot','محوري'],['flood','Flood','غمر'],['hydro','Hydroponic','زراعة مائية']]},
@@ -118,6 +111,9 @@
     var q={}; (url.split('?')[1]||'').split('&').forEach(function(p){var kv=p.split('='); if(kv[0]) q[decodeURIComponent(kv[0])]=decodeURIComponent(kv[1]||'');});
     if(path==='/geo/model') return ok({subtypes:GEO_SUB,domains:GEO_DOM});
     if(path==='/geo/layers') return ok(geoItems());
+    var gfm=path.match(/^\/geo\/(zone|site|farm_area|field)\/([^/]+)\/forms$/);
+    if(gfm){ var fc0=gfm[1]==='field'?1:fields.filter(function(f){ if(gfm[1]==='farm_area') return f.farmAreaId===gfm[2]; var a=areas.filter(function(x){return x.id===f.farmAreaId;})[0]; if(!a) return false; if(gfm[1]==='site') return a.siteId===gfm[2]; var s0=sites.filter(function(x){return x.id===a.siteId;})[0]; return s0&&s0.countryId===gfm[2]; }).length;
+      return ok({field_count:fc0,forms:[]}); }
     var gm=path.match(/^\/geo\/(zone|site|farm_area|field)\/([^/]+)\/(validate|geometry|subtype|history)$/);
     if(gm){
       var gcls=gm[1], gid=gm[2], gop=gm[3], gst=geoStore(), now=new Date().toISOString();
@@ -167,8 +163,8 @@
         mk('water_33kpa','Water at field capacity (33 kPa)','% vol',function(d){return Math.round(wv(14+d/30,2));}),
         mk('texture','Texture class (USDA)','',function(d){return d<60?'Loamy sand':'Sandy loam';})]}); }
 
-    if(path==='/gis/layers'&&method==='GET') return ok([{id:'demo-struct',name:'Agro_Structures (GCC)',sourceType:'arcgis_feature_service',featureCount:DEMOFC.features.length,isVisible:true,style:{color:'#1f7a4d',fillOpacity:0.25}}]);
-    if(path==='/gis/layers/demo-struct/features') return ok(DEMOFC);
+    if(path==='/gis/layers'&&method==='GET') return ok([{id:'demo-struct',name:'Agro_Structures (GCC)',sourceType:'arcgis_feature_service',featureCount:0,isVisible:true,style:{color:'#1f7a4d',fillOpacity:0.25}}]);
+    if(path==='/gis/layers/demo-struct/features') return ok(EMPTYFC);
     if(path==='/satellite/status'){ var dc=window.__devSat&&window.__devSat.cfg(); return ok(dc?{configured:true,service:dc.service,label:(dc.label||'Sentinel-2')+' · live on this device'}:{configured:true,service:'sentinel-hub',label:'Sample imagery (save your configuration ID in Settings → API keys)'}); }
     if(path==='/satellite/indices') return ok(SATCAT);
     if(path==='/satellite/tile-key') return ok({key:'demo.key',expiresAt:new Date(Date.now()+12*3600e3).toISOString()});
@@ -217,7 +213,7 @@
     if(path==='/countries') return ok(countries);
     if(path==='/sites') return ok(q.country_id?sites.filter(function(s){return s.countryId===q.country_id;}):sites);
     if(path==='/farm-areas') return ok(q.site_id?areas.filter(function(a){return a.siteId===q.site_id;}):areas);
-    if(path==='/fields') return ok(fields);
+    if(path==='/fields'){ var fk=geoKeys(), fst=geoStore(); return ok(fields.map(function(f){ var e=fst[f.id]||{}; return Object.assign({},f,{keyId:fk[f.id],subtypeCode:e.subtype||null,gisZoneId:f.gis_zone_id||null,gisFarmCode:f.gis_farm_code||null,gisGlobalId:f.gis_external_id||null,hasShape:!!e.geometry}); })); }
     if(path==='/crops') return ok(CROPS.map(function(c,i){return {id:'crop'+i,name:c};}));
     if(path==='/field-types') return ok([{id:'ft1',name:'Greenhouse'},{id:'ft2',name:'Nethouse'},{id:'ft3',name:'PIVOT'}]);
     if(path==='/seasons') return ok(SEASONS);
@@ -256,13 +252,7 @@
      the service does not answer, the built-in sample polygons are used instead. */
   var LIVE_LAYER='https://services1.arcgis.com/jz3ndhbYV5K9NwI8/arcgis/rest/services/Agro_Structures/FeatureServer/21';
   var LIVE=null, META=null;
-  /* Sample symbology for the offline polygons (one colour per structure type). */
-  var DEMO_META={name:'Agro_Structures',drawingInfo:{transparency:0,renderer:{type:'uniqueValue',field1:'Structure_Type',uniqueValueInfos:[
-    {value:'Greenhouse',label:'Greenhouse',symbol:{type:'esriSFS',style:'esriSFSSolid',color:[255,255,255,90],outline:{type:'esriSLS',color:[38,115,0,255],width:1.5}}},
-    {value:'NetHouse',label:'Nethouse',symbol:{type:'esriSFS',style:'esriSFSSolid',color:[190,232,255,140],outline:{type:'esriSLS',color:[0,92,230,255],width:1.5}}},
-    {value:'Open Field',label:'Farm plots',symbol:{type:'esriSFS',style:'esriSFSSolid',color:[255,235,175,150],outline:{type:'esriSLS',color:[168,112,0,255],width:1.5}}},
-    {value:'Pivot',label:'Pivot',symbol:{type:'esriSFS',style:'esriSFSSolid',color:[163,255,115,140],outline:{type:'esriSLS',color:[56,168,0,255],width:1.5}}}]}},
-    fields:[],types:[]};
+  var DEMO_META={name:'Agro_Structures',drawingInfo:null,fields:[],types:[]};
   var j=function(u){ return of(u).then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }); };
   function race(p,ms){ return Promise.race([p,new Promise(function(_,rej){ setTimeout(function(){ rej(new Error('timeout')); },ms); })]); }
   function liveMeta(){
@@ -298,7 +288,7 @@
       /* The copy of the real layer shipped with the app (read from ArcGIS on the date in its name), else the samples. */
       return of('./agro_structures.geojson').then(function(r){ if(!r.ok) throw new Error('no copy'); return r.json(); })
         .then(function(fc){ if(!fc||!(fc.features||[]).length) throw new Error('empty'); fc.features.forEach(function(f,i){ if(f.id===undefined) f.id=(f.properties&&f.properties.OBJECTID)||i; }); fc._snapshot=true; return fc; })
-        .catch(function(){ LIVE=null; return DEMOFC; });
+        .catch(function(){ LIVE=null; return EMPTYFC; });
     });
     return LIVE;
   }
@@ -450,7 +440,7 @@
     }
     if(isApi(url)&&/\/geo\/import\/arcgis(\?|$)/.test(url)&&init&&init.method==='POST'){
       var ib={}; try{ ib=init.body?JSON.parse(init.body):{}; }catch(e){}
-      return Promise.all([liveLayer(),liveMeta()]).then(function(r){ var fc=r[0]||DEMOFC, rp=demoImport(fc,r[1]||DEMO_META,ib); rp.layer.source=fc._live?'live':fc._snapshot?'copy':'sample'; return jsonRes(ok(rp)); });
+      return Promise.all([liveLayer(),liveMeta()]).then(function(r){ var fc=r[0]||EMPTYFC, rp=demoImport(fc,r[1]||DEMO_META,ib); rp.layer.source=fc._live?'live':fc._snapshot?'copy':'none'; return jsonRes(ok(rp)); });
     }
     if(isApi(url)&&/\/gis\/layers\/demo-struct\/features(\?|$)/.test(url)){
       return liveLayer().then(function(fc){ return jsonRes(ok(fc)); });
@@ -459,13 +449,13 @@
     if(isApi(url)&&/\/gis\/layers(\?|$)/.test(url)&&(!init||!init.method||init.method==='GET')){
       return liveLayer().then(function(fc){
         var live=fc&&fc._live;
-        return jsonRes(ok([{id:'demo-struct',name:live?'Agro_Structures (ArcGIS Online · live)':(fc&&fc._snapshot)?'Agro_Structures (ArcGIS copy · 15 Nov 2026)':'Agro_Structures (sample, ArcGIS not reachable)',
+        return jsonRes(ok([{id:'demo-struct',name:live?'Agro_Structures (ArcGIS Online · live)':(fc&&fc._snapshot)?'Agro_Structures (ArcGIS copy · 15 Nov 2026)':'Agro_Structures (ArcGIS not reachable)',
           sourceType:'arcgis_feature_service',featureCount:(fc&&fc.features||[]).length,isVisible:true,style:{color:'#1f7a4d',fillOpacity:0.25}}]));
       });
     }
     if(isApi(url)&&/\/gis\/layers\/demo-struct\/metadata(\?|$)/.test(url)){
       /* Live symbology only together with the live polygons; the sample polygons keep the sample legend. */
-      return liveLayer().then(function(fc){ return fc&&fc._live?liveMeta():null; }).then(function(m){ return jsonRes(ok(m||DEMO_META)); });
+      return liveLayer().then(function(fc){ return fc&&(fc._live||fc._snapshot)?liveMeta():null; }).then(function(m){ return jsonRes(ok(m||DEMO_META)); });
     }
     if(isApi(url)){ var m=(init&&init.method)||'GET'; var b=null; try{b=init&&init.body?JSON.parse(init.body):null;}catch(e){}
       return Promise.resolve(new Response(JSON.stringify(body(url,m,b)),{status:200,headers:{'Content-Type':'application/json'}})); }

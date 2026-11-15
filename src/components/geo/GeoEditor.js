@@ -23,7 +23,10 @@ import useFillHeight from '../../hooks/useFillHeight';
 import { apiRequest } from '../../utils/api';
 import { useNotification } from '../../contexts/NotificationContext';
 import { useIsArabic } from '../../i18n/shellLabels';
+import { Link as RouterLink } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import ArcgisImportDialog from './ArcgisImportDialog';
+import { forgetGeo } from './FieldSelect';
 import { areaHa, boundsOf, circlePolygon, readBoundaryFile, toMultiPolygon, GEO_CLASSES } from './geoUtils';
 
 /**
@@ -119,6 +122,7 @@ function FitTo({ bounds, fitKey, bottomPad }) {
 
 export default function GeoEditor({ canEdit, canImport = false }) {
   const notify = useNotification();
+  const queryClient = useQueryClient();
   const isAr = useIsArabic();
   const theme = useTheme();
   const isPhone = useMediaQuery(theme.breakpoints.down('sm'));
@@ -138,13 +142,14 @@ export default function GeoEditor({ canEdit, canImport = false }) {
   const [check, setCheck] = useState(null);
   const [saving, setSaving] = useState(false);
   const [history, setHistory] = useState(null);
+  const [linked, setLinked] = useState(null); // forms recorded on the selected feature
   const [fit, setFit] = useState({ key: 0, bounds: null });
   const fileRef = useRef(null);
   const [importOpen, setImportOpen] = useState(false);
 
   const load = useCallback(async () => {
     const [l, m] = await Promise.all([apiRequest('/geo/layers'), apiRequest('/geo/model')]);
-    setLayers({ ...l, __v: Date.now() }); setModel(m || { subtypes: [], domains: [] });
+    forgetGeo(); setLayers({ ...l, __v: Date.now() }); setModel(m || { subtypes: [], domains: [] });
     return l;
   }, []);
   const loadAndFit = useCallback(() => {
@@ -273,6 +278,16 @@ export default function GeoEditor({ canEdit, canImport = false }) {
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
   }, [editing, mode]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!selected) { setLinked(null); return undefined; }
+    let alive = true;
+    setLinked(null);
+    apiRequest(`/geo/${selected.cls}/${selected.id}/forms?records=0`)
+      .then((r) => { if (alive) setLinked(r); })
+      .catch(() => { if (alive) setLinked({ field_count: 0, forms: [], error: true }); });
+    return () => { alive = false; };
+  }, [selected?.cls, selected?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadHistory = async () => {
     if (!current) return;
@@ -437,6 +452,35 @@ export default function GeoEditor({ canEdit, canImport = false }) {
 
       <Divider />
       <Box>
+        <Typography component="h3" sx={{ fontSize: '0.8125rem', fontWeight: 600, mb: 1 }}>
+          {isAr ? 'الاستمارات على هذا العنصر' : 'Forms on this feature'}
+          {linked && current.cls !== 'field' ? (
+            <Box component="span" sx={{ fontWeight: 400, color: 'text.secondary' }}>{isAr ? ` · ${linked.field_count} حقل` : ` · ${linked.field_count} fields`}</Box>
+          ) : null}
+        </Typography>
+        {!linked ? <CircularProgress size={16} /> : linked.forms.length === 0 ? (
+          <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+            {isAr ? 'لا سجلات بعد. الاستمارات ترتبط بالحقل عند اختياره فيها.' : 'No records yet. Forms link to the field when it is chosen in them.'}
+          </Typography>
+        ) : (
+          <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0, border: 1, borderColor: 'divider' }}>
+            {linked.forms.map((fm) => (
+              <Box component="li" key={fm.form_id} sx={{ '& + &': { borderTop: 1, borderColor: 'divider' } }}>
+                <ButtonBase component={RouterLink} to={fm.form_path || '#'} sx={{ width: '100%', justifyContent: 'flex-start', gap: 2, px: 2, py: 1, textAlign: 'start', '&:hover': { bgcolor: 'action.hover' } }}>
+                  <Box component="span" sx={{ flex: 1, minWidth: 0, fontSize: '0.8125rem' }}>{isAr ? (fm.title_ar || fm.title_en) : fm.title_en}</Box>
+                  <Box component="span" sx={{ fontSize: '0.75rem', color: 'text.secondary', fontVariantNumeric: 'tabular-nums', textAlign: 'end' }}>
+                    {fm.record_count} {isAr ? 'سجل' : 'records'}
+                    {fm.last_record_date ? <><br /><bdi dir="ltr">{String(fm.last_record_date).slice(0, 10)}</bdi></> : null}
+                  </Box>
+                </ButtonBase>
+              </Box>
+            ))}
+          </Box>
+        )}
+      </Box>
+
+      <Divider />
+      <Box>
         <ButtonBase onClick={() => (history ? setHistory(null) : loadHistory())} aria-expanded={!!history} sx={{ fontSize: '0.8125rem', color: 'text.secondary', gap: 1 }}>
           {history ? <ExpandIcon fontSize="small" /> : <ChevronIcon fontSize="small" sx={{ transform: (t) => (t.direction === 'rtl' ? 'scaleX(-1)' : 'none') }} />}
           {isAr ? 'سجل التعديلات' : 'Edit history'}
@@ -544,7 +588,7 @@ export default function GeoEditor({ canEdit, canImport = false }) {
           )}
         </Box>
       </MapWorkspace>
-      {canImport && <ArcgisImportDialog open={importOpen} onClose={() => setImportOpen(false)} onDone={loadAndFit} />}
+      {canImport && <ArcgisImportDialog open={importOpen} onClose={() => setImportOpen(false)} onDone={() => { queryClient.invalidateQueries({ queryKey: ['masterData'] }); loadAndFit(); }} />}
       <input ref={fileRef} type="file" accept=".geojson,.json,.kml,.zip" hidden onChange={(e) => { importFile(e.target.files?.[0]); e.target.value = ''; }} />
     </Box>
   );

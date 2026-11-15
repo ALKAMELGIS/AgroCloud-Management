@@ -1,6 +1,7 @@
 import { dbPool } from '../db/client';
 import { AppError, NotFoundError } from '../utils/errors';
 import { assertCanManageSite, assertCanManageZone } from './zoneAccess.service';
+import { formsForFields } from './formRegistry.service';
 
 /**
  * The system's own geodatabase: zones, sites, farm areas and fields are drawn
@@ -252,3 +253,27 @@ export async function history(orgId: string, cls: GeoClass, id: string) {
   return r.rows;
 }
 
+
+/** Fields inside a feature (itself for a field), for the forms linked to it. */
+async function fieldIdsOf(orgId: string, cls: GeoClass, id: string): Promise<string[]> {
+  await scopeOf(orgId, cls, id);
+  const sql = {
+    field: 'SELECT id FROM fields WHERE id = $1 AND deleted_at IS NULL',
+    farm_area: 'SELECT id FROM fields WHERE farm_area_id = $1 AND deleted_at IS NULL',
+    site: 'SELECT f.id FROM fields f JOIN farm_areas fa ON fa.id = f.farm_area_id WHERE fa.site_id = $1 AND f.deleted_at IS NULL',
+    zone: `SELECT f.id FROM fields f JOIN farm_areas fa ON fa.id = f.farm_area_id JOIN sites s ON s.id = fa.site_id
+            WHERE s.country_id = $1 AND f.deleted_at IS NULL`,
+  }[cls];
+  return (await dbPool.query(sql, [id])).rows.map((r: any) => r.id);
+}
+
+/**
+ * Forms recorded on a map feature: every form (FORM_ID) with its record count, first / last
+ * record date and its latest records, through field_id. The relationship
+ * Agro_Structures feature → field (KeyID) → form records.
+ */
+export async function formsOf(orgId: string, cls: GeoClass, id: string, recordsPerForm = 3) {
+  const ids = await fieldIdsOf(orgId, cls, id);
+  const forms = ids.length ? await formsForFields(ids, orgId, { recordsPerForm }) : [];
+  return { field_count: ids.length, forms };
+}

@@ -1,5 +1,6 @@
 import { useMemo, useCallback, useEffect, useRef } from 'react';
 import { Grid, TextField, MenuItem } from '@mui/material';
+import FieldSelect from './geo/FieldSelect';
 
 const selectSx = {
   '& .MuiSelect-select': {
@@ -249,9 +250,7 @@ export default function LocationSelector({
       </Cell>
 
       <Cell size={gridSize}>
-        <TextField
-          fullWidth
-          select
+        <FieldSelect
           label={fieldLabel}
           name="field"
           value={values.field}
@@ -259,34 +258,10 @@ export default function LocationSelector({
           error={touched.field && !!errors.field}
           helperText={touched.field && errors.field}
           disabled={!values.farmArea}
-          InputLabelProps={{ shrink: true }}
-          SelectProps={{
-            displayEmpty: true,
-            renderValue: (selected) => {
-              if (!selected) return `Select ${fieldLabel.toLowerCase()}`;
-              const f = availableFields.find((fl) => fl.id === selected);
-              return f ? f.name : `Select ${fieldLabel.toLowerCase()}`;
-            },
-          }}
+          fields={availableFields}
+          placeholder={`Select ${fieldLabel.toLowerCase()}`}
           sx={selectSx}
-        >
-          {availableFields.length === 0 && (
-            <MenuItem value="" disabled>
-              No fields yet
-            </MenuItem>
-          )}
-          {availableFields.map((field) => (
-            <MenuItem key={field.id} value={field.id}>
-              {field.name} {field.type ? `(${field.type})` : ''}
-              {/* GIS key (ZONE_ID + Farm_Code) that links this field to its map polygon. */}
-              {(field.gis_farm_code || field.gisFarmCode) && (field.gis_farm_code || field.gisFarmCode) !== field.name && (
-                <bdi translate="no" style={{ marginInlineStart: 8, fontSize: '0.75rem', color: 'var(--sheet-ink-3, #767676)' }}>
-                  {field.gis_farm_code || field.gisFarmCode}
-                </bdi>
-              )}
-            </MenuItem>
-          ))}
-        </TextField>
+        />
       </Cell>
     </>
   );

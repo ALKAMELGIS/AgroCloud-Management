@@ -26,6 +26,7 @@ import { Formik, Form } from 'formik';
 import { getCropDripperCount, getCropDripTestCount } from '../utils/masterDataUtils';
 import { useMasterData } from '../utils/useMasterData';
 import { createEcph } from '../utils/backendApi';
+import FieldSelect from '../components/geo/FieldSelect';
 import { useNotification } from '../contexts/NotificationContext';
 import { queueEntry } from '../utils/offlineQueue';
 import { validationSchema, calculateValveMetrics } from './ecph/ecphUtils';
@@ -519,9 +520,7 @@ function ECPHEntry() {
                           <MenuItem value="" disabled>No farm areas yet</MenuItem>
                         )}
                       </TextField>
-                      <TextField
-                        fullWidth
-                        select
+                      <FieldSelect
                         label={<HintLabel hint="Individual growing area. NH = Net House, GH = Greenhouse, OF = Open Field">Field</HintLabel>}
                         name="field"
                         value={values.field}
@@ -529,27 +528,9 @@ function ECPHEntry() {
                         onBlur={handleBlur}
                         error={touched.field && !!errors.field}
                         helperText={touched.field && errors.field}
-                        InputLabelProps={{ shrink: true }}
-                        SelectProps={{
-                          displayEmpty: true,
-                          renderValue: (selected) => {
-                            if (!selected) return <em>Select field</em>;
-                            const field = allFields.find((f) => f.id === selected);
-                            return field ? `${field.name}${field.type ? ` · ${field.type}` : ''}` : <em>Select field</em>;
-                          },
-                        }}
+                        fields={allFields.filter(f => !values.farmArea || f.farmAreaId === values.farmArea)}
                         sx={{ ...SELECT_SX, ...span({ xs: 2, md: 2 }) }}
-                      >
-                        {allFields.filter(f => !values.farmArea || f.farmAreaId === values.farmArea).map((field) => (
-                          <MenuItem key={field.id} value={field.id}>
-                            <Box component="span" sx={{ flex: 1 }}>{field.name}</Box>
-                            <Box component="span" sx={{ color: 'text.secondary', fontSize: '0.8125rem' }}>{field.type || 'Unknown'}</Box>
-                          </MenuItem>
-                        ))}
-                        {allFields.filter(f => !values.farmArea || f.farmAreaId === values.farmArea).length === 0 && (
-                          <MenuItem value="" disabled>No fields yet</MenuItem>
-                        )}
-                      </TextField>
+                      />
                       <TextField
                         fullWidth
                         select

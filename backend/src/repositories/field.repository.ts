@@ -72,6 +72,12 @@ function mapField(row: any): Field {
     deletedAt: row.deleted_at ?? undefined,
     varietyName: row.variety_name ?? undefined,
     current_crop: row.crop_name ?? undefined,
+    // Link to the map / Agro_Structures: permanent KeyID, subtype (Structure_Type) and the layer keys.
+    keyId: row.key_id ?? undefined,
+    subtypeCode: row.subtype_code ?? undefined,
+    gisZoneId: row.gis_zone_id ?? undefined,
+    gisFarmCode: row.gis_farm_code ?? undefined,
+    gisGlobalId: row.gis_external_id ?? undefined,
   };
 }
 

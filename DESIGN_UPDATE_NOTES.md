@@ -536,3 +536,12 @@ Pages:
 - Re-import leaves unchanged shapes alone (no history row) and keeps shapes edited in AgroCloud.
 - Full run of the real layer on PostgreSQL/PostGIS: 13 zones, 16 sites, 36 farm areas, 1188 fields with shapes, 0 invalid shapes, 0 missing or duplicate KeyIDs, a hand-entered field adopted and re-keyed; second run: 1188 matched, 0 changed. ~13 s.
 - Demo / APK: a copy of the layer (`demo/agro_structures.geojson`, `agro_structures.meta.json`, read 15 Nov 2026) is shipped and used when ArcGIS cannot be read from the page; the import dialog says whether it used the live layer, the copy or samples. The demo no longer starts with made-up shapes.
+
+## Round 49 — Agro_Structures linked to the form fields
+
+- Made-up shapes removed from the demo / APK: the sample polygons (GH/NH/OF/PV rectangles and pivots) and every shape saved on the device by earlier versions (`agro_demo_geo_v1`, `agro_demo_import_v1`) are gone; without ArcGIS and without the shipped copy the map shows nothing rather than invented shapes.
+- Fields API now returns the map link of each field: `keyId`, `subtypeCode` (Structure_Type), `gisZoneId`, `gisFarmCode`, `gisGlobalId`.
+- New `components/geo/FieldSelect.js`, the field picker of the forms (EC/pH entry, Fertigation entry via `LocationSelector`): each option shows a swatch of its structure type (dashed when it has no shape), its KeyID and type; under the field the chosen field's KeyID · type · area; a map button opens the real shapes of the candidate fields on satellite imagery and a click on a shape picks the field. Shapes and subtypes come from `/geo/layers` + `/geo/model` (now readable by every signed-in user of the organisation; editing rules unchanged), cached 2 minutes and refreshed after map edits.
+- Map editor, Attributes: **Forms on this feature** — every form (FORM_ID) recorded on the field, or on all fields inside a farm area / site / zone, with record count and last date, linking to the form (`GET /api/v1/geo/:cls/:id/forms`).
+- GIS Map feature card: features without Farm_Code reach their imported field through GlobalID (`fields.gis_external_id`); the card always sends the GlobalID.
+- After an import the master data is refreshed, so forms list the new fields at once.
