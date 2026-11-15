@@ -51,7 +51,8 @@ function ECPHEntry() {
   const appliedActiveSite = useRef(false);
   const [entriesRefreshKey, setEntriesRefreshKey] = useState(0);
   const [valve2Expanded, setValve2Expanded] = useState(false);
-  const [viewMode, setViewMode] = useState('form');
+  // Phones open on the field cards (one card per field); larger screens on the form.
+  const [viewMode, setViewMode] = useState(() => (typeof window !== 'undefined' && window.matchMedia?.('(max-width: 599.95px)').matches ? 'spreadsheet' : 'form'));
   const refreshEntries = useCallback(() => setEntriesRefreshKey((k) => k + 1), []);
 
   // Helper functions to get all sites, farm areas, and fields (independent selection)

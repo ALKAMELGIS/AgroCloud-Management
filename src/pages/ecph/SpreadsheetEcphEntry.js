@@ -23,11 +23,12 @@ import { useNotification } from '../../contexts/NotificationContext';
 import { queueEntry } from '../../utils/offlineQueue';
 import { calculateValveMetrics } from './ecphUtils';
 import { useActiveSite } from '../../contexts/ActiveSiteContext';
-import useAppLayout from '../../hooks/useAppLayout';
+import useAppLayout, { MOBILE_NAV_HEIGHT } from '../../hooks/useAppLayout';
 import PasteFromExcel from './PasteFromExcel';
 import EcphImporter from '../../components/EcphImporter';
 import { excelTableSx } from '../../components/table/ExcelTable';
 import InfoNote from '../../components/InfoNote';
+import EcphFieldCards from './EcphFieldCards';
 
 const WEATHER_OPTIONS = [
   'Sunny', 'Cloudy', 'Partly Cloudy', 'Foggy', 'Raining', 'Windy', 'Overcast', 'Hazy',
@@ -132,7 +133,7 @@ export default function SpreadsheetEcphEntry({ onEntrySaved, readOnly = false })
   const { data: masterData } = useMasterData();
   const notify = useNotification();
   const { activeSiteId: defaultSiteId } = useActiveSite();
-  const { isMobile, scrollRegionHeight } = useAppLayout();
+  const { isMobile, isPhone, scrollRegionHeight } = useAppLayout();
   const [showMore, setShowMore] = useState(false);
 
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
@@ -191,6 +192,11 @@ export default function SpreadsheetEcphEntry({ onEntrySaved, readOnly = false })
       farmAreaId: currentFarmArea.id,
     }));
   }, [currentFarmArea]);
+
+  const keyOf = useCallback((fid) => {
+    const f = fieldsForTab.find((x) => x.id === fid);
+    return f?.keyId || f?.key_id || '';
+  }, [fieldsForTab]);
 
   const isFarmPlotTab = useMemo(() => {
     const areaName = (currentFarmArea?.name || '').toLowerCase();
@@ -623,7 +629,7 @@ export default function SpreadsheetEcphEntry({ onEntrySaved, readOnly = false })
         <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
           <Tabs value={selectedTab} onChange={handleTabChange} variant="scrollable" scrollButtons="auto">
             {farmAreasForSite.map((fa) => (
-              <Tab key={fa.id} label={fa.name} />
+              <Tab key={fa.id} label={`${fa.name} · ${(fa.fields || []).length}`} />
             ))}
           </Tabs>
         </Box>
@@ -638,9 +644,9 @@ export default function SpreadsheetEcphEntry({ onEntrySaved, readOnly = false })
         <>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1, flexWrap: 'wrap', gap: 1 }}>
             <Typography variant="subtitle2" color="text.secondary">
-              {currentFarmArea.name} — {fieldsForTab.length} field(s), {rows.length} row(s)
+              {fieldsForTab.length} fields · {rows.length} valve rows
             </Typography>
-            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+            <Box sx={{ display: isPhone ? 'none' : 'flex', gap: 1, flexWrap: 'wrap' }}>
               {isMobile && (
                 <Button size="small" variant="text" onClick={() => setShowMore(!showMore)}>
                   {showMore ? 'Less columns' : 'More columns'}
@@ -678,28 +684,59 @@ export default function SpreadsheetEcphEntry({ onEntrySaved, readOnly = false })
             </Alert>
           )}
 
+          {isPhone ? (
+            <>
+              <EcphFieldCards rows={rows} keyOf={keyOf} isFarmPlot={isFarmPlotTab} updateRow={updateRow}
+                addValveRow={addValveRow} removeRow={removeRow} cellColor={getCellColor} readOnly={readOnly} />
+              {!readOnly && (() => {
+                const total = fieldsForTab.length;
+                const done = new Set(rows.filter((r) => r.valveNumber && r.dripVolume).map((r) => r.fieldId)).size;
+                return (
+                  <Box sx={{
+                    position: 'sticky', bottom: MOBILE_NAV_HEIGHT, zIndex: 5, mx: -1.5, mt: 2, px: 2, py: 1.5,
+                    display: 'flex', alignItems: 'center', gap: 1.5, bgcolor: 'background.paper', borderTop: 1, borderColor: 'divider',
+                  }}>
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography sx={{ fontWeight: 600, fontSize: '0.875rem' }}>{done} of {total} fields</Typography>
+                      <Box sx={{ height: 4, mt: 0.75, bgcolor: 'divider' }}><Box sx={{ height: 4, width: `${total ? (done / total) * 100 : 0}%`, bgcolor: 'primary.main' }} /></Box>
+                    </Box>
+                    <Button variant="contained" disableElevation onClick={handleSaveAll} disabled={saving || !done}
+                      startIcon={saving ? <CircularProgress size={16} color="inherit" /> : null} sx={{ height: 48, px: 2.75 }}>
+                      Save all
+                    </Button>
+                  </Box>
+                );
+              })()}
+            </>
+          ) : (
           <FitTableContainer component={Paper} variant="outlined" sx={{ overflow: 'auto', WebkitOverflowScrolling: 'touch' }}>
             <Table size="small" stickyHeader sx={[excelTableSx, fieldFreezeSx, thresholdCellSx]}>
               <TableHead>
                 <TableRow>
-                  <TableCell className="col-frozen-0">Field</TableCell>
-                  <TableCell>Valve</TableCell>
-                  <TableCell>Time</TableCell>
-                  <TableCell className="col-numeric">EC In</TableCell>
-                  {!isFarmPlotTab && <TableCell className="col-numeric">EC Out</TableCell>}
-                  <TableCell className="col-numeric">pH In</TableCell>
-                  {!isFarmPlotTab && <TableCell className="col-numeric">pH Out</TableCell>}
-                  <TableCell className="col-numeric">Drip Vol</TableCell>
-                  {!isFarmPlotTab && <TableCell className="col-numeric">Drain Vol</TableCell>}
+                  <TableCell className="col-frozen-0" rowSpan={2}>Field</TableCell>
+                  <TableCell rowSpan={2}>Valve</TableCell>
+                  <TableCell rowSpan={2}>Time</TableCell>
+                  <TableCell align="center" className="col-group" colSpan={isFarmPlotTab ? 1 : 2}>EC</TableCell>
+                  <TableCell align="center" className="col-group" colSpan={isFarmPlotTab ? 1 : 2}>pH</TableCell>
+                  <TableCell align="center" className="col-group" colSpan={isFarmPlotTab ? 1 : 4}>Volume (ml)</TableCell>
+                  <TableCell align="center" className="col-group" colSpan={4}>Water (m³)</TableCell>
+                  {showExtended && <TableCell rowSpan={2}>Weather</TableCell>}
+                  {showExtended && <TableCell rowSpan={2}>Status</TableCell>}
+                  <TableCell rowSpan={2} sx={{ width: 60 }}></TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="col-numeric">In</TableCell>
+                  {!isFarmPlotTab && <TableCell className="col-numeric">Out</TableCell>}
+                  <TableCell className="col-numeric">In</TableCell>
+                  {!isFarmPlotTab && <TableCell className="col-numeric">Out</TableCell>}
+                  <TableCell className="col-numeric">Drip</TableCell>
+                  {!isFarmPlotTab && <TableCell className="col-numeric">Drain</TableCell>}
                   {!isFarmPlotTab && <TableCell className="col-numeric">{growBagColHeader}</TableCell>}
                   {!isFarmPlotTab && <TableCell className="col-numeric">% Drain</TableCell>}
-                  <TableCell className="col-numeric">Water/Drip (M3)</TableCell>
-                  <TableCell className="col-numeric">Qty Water (M3)</TableCell>
+                  <TableCell className="col-numeric">Per drip</TableCell>
+                  <TableCell className="col-numeric">Qty</TableCell>
                   <TableCell>Cycle</TableCell>
-                  <TableCell className="col-numeric">Total Water</TableCell>
-                  {showExtended && <TableCell>Weather</TableCell>}
-                  {showExtended && <TableCell>Status</TableCell>}
-                  <TableCell sx={{ width: 60 }}></TableCell>
+                  <TableCell className="col-numeric">Total</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -830,6 +867,7 @@ export default function SpreadsheetEcphEntry({ onEntrySaved, readOnly = false })
               </TableBody>
             </Table>
           </FitTableContainer>
+          )}
         </>
       )}
 

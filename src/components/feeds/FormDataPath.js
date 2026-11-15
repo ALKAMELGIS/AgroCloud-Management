@@ -114,7 +114,14 @@ export function FormPathPanel({ form, onClose }) {
 
       <Box sx={{ display: 'grid', gap: 1 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-          <Typography sx={{ fontWeight: 600, fontSize: '0.8125rem', flex: 1 }}>ArcGIS Online · related table</Typography>
+          <Typography sx={{ fontWeight: 600, fontSize: '0.8125rem', flex: 1, display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            ArcGIS
+            <Tooltip title={`Relationship class in ArcGIS Pro: ${origin} ${feed.linkBy === 'field' ? 'GlobalID' : 'Site KeyID'} → ${destKey.split(' ')[0]}, one to many`}>
+              <IconButton size="small" aria-label="Relationship class" sx={{ width: 28, height: 28 }}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5V14M12 17h.01" /></svg>
+              </IconButton>
+            </Tooltip>
+          </Typography>
           {feed.arcgisTableUrl && (
             <Typography sx={{ display: 'flex', alignItems: 'center', gap: 0.75, fontSize: '0.75rem', color: 'text.secondary' }}>
               <Box component="span" sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: feed.lastError ? 'error.main' : feed.syncMode === 'off' ? 'text.disabled' : '#2f8a57' }} />
@@ -128,9 +135,7 @@ export function FormPathPanel({ form, onClose }) {
             <Button variant="outlined" href={feed.arcgisTableUrl} target="_blank" rel="noopener noreferrer" endIcon={<OpenGlyph />} sx={{ flexShrink: 0 }}>Open</Button>
           </Box>
         ) : (
-          <Alert severity="info" icon={false} sx={{ fontSize: '0.75rem' }}>
-            No ArcGIS table yet. {isAdmin ? 'Create it inside the Agro_Structures service, or paste the link of a table you made.' : 'Ask the CEO or operation manager to create it.'}
-          </Alert>
+          <Typography sx={{ fontSize: '0.8125rem', color: 'text.secondary' }}>No table yet</Typography>
         )}
         {feed.lastError && <Alert severity="error" sx={{ fontSize: '0.75rem' }}>{feed.lastError}</Alert>}
         {isAdmin && (
@@ -153,13 +158,10 @@ export function FormPathPanel({ form, onClose }) {
             </TextField>
           </Box>
         )}
-        <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
-          In ArcGIS Pro run Create Relationship Class once: origin {origin} ({feed.linkBy === 'field' ? 'GlobalID' : 'Site KeyID'}), destination this table ({feed.linkBy === 'field' ? 'STRUCT_GLOBALID' : 'SITE_KEYID'}), one to many. The popup of each shape then lists its records.
-        </Typography>
       </Box>
 
       <Box sx={{ display: 'grid', gap: 1 }}>
-        <Typography sx={{ fontWeight: 600, fontSize: '0.8125rem' }}>Power BI · Excel · other systems</Typography>
+        <Typography sx={{ fontWeight: 600, fontSize: '0.8125rem' }}>Power BI · Excel</Typography>
         <Box role="tablist" aria-label="Format" sx={{ display: 'flex', width: 'max-content', border: 1, borderColor: 'divider' }}>
           {['csv', 'geojson', 'json'].map((f) => (
             <ButtonBase key={f} role="tab" aria-selected={format === f} onClick={() => setFormat(f)}
@@ -175,7 +177,7 @@ export function FormPathPanel({ form, onClose }) {
             {keyOptions.map((k) => <MenuItem key={k} value={k} sx={{ fontFamily: MONO, fontSize: '0.75rem' }}>{k}</MenuItem>)}
           </TextField>
           <Box sx={{ display: 'grid', gap: 0.5 }}>
-            <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>Header for Power BI</Typography>
+            <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>Header</Typography>
             <Typography sx={{ fontFamily: MONO, fontSize: '0.75rem' }}>
               <bdi dir="ltr">X-API-Key: {feed.keys?.[0] ? `${feed.keys[0].key_prefix}••••` : 'no key yet'}</bdi>
             </Typography>
@@ -183,7 +185,7 @@ export function FormPathPanel({ form, onClose }) {
         </Box>
         {newKey && (
           <Alert severity="warning" sx={{ fontSize: '0.75rem', '& .MuiAlert-message': { width: '100%', minWidth: 0 } }}>
-            Copy this key now. It is shown only once.
+            Shown once
             <Box sx={{ mt: 1 }}><PathRow label="New key" value={newKey} action /></Box>
           </Alert>
         )}
@@ -208,7 +210,7 @@ export function FormPathPanel({ form, onClose }) {
       {msg && <Alert severity={msg.type} onClose={() => setMsg(null)}>{msg.text}</Alert>}
 
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, pt: 1.5, borderTop: 1, borderColor: 'divider', fontSize: '0.75rem', color: 'text.secondary', flexWrap: 'wrap' }}>
-        <span>Read only · {feed.records ?? '—'} records · {feed.includeNames ? 'staff names included' : 'staff names not shared'}</span>
+        <span>{feed.records ?? '—'} records</span>
         <Box sx={{ flex: 1 }} />
         {onClose && <Button size="small" component={RouterLink} to="/manage/countries?tab=feeds" onClick={onClose}>All form paths</Button>}
       </Box>
@@ -224,7 +226,6 @@ export function FormPathDialog({ form, label, open, onClose }) {
         <LinkGlyph size={20} color={GREEN} />
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography id="form-path-title" component="h2" sx={{ fontWeight: 600, fontSize: '1rem' }}>Data path · {label}</Typography>
-          <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>Read-only links to this form's records</Typography>
         </Box>
         <IconButton aria-label="Close" onClick={onClose}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>

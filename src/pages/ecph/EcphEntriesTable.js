@@ -55,6 +55,8 @@ import EntryHistoryToolbar from '../../components/entries/EntryHistoryToolbar';
 import { useEntryHistory } from '../../hooks/useEntryHistory';
 import useSeasonListDates from '../../hooks/useSeasonListDates';
 import { excelTableSx, freezeColumnsSx } from '../../components/table/ExcelTable';
+import useAppLayout from '../../hooks/useAppLayout';
+import EcphRecordList from './EcphRecordList';
 
 const CHECKBOX_W = 36;
 // Date, Site, Farm Area, Field — the run that still identifies a reading once
@@ -213,6 +215,11 @@ export default function EcphEntriesTable({ siteId, masterData, refreshTrigger = 
   const allSites = useMemo(() => buildSites(masterData), [masterData]);
   const allFarmAreas = useMemo(() => buildFarmAreas(masterData), [masterData]);
   const allFields = useMemo(() => buildAllFields(masterData), [masterData]);
+  // Phones get a list and a record sheet; tablets freeze only the tick box and date
+  // (five frozen columns covered most of a tablet screen).
+  const { isPhone, isMobile } = useAppLayout();
+  const frozenN = isMobile ? 2 : ENTRY_FROZEN_WIDTHS.length;
+  const fz = (i) => (i < frozenN ? `col-frozen-${i}` : undefined);
   const siteFields = useMemo(
     () => allFields.filter((f) => !siteId || f.siteId === siteId),
     [allFields, siteId],
@@ -548,8 +555,14 @@ export default function EcphEntriesTable({ siteId, masterData, refreshTrigger = 
                 Showing {filteredAndSortedEntries.length} entries — narrow the date range for faster loading
               </Typography>
             )}
+            {isPhone ? (
+              <EcphRecordList entries={paginatedEntries} fieldName={getFieldName}
+                keyOf={(id) => { const f = allFields.find((x) => x.id === id); return f?.keyId || f?.key_id || ''; }}
+                onEdit={(entry) => { setEditingEntry({ ...entry, valve1: entry.valves?.[0] || {} }); setEditDialogOpen(true); }}
+                onDelete={handleDelete} />
+            ) : (
             <TableContainer sx={{ maxHeight: 520 }}>
-              <Table size="small" sx={[excelTableSx, freezeColumnsSx(ENTRY_FROZEN_WIDTHS), twoRowHeadSx, { minWidth: 1100 }]}>
+              <Table size="small" sx={[excelTableSx, freezeColumnsSx(ENTRY_FROZEN_WIDTHS.slice(0, frozenN)), twoRowHeadSx, { minWidth: 1100 }]}>
                 <TableHead>
                   <TableRow>
                     <TableCell padding="checkbox" rowSpan={2} className="col-frozen-0">
@@ -566,17 +579,17 @@ export default function EcphEntriesTable({ siteId, masterData, refreshTrigger = 
                         Date
                       </TableSortLabel>
                     </TableCell>
-                    <TableCell rowSpan={2} className="col-frozen-2">
+                    <TableCell rowSpan={2} className={fz(2)}>
                       <TableSortLabel active={orderBy === 'site'} direction={orderBy === 'site' ? order : 'asc'} onClick={() => handleSort('site')}>
                         Site
                       </TableSortLabel>
                     </TableCell>
-                    <TableCell rowSpan={2} className="col-frozen-3">
+                    <TableCell rowSpan={2} className={fz(3)}>
                       <TableSortLabel active={orderBy === 'farmArea'} direction={orderBy === 'farmArea' ? order : 'asc'} onClick={() => handleSort('farmArea')}>
                         Farm Area
                       </TableSortLabel>
                     </TableCell>
-                    <TableCell rowSpan={2} className="col-frozen-4">
+                    <TableCell rowSpan={2} className={fz(4)}>
                       <TableSortLabel active={orderBy === 'field'} direction={orderBy === 'field' ? order : 'asc'} onClick={() => handleSort('field')}>
                         Field
                       </TableSortLabel>
@@ -636,9 +649,9 @@ export default function EcphEntriesTable({ siteId, masterData, refreshTrigger = 
                           <Checkbox slotProps={{ input: { 'aria-label': 'Select row' } }} size="small" checked={selectedIds.has(entry.id)} onChange={() => toggleSelect(entry.id)} />
                         </TableCell>
                         <TableCell className="col-frozen-1" title={entry.date || ''}>{entry.date}</TableCell>
-                        <TableCell className="col-frozen-2" title={getSiteName(entry.siteId) || ''}>{getSiteName(entry.siteId)}</TableCell>
-                        <TableCell className="col-frozen-3" title={getFarmAreaName(entry.farmAreaId) || ''}>{getFarmAreaName(entry.farmAreaId)}</TableCell>
-                        <TableCell className="col-frozen-4" title={getFieldName(entry.fieldId) || ''}>{getFieldName(entry.fieldId)}</TableCell>
+                        <TableCell className={fz(2)} title={getSiteName(entry.siteId) || ''}>{getSiteName(entry.siteId)}</TableCell>
+                        <TableCell className={fz(3)} title={getFarmAreaName(entry.farmAreaId) || ''}>{getFarmAreaName(entry.farmAreaId)}</TableCell>
+                        <TableCell className={fz(4)} title={getFieldName(entry.fieldId) || ''}>{getFieldName(entry.fieldId)}</TableCell>
                         <TableCell>{entry.time}</TableCell>
                         <TableCell className="col-numeric">{renderEcPhChip(valve1.ecIn, 'ec')}</TableCell>
                         <TableCell className="col-numeric">{renderEcPhChip(valve1.ecOut, 'ec')}</TableCell>
@@ -688,6 +701,7 @@ export default function EcphEntriesTable({ siteId, masterData, refreshTrigger = 
                 </TableBody>
               </Table>
             </TableContainer>
+            )}
             <TablePagination
               component="div"
               count={filteredAndSortedEntries.length}

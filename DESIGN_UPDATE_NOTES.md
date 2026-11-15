@@ -584,3 +584,9 @@ Pages:
 ## Round 55 — Frozen Field column
 - EC/PH and Fertigation sheets: the Field header was static while its cells were sticky, so scrolling sideways left the cells covering Valve/Time. The header is sticky again.
 - Phone/tablet redesign of the record tables shown in design (field cards on phone, records list + record sheet, tablet sheet with grouped headers); waiting for approval.
+
+## Round 56 — Record tables on phone and tablet (built from the design)
+- Phone EC/PH entry opens on field cards: one open card per field (valves as 44px labelled boxes, decimal keypad, out-of-range boxes tinted), other fields closed with their state; sticky "x of n fields · Save all" bar above the bottom nav.
+- Phone EC/PH records: list grouped by day (field, time, EC in→out, pH in→out) and a bottom sheet with every value, edit, delete, previous/next.
+- Tablet: the records table freezes only the tick box and date (five frozen columns covered the screen); the entry sheet has grouped headers (EC · pH · Volume · Water) with In/Out under them.
+- Data feeds: explanation text removed (intro cards, relationship paragraph → "?" tooltip, footer shows the record count only); phone rows show name, path, copy and manage.
