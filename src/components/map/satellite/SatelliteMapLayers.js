@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { WMS_URL } from './satelliteApi';
@@ -11,13 +11,64 @@ function ensurePane(map, name, zIndex) {
   return pane;
 }
 
-function wmsLayer(sat, time, pane) {
+/*
+ * Satellite tiles clipped to fields inside each tile: the image is drawn on a
+ * canvas through the fields' outlines, so the clip is exact at every zoom level
+ * and moves with the tiles while zooming and panning (no lag, no offset).
+ */
+const ClippedWMS = L.TileLayer.WMS.extend({
+  createTile(coords, done) {
+    const size = this.getTileSize();
+    const canvas = document.createElement('canvas');
+    canvas.width = size.x; canvas.height = size.y;
+    const img = new Image();
+    const draw = () => {
+      const ctx = canvas.getContext('2d');
+      const origin = coords.scaleBy(size);
+      const nw = this._map.unproject(origin, coords.z);
+      const se = this._map.unproject(origin.add(size), coords.z);
+      const tb = L.latLngBounds(se, nw);
+      ctx.beginPath();
+      let any = false;
+      (this.options.clipShapes || []).forEach((sh) => {
+        if (!sh.bounds.intersects(tb)) return;
+        sh.rings.forEach((ring) => {
+          ring.forEach(([lng, lat], i) => {
+            const pt = this._map.project([lat, lng], coords.z).subtract(origin);
+            if (i) ctx.lineTo(pt.x, pt.y); else ctx.moveTo(pt.x, pt.y);
+          });
+          ctx.closePath();
+          any = true;
+        });
+      });
+      if (any) { ctx.save(); ctx.clip(); ctx.drawImage(img, 0, 0, size.x, size.y); ctx.restore(); }
+      done(null, canvas);
+    };
+    img.onload = draw;
+    img.onerror = () => done(null, canvas);
+    img.src = this.getTileUrl(coords);
+    return canvas;
+  },
+});
+
+/** Outlines and bounds of the clip fields, prepared once per change. */
+function clipShapes(features) {
+  return (features || []).map((f) => {
+    const rings = allRings(f).filter((r) => r && r.length > 3);
+    if (!rings.length) return null;
+    const pts = rings.flat();
+    return { rings, bounds: L.latLngBounds(pts.map(([lng, lat]) => [lat, lng])) };
+  }).filter(Boolean);
+}
+
+function wmsLayer(sat, time, pane, shapes) {
   const opts = {
     layers: 'S2', format: 'image/png', transparent: true, version: '1.3.0', tileSize: 512, maxZoom: 20,
     k: sat.tileKey, index: sat.index, time, maxcc: sat.maxcc, opacity: sat.opacity, pane,
   };
-  // Drawn areas clip on the server (GEOMETRY); Agro_Structures fields clip on the map (pane clip-path).
+  // Drawn areas clip on the server (GEOMETRY); Agro_Structures fields clip inside each tile.
   if (sat.aoiMode === 'drawn' && sat.clip && sat.wkt) opts.geometry = sat.wkt;
+  if (shapes) return new ClippedWMS(WMS_URL, { ...opts, clipShapes: shapes });
   return L.tileLayer.wms(WMS_URL, opts);
 }
 
@@ -29,16 +80,18 @@ function wmsLayer(sat, time, pane) {
 export default function SatelliteMapLayers({ sat, clipFeatures = null }) {
   const map = useMap();
   const swipeRef = useRef(sat.compare.swipe);
+  const shapes = useMemo(() => (sat.aoiMode === 'structures' && sat.structClip && clipFeatures ? clipShapes(clipFeatures) : null),
+    [sat.aoiMode, sat.structClip, clipFeatures]);
   swipeRef.current = sat.compare.swipe;
 
   // Main image.
   useEffect(() => {
     if (!sat.ready || !sat.show) return undefined;
     ensurePane(map, 'satellite', 350);
-    const layer = wmsLayer(sat, sat.time, 'satellite').addTo(map);
+    const layer = wmsLayer(sat, sat.time, 'satellite', shapes).addTo(map);
     return () => { layer.remove(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map, sat.ready, sat.show, sat.tileKey, sat.index, sat.time, sat.maxcc, sat.clip, sat.wkt, sat.aoiMode]);
+  }, [map, sat.ready, sat.show, sat.tileKey, sat.index, sat.time, sat.maxcc, sat.clip, sat.wkt, sat.aoiMode, shapes]);
 
   // Opacity changes without reloading tiles.
   useEffect(() => {
@@ -49,7 +102,7 @@ export default function SatelliteMapLayers({ sat, clipFeatures = null }) {
   useEffect(() => {
     if (!sat.ready || !sat.show || !sat.compare.on || !sat.compare.date) return undefined;
     const pane = ensurePane(map, 'satellite-compare', 351);
-    const layer = wmsLayer(sat, `${sat.compare.date}/${sat.compare.date}`, 'satellite-compare').addTo(map);
+    const layer = wmsLayer(sat, `${sat.compare.date}/${sat.compare.date}`, 'satellite-compare', shapes).addTo(map);
     const rtl = document.documentElement.dir === 'rtl';
     const clipPane = () => {
       const size = map.getSize();
@@ -72,41 +125,9 @@ export default function SatelliteMapLayers({ sat, clipFeatures = null }) {
       pane.style.clip = '';
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map, sat.ready, sat.show, sat.compare.on, sat.compare.date, sat.tileKey, sat.index, sat.maxcc, sat.clip, sat.wkt, sat.aoiMode]);
+  }, [map, sat.ready, sat.show, sat.compare.on, sat.compare.date, sat.tileKey, sat.index, sat.maxcc, sat.clip, sat.wkt, sat.aoiMode, shapes]);
 
   useEffect(() => { window.dispatchEvent(new Event('agrocloud:satellite-swipe')); }, [sat.compare.swipe]);
-
-  // Agro_Structures mode: show the image only inside the chosen fields (PIVOT, Farm Plots).
-  // The satellite panes get a CSS clip-path drawn from the fields' shapes in layer pixels,
-  // redrawn after each zoom; fields outside the view (with a margin) are skipped.
-  useEffect(() => {
-    const on = sat.aoiMode === 'structures' && sat.structClip && sat.show && clipFeatures;
-    const panes = ['satellite', 'satellite-compare'].map((n) => map.getPane(n)).filter(Boolean);
-    if (!on) { panes.forEach((p) => { p.style.clipPath = ''; }); return undefined; }
-    const draw = () => {
-      const view = map.getBounds().pad(0.5);
-      let d = '';
-      clipFeatures.forEach((f) => {
-        allRings(f).forEach((ring) => {
-          if (!ring || ring.length < 4) return;
-          if (!ring.some(([lng, lat]) => view.contains([lat, lng]))) return;
-          ring.forEach(([lng, lat], i) => {
-            const pt = map.latLngToLayerPoint([lat, lng]);
-            d += `${i ? 'L' : 'M'}${Math.round(pt.x)} ${Math.round(pt.y)}`;
-          });
-          d += 'Z';
-        });
-      });
-      const value = d ? `path('${d}')` : 'path("M0 0Z")';
-      ['satellite', 'satellite-compare'].forEach((n) => { const p = map.getPane(n); if (p) p.style.clipPath = value; });
-    };
-    draw();
-    map.on('zoomend moveend viewreset layeradd', draw);
-    return () => {
-      map.off('zoomend moveend viewreset layeradd', draw);
-      ['satellite', 'satellite-compare'].forEach((n) => { const p = map.getPane(n); if (p) p.style.clipPath = ''; });
-    };
-  }, [map, sat.aoiMode, sat.structClip, sat.show, clipFeatures]);
 
   // AOI outline (the chosen field, or the active drawn area).
   useEffect(() => {
