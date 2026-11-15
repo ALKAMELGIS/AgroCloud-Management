@@ -1,5 +1,6 @@
 import { Box, Typography } from '@mui/material';
 import HelpTip from './HelpTip';
+import { FORM_IDENTITY } from '../theme/formIdentity';
 
 /**
  * The one page title style used on every screen: an <h1>, 17px on phones
@@ -8,8 +9,18 @@ import HelpTip from './HelpTip';
  *
  * `help` puts the page's explanation behind a small "?" next to the title
  * instead of a paragraph under it.
+ *
+ * `form` (ecph, fertigation, irrigation, harvest, cropRotation, pumpRoom,
+ * economics) marks the page with that form's colour: a short bar before the title.
  */
-export default function PageTitle({ children, sx, help, ...rest }) {
+export default function PageTitle({ children, sx, help, form, ...rest }) {
+  const identity = form ? FORM_IDENTITY[form] : null;
+  const text = identity ? (
+    <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
+      <Box component="span" aria-hidden="true" sx={{ width: 4, height: '1.05em', borderRadius: 2, bgcolor: identity.base, flexShrink: 0 }} />
+      {children}
+    </Box>
+  ) : children;
   const title = (
     <Typography
       component="h1"
@@ -25,7 +36,7 @@ export default function PageTitle({ children, sx, help, ...rest }) {
         ...(help ? {} : sx),
       }}
     >
-      {children}
+      {text}
     </Typography>
   );
   if (!help) return title;

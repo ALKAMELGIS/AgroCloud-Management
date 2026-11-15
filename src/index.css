@@ -99,3 +99,6 @@ a:hover {
   .MuiCheckbox-sizeSmall { padding: 10px; }
   .MuiChip-deleteIcon { font-size: 22px; }
 }
+
+/* Charts keep left-to-right geometry in Arabic, so axis numbers sit outside the plot. */
+[dir='rtl'] .recharts-wrapper .recharts-surface { direction: ltr; }

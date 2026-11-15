@@ -267,7 +267,7 @@ function ECPHReports() {
   return (
     <Container maxWidth="lg">
       <Box>
-        <PageTitle sx={{ mb: 1 }}>
+        <PageTitle form="ecph" sx={{ mb: 1 }}>
           EC/PH Reports
         </PageTitle>
         <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>

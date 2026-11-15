@@ -1506,6 +1506,53 @@ export const PAGE_AR = {
   'Record deleted': 'تم حذف السجل',
   'Irrigation record saved': 'تم حفظ سجل الري',
   'Moved to another sheet': 'تم النقل إلى ورقة أخرى',
+  // Form dashboards (clear charts)
+  'Days with irrigation': 'أيام الري',
+  'Total cycles': 'إجمالي الدورات',
+  'Total water': 'إجمالي المياه',
+  'Irrigation records': 'سجلات الري',
+  'Water only (exclude fertilizer cycles)': 'المياه فقط (بدون دورات التسميد)',
+  'Daily Water (m³)': 'المياه اليومية (م³)',
+  'Flow Rate': 'معدل التدفق',
+  'Daily Total (m³)': 'الإجمالي اليومي (م³)',
+  'Water Qty (m³)': 'كمية المياه (م³)',
+  'EC by day · mS/cm': 'EC حسب اليوم · mS/cm',
+  'pH by day': 'pH حسب اليوم',
+  'Drain by day · %': 'التصريف حسب اليوم · %',
+  'Recent readings': 'أحدث القراءات',
+  'Is pH out in the target band?': 'هل pH الخارج ضمن النطاق المستهدف؟',
+  'Is EC out in the target band?': 'هل EC الخارج ضمن النطاق المستهدف؟',
+  'Previous 7 days': 'الأيام السبعة السابقة',
+  'Last 7 days': 'آخر 7 أيام',
+  'Harvest by day · kg': 'الحصاد حسب اليوم · كجم',
+  'Which fields gave the most · kg': 'أي الحقول أنتجت أكثر · كجم',
+  'Share by crop / variety': 'الحصة حسب المحصول / الصنف',
+  'Harvest by week · kg': 'الحصاد حسب الأسبوع · كجم',
+  'Total harvest': 'إجمالي الحصاد',
+  'Average per entry': 'المتوسط لكل إدخال',
+  'Top crop': 'المحصول الأعلى',
+  'Fertiliser by day · kg': 'السماد حسب اليوم · كجم',
+  'Which fertilisers · kg': 'الأسمدة المستخدمة · كجم',
+  'Fertiliser per field · kg': 'السماد لكل حقل · كجم',
+  'Fertiliser by week · kg': 'السماد حسب الأسبوع · كجم',
+  'Recipes used · entries': 'الوصفات المستخدمة · إدخالات',
+  'Water by day · m³': 'المياه حسب اليوم · م³',
+  'Total fertiliser': 'إجمالي السماد',
+  'Average daily water': 'متوسط المياه اليومي',
+  'Average flow rate': 'متوسط معدل التدفق',
+  'Average frequency': 'متوسط التكرار',
+  'Average valves': 'متوسط المحابس',
+  'Irrigation cycles by day': 'دورات الري حسب اليوم',
+  'Water per location · m³': 'المياه لكل موقع · م³',
+  'Drain': 'التصريف',
+  'No data in this range': 'لا توجد بيانات في هذه الفترة',
+  'No readings in this range': 'لا توجد قراءات في هذه الفترة',
+  'Watch': 'مراقبة',
+  'Out': 'خارج',
+  'Good': 'جيد',
+  'Crop rotation': 'الدورة الزراعية',
+  'Pump room': 'غرفة المضخات',
+  'Economics': 'الاقتصاديات',
 };
 
 /** Arabic for the subject of a generic "X saved / deleted …" toast. */
@@ -1600,6 +1647,12 @@ function subjectAr(subject) {
  * Arabic sentence, or null when a part is not known (the English stays).
  */
 const PATTERNS = [
+  // "Target 1.8–2.6 mS/cm" (dashboard chart legends)
+  [/^Target ([\d.]+–[\d.]+)(.*)$/, (m) => `النطاق المستهدف \u2066${m[1]}${m[2]}\u2069`],
+  // "mS/cm · target 1.8–2.6" / "target 5.5–6.5" (EC/pH tiles)
+  [/^(?:(.+) · )?target ([\d.]+–[\d.]+)$/, (m) => `المستهدف \u2066${m[2]}\u2069${m[1] ? ` · \u2066${m[1]}\u2069` : ''}`],
+  // "6.4 · rising · near edge" (band rows)
+  [/^([\d.]+) · (rising|falling|steady)(?: · (out|near edge))?$/, (m) => `${m[1]} · ${{ rising: 'يرتفع', falling: 'ينخفض', steady: 'ثابت' }[m[2]]}${m[3] ? ` · ${m[3] === 'out' ? 'خارج النطاق' : 'قرب الحد'}` : ''}`],
   // "12× drip volume (ml)" (EC/pH valve form)
   [/^(\d+|N)× drip volume \(ml\)$/, (m) => `حجم التنقيط ×${m[1] === 'N' ? 'N' : m[1]} (مل)`],
   // "Field saved successfully!" / "Worker added" / "Weather entry updated successfully!"

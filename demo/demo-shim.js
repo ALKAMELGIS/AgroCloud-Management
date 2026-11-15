@@ -228,6 +228,34 @@
       AIMSG[cidA].push({id:'u'+Date.now(),role:'user',content:t,artifacts:[],sources:[]}); AIMSG[cidA].push(m);
       return ok({conversationId:cidA,message:m});
     }
+    // Demo-only sample readings so the form dashboards have something to show. The real server never sees these.
+    if(method==='GET'&&(path==='/ecph'||path==='/harvests'||path==='/fertigation'||path==='/irrigation-drip')){
+      if(Number(q.page||1)>1) return ok([],{meta:{total:0,page:Number(q.page),totalPages:1}});
+      var dSite=q.site_id, dAreas=areas.filter(function(a){return !dSite||a.siteId===dSite;}).map(function(a){return a.id;});
+      var dFields=fields.filter(function(f){return dAreas.indexOf(f.farmAreaId)>=0&&(!q.field_id||f.id===q.field_id);});
+      var dRnd=function(s){var h=2166136261;for(var i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return ((h>>>0)%10000)/10000;};
+      var dEnd=new Date(); dEnd.setUTCHours(0,0,0,0); var dOut=[];
+      for(var dd=55;dd>=1;dd--){
+        var dt=new Date(dEnd.getTime()-dd*86400000).toISOString().slice(0,10);
+        if((q.start_date&&dt<q.start_date)||(q.end_date&&dt>q.end_date)) continue;
+        dFields.forEach(function(f,fi){
+          var r=function(k){return dRnd(f.id+dt+k);}, t=(55-dd)/55, crop=CROPS[fi%CROPS.length];
+          if(path==='/ecph'){
+            var ecB=2.1+fi*0.11, phB=6.05+fi*0.09+(fi===0?t*0.9:0);
+            dOut.push({id:'de'+f.id+dt,date:dt,fieldId:f.id,fieldName:f.name,valveReadings:[1,2].map(function(v){return {valveNumber:v,ecIn:+(1.95+r('ei'+v)*0.2).toFixed(2),ec:+(ecB+r('eo'+v)*0.3).toFixed(2),phIn:+(5.9+r('pi'+v)*0.3).toFixed(2),ph:+(phB+r('po'+v)*0.3).toFixed(2),dripVolume:1200,drain:Math.round(220+r('dr'+v)*80),percentDrain:+(0.17+r('pd'+v)*0.08).toFixed(3)};})});
+          } else if(path==='/harvests'){
+            if(dd%2===fi%2) dOut.push({id:'dh'+f.id+dt,date:dt,fieldId:f.id,fieldName:f.name,totalQuantity:Math.round(260+fi*40+r('q')*320+t*120),varieties:[{variety:crop,quantity:Math.round(260+fi*40+r('q')*320+t*120),grade:r('g')>0.25?'A':'B'}]});
+          } else if(path==='/fertigation'){
+            var n=+(18+r('n')*8).toFixed(1),k=+(22+r('k')*9).toFixed(1),pz=+(6+r('p')*4).toFixed(1);
+            dOut.push({id:'df'+f.id+dt,date:dt,fieldId:f.id,fieldName:f.name,dailyWater:+(9+fi*0.8+r('w')*4).toFixed(1),flowRate:+(2.4+r('f')*0.6).toFixed(2),frequency:4+Math.round(r('fr')*3),valvesCount:2,recipeId:['Tomato vegetative','Cucumber fruiting','Leafy greens'][fi%3],fertilizers:{'Calcium nitrate':n,'Potassium sulphate':k,'MAP':pz,'Magnesium sulphate':+(3+r('m')*2).toFixed(1)},totalFertilizer:+(n+k+pz).toFixed(1)});
+          } else {
+            var fq=5+Math.round(r('c')*4), wq=+(2.2+r('wq')*0.6).toFixed(2);
+            dOut.push({id:'di'+f.id+dt,date:dt,fieldId:f.id,locationLabel:f.name,waterQtyM3:wq,frequency:fq,dailyWater:+(wq*fq).toFixed(2)});
+          }
+        });
+      }
+      return ok(dOut,{meta:{total:dOut.length,page:1,totalPages:1}});
+    }
     if(path==='/countries') return ok(countries);
     if(path==='/sites') return ok(q.country_id?sites.filter(function(s){return s.countryId===q.country_id;}):sites);
     if(path==='/farm-areas') return ok(q.site_id?areas.filter(function(a){return a.siteId===q.site_id;}):areas);

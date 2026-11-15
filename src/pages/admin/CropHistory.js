@@ -1076,7 +1076,7 @@ export default function CropHistory() {
   return (
     <Box sx={{ maxWidth: 1760, mx: 'auto' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', mb: 2 }}>
-        <PageTitle help="Manage crop rotation history and planting/transplant records.">
+        <PageTitle form="cropRotation" help="Manage crop rotation history and planting/transplant records.">
           Crop Rotation & Planting
         </PageTitle>
         <FormPathButton form="crop-rotation" label="Crop Rotation" />

@@ -22,6 +22,8 @@ import ReadOnlyBanner from '../components/ReadOnlyBanner';
 import { PAGE_KEYS } from '../utils/roleAccess';
 import useSeasonListDates from '../hooks/useSeasonListDates';
 import PageTitle from '../components/PageTitle';
+import { FORM_IDENTITY, FormIdentityProvider } from '../theme/formIdentity';
+import { FormTile } from '../components/dashboard/clearCharts';
 
 const EcphDashboard = lazy(() => import('./dashboard/EcphDashboard'));
 const FertigationDashboard = lazy(() => import('./dashboard/FertigationDashboard'));
@@ -109,6 +111,8 @@ function Dashboard() {
 
   if (isLoading) return <DashboardSkeleton />;
 
+  const activeForm = FORM_IDENTITY[DASHBOARD_TABS[activeTab]?.key] || FORM_IDENTITY.ecph;
+
   return (
     <Box>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 2.5 }}>
@@ -187,28 +191,49 @@ function Dashboard() {
       <Tabs
         value={activeTab}
         onChange={(_, v) => setActiveTab(v)}
+        variant="scrollable"
+        allowScrollButtonsMobile
         sx={{
           mb: 2,
           borderBottom: 1,
           borderColor: 'divider',
-          minHeight: 42,
-          '& .MuiTabs-indicator': { bgcolor: 'primary.main' },
+          minHeight: 46,
+          '& .MuiTabs-indicator': { bgcolor: activeForm.base, height: 3 },
         }}
       >
-        {DASHBOARD_TABS.map((t) => (
-          <Tab
-            key={t.key}
-            label={t.label}
-            sx={{
-              textTransform: 'none',
-              fontWeight: 600,
-              minHeight: 42,
-              '&.Mui-selected': { color: 'text.primary' },
-            }}
-          />
-        ))}
+        {DASHBOARD_TABS.map((t) => {
+          const f = FORM_IDENTITY[t.key];
+          return (
+            <Tab
+              key={t.key}
+              label={(
+                <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
+                  <Box component="span" sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: f.base }} />
+                  {t.label}
+                </Box>
+              )}
+              sx={{
+                textTransform: 'none',
+                fontWeight: 600,
+                minHeight: 46,
+                '&.Mui-selected': { color: f.dark },
+              }}
+            />
+          );
+        })}
       </Tabs>
 
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2.5 }}>
+        <FormTile form={activeForm} />
+        <Box>
+          <Typography component="h2" sx={{ fontSize: 18, fontWeight: 600, lineHeight: 1.2 }}>{activeForm.name}</Typography>
+          <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>
+            {selectedFieldObj ? selectedFieldObj.name : 'All fields'}{seasonFrom || seasonTo ? ` · ${seasonFrom || '…'} → ${seasonTo || '…'}` : ''}
+          </Typography>
+        </Box>
+      </Box>
+
+      <FormIdentityProvider form={activeForm}>
       {activeTab === 0 && (
         <Suspense fallback={<Box sx={{ p: 4, textAlign: 'center' }}><Typography>Loading EC/pH Dashboard...</Typography></Box>}>
           <EcphDashboard
@@ -256,6 +281,7 @@ function Dashboard() {
           />
         </Suspense>
       )}
+      </FormIdentityProvider>
     </Box>
   );
 }

@@ -6,22 +6,24 @@ import {
 } from '@mui/material';
 import { ChevronLeftOutlined as ChevronLeft, ChevronRightOutlined as ChevronRight } from '@mui/icons-material';
 import {
-  BarChart, Bar, Line, PieChart, Pie, Cell,
-  ComposedChart, Area,
-  XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, Legend, ResponsiveContainer,
+  BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, ResponsiveContainer,
 } from 'recharts';
 import { listHarvestsAll } from '../../utils/backendApi';
 import { formatDate, toNumber } from './dashboardUtils';
 import DashboardSection, { DashboardChartBody } from '../../components/dashboard/DashboardSection';
 import DashboardStatCard from '../../components/dashboard/DashboardStatCard';
 import { excelTableSx, GutterCell } from '../../components/table/ExcelTable';
-import { FARM_GREEN, CHART_GRID, CHART_TICK, CHART_TOOLTIP, CHART_COLORS } from '../../components/dashboard/dashboardChartTheme';
+import { CHART_TOOLTIP } from '../../components/dashboard/dashboardChartTheme';
+import {
+  RankBars, ShareBar, byWeek, gridProps, useFormColors, xAxisProps, yAxisProps,
+} from '../../components/dashboard/clearCharts';
 
 export default function HarvestDashboard({ fieldId, siteId, dateFrom, dateTo, allFields = [] }) {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sortConfig, setSortConfig] = useState({ key: 'date', dir: 'desc' });
   const [chartOffset, setChartOffset] = useState(-1);
+  const form = useFormColors();
 
   useEffect(() => {
     let cancelled = false;
@@ -110,19 +112,7 @@ export default function HarvestDashboard({ fieldId, siteId, dateFrom, dateTo, al
       .sort((a, b) => b.total - a.total);
   }, [data]);
 
-  const cumulativeData = useMemo(() => {
-    const byDate = {};
-    data.forEach(entry => {
-      const d = (entry.date || '').toString().split('T')[0];
-      if (!d) return;
-      byDate[d] = (byDate[d] || 0) + toNumber(entry.totalQuantity);
-    });
-    let cumulative = 0;
-    return Object.keys(byDate).sort().map(d => {
-      cumulative += byDate[d];
-      return { date: formatDate(d), cumulative: parseFloat(cumulative.toFixed(1)), daily: parseFloat(byDate[d].toFixed(1)) };
-    });
-  }, [data]);
+  const weeklyData = useMemo(() => byWeek(data.map((e) => ({ date: e.date, value: toNumber(e.totalQuantity) }))), [data]);
 
   const tableData = useMemo(() => {
     const rows = data.slice(0, 200).map(entry => {
@@ -161,22 +151,22 @@ export default function HarvestDashboard({ fieldId, siteId, dateFrom, dateTo, al
     <Box>
       <Grid container spacing={1.5} sx={{ mb: 3 }}>
         <Grid size={{ xs: 6, sm: 3 }}>
-          <DashboardStatCard title="Total Harvest" value={`${stats.totalKg} kg`} />
+          <DashboardStatCard lead title="Total harvest" value={`${stats.totalKg} kg`} />
         </Grid>
         <Grid size={{ xs: 6, sm: 3 }}>
           <DashboardStatCard title="Entries" value={stats.count} />
         </Grid>
         <Grid size={{ xs: 6, sm: 3 }}>
-          <DashboardStatCard title="Avg per Entry" value={`${stats.avgPerEntry} kg`} color="#3b82f6" />
+          <DashboardStatCard title="Average per entry" value={`${stats.avgPerEntry} kg`} />
         </Grid>
         <Grid size={{ xs: 6, sm: 3 }}>
-          <DashboardStatCard title="Top Crop" value={stats.topCrop} color="#f59e0b" />
+          <DashboardStatCard title="Top crop" value={stats.topCrop} />
         </Grid>
       </Grid>
 
-      <DashboardSection title="Daily Harvest Trend (kg)">
+      <DashboardSection title="Harvest by day · kg">
         <DashboardChartBody
-          height={340}
+          height={320}
           footer={allTrendData.length > VISIBLE_POINTS ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 2, mt: 1 }}>
               <IconButton disabled={!canGoLeft} onClick={() => setChartOffset(Math.max(0, effectiveOffset - 7))} size="small" aria-label="Previous">
@@ -192,32 +182,49 @@ export default function HarvestDashboard({ fieldId, siteId, dateFrom, dateTo, al
           ) : null}
         >
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={trendData}>
-              <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} />
-              <XAxis dataKey="date" tick={{ fontSize: 11, fill: CHART_TICK }} />
-              <YAxis tick={{ fontSize: 11, fill: CHART_TICK }} />
-              <RTooltip contentStyle={CHART_TOOLTIP} />
-              <Legend />
-              <Bar dataKey="quantity" name="Daily Harvest (kg)" fill={FARM_GREEN} radius={[4, 4, 0, 0]} />
-              <Line type="monotone" dataKey="quantity" name="Trend" stroke="#b8523a" strokeWidth={2} dot={false} />
-            </ComposedChart>
+            <BarChart data={trendData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+              <CartesianGrid {...gridProps} />
+              <XAxis dataKey="date" {...xAxisProps} />
+              <YAxis {...yAxisProps} />
+              <RTooltip contentStyle={CHART_TOOLTIP} cursor={{ fill: form.pale }} />
+              <Bar dataKey="quantity" name="Harvest (kg)" fill={form.base} radius={[4, 4, 0, 0]} maxBarSize={28} animationDuration={800} />
+            </BarChart>
           </ResponsiveContainer>
         </DashboardChartBody>
       </DashboardSection>
 
-      {!fieldId && fieldComparisonData.length > 0 && (
-        <DashboardSection title="Harvest by Field (kg)">
-          <DashboardChartBody height={Math.max(300, fieldComparisonData.length * 32)}>
+      <Grid container spacing={2} sx={{ mb: { xs: 4, md: 5 } }}>
+        {!fieldId && fieldComparisonData.length > 0 && (
+          <Grid size={{ xs: 12, lg: 6 }}>
+            <DashboardSection title="Which fields gave the most · kg" sx={{ mb: 0, height: '100%' }}>
+              <Box sx={{ p: { xs: 3, sm: 4 } }}>
+                <RankBars items={fieldComparisonData.map((r) => ({ label: String(r.name), value: r.total }))} showShare />
+              </Box>
+            </DashboardSection>
+          </Grid>
+        )}
+        {cropBreakdownData.length > 0 && (
+          <Grid size={{ xs: 12, lg: 6 }}>
+            <DashboardSection title="Share by crop / variety" sx={{ mb: 0, height: '100%' }}>
+              <Box sx={{ p: { xs: 3, sm: 4 } }}>
+                <ShareBar items={cropBreakdownData.map((r) => ({ label: r.name, value: r.total }))} format={(v) => `${v.toLocaleString()} kg`} />
+              </Box>
+            </DashboardSection>
+          </Grid>
+        )}
+      </Grid>
+
+      {weeklyData.length > 1 && (
+        <DashboardSection title="Harvest by week · kg">
+          <DashboardChartBody height={300}>
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={fieldComparisonData} layout="vertical" margin={{ left: 100 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} />
-                <XAxis type="number" tick={{ fontSize: 11, fill: CHART_TICK }} />
-                <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: CHART_TICK }} width={100} />
-                <RTooltip contentStyle={CHART_TOOLTIP} />
-                <Bar dataKey="total" name="Total (kg)" radius={[0, 4, 4, 0]}>
-                  {fieldComparisonData.map((_, idx) => (
-                    <Cell key={idx} fill={CHART_COLORS[idx % CHART_COLORS.length]} />
-                  ))}
+              <BarChart data={weeklyData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                <CartesianGrid {...gridProps} />
+                <XAxis dataKey="week" {...xAxisProps} />
+                <YAxis {...yAxisProps} />
+                <RTooltip contentStyle={CHART_TOOLTIP} cursor={{ fill: form.pale }} />
+                <Bar dataKey="value" name="Harvest (kg)" radius={[4, 4, 0, 0]} maxBarSize={44} animationDuration={800}>
+                  {weeklyData.map((_, i) => <Cell key={i} fill={i === weeklyData.length - 1 ? form.dark : form.light} />)}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -225,43 +232,7 @@ export default function HarvestDashboard({ fieldId, siteId, dateFrom, dateTo, al
         </DashboardSection>
       )}
 
-      {cropBreakdownData.length > 0 && (
-        <DashboardSection title="Harvest by Crop / Variety">
-          <DashboardChartBody height={320}>
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={cropBreakdownData} dataKey="total" nameKey="name" cx="50%" cy="50%" outerRadius={110} label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`} labelLine={{ strokeWidth: 1 }}>
-                  {cropBreakdownData.map((_, idx) => (
-                    <Cell key={idx} fill={CHART_COLORS[idx % CHART_COLORS.length]} />
-                  ))}
-                </Pie>
-                <RTooltip contentStyle={CHART_TOOLTIP} />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
-          </DashboardChartBody>
-        </DashboardSection>
-      )}
-
-      {cumulativeData.length > 1 && (
-        <DashboardSection title="Cumulative Harvest (kg)">
-          <DashboardChartBody height={340}>
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={cumulativeData}>
-                <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} />
-                <XAxis dataKey="date" tick={{ fontSize: 11, fill: CHART_TICK }} />
-                <YAxis tick={{ fontSize: 11, fill: CHART_TICK }} />
-                <RTooltip contentStyle={CHART_TOOLTIP} />
-                <Legend />
-                <Area type="monotone" dataKey="cumulative" name="Cumulative (kg)" stroke="#2f6aa8" fill="#2f6aa8" fillOpacity={0.15} strokeWidth={2} />
-                <Line type="monotone" dataKey="daily" name="Daily (kg)" stroke={FARM_GREEN} strokeWidth={1.5} dot={{ r: 2 }} />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </DashboardChartBody>
-        </DashboardSection>
-      )}
-
-      <DashboardSection title="Recent Entries">
+      <DashboardSection title="Recent entries">
         <TableContainer sx={{ maxHeight: 400 }}>
           <Table size="small" sx={excelTableSx}>
             <TableHead>

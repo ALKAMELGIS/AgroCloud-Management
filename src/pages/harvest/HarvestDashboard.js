@@ -24,6 +24,7 @@ import useOpsExcelExport from '../../hooks/useOpsExcelExport';
 import { OPS_EXPORT } from '../../utils/companyExcelExport';
 import PageTitle from '../../components/PageTitle';
 import ExportButton from '../../components/ExportButton';
+import { FormIdentityProvider } from '../../theme/formIdentity';
 
 // Color scheme for crops
 const CROP_COLORS = {
@@ -38,7 +39,7 @@ const CROP_COLORS = {
   'Figs': '#4BC0C0',
 };
 
-function HarvestDashboard() {
+function HarvestDashboardPage() {
   const notify = useNotification();
   const exportOpsExcel = useOpsExcelExport();
   const [harvestData, setHarvestData] = useState([]);
@@ -250,7 +251,7 @@ function HarvestDashboard() {
     <Container maxWidth="xl">
       <Box>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 3, mb: 3 }}>
-          <PageTitle>
+          <PageTitle form="harvest">
             Harvest Dashboard
           </PageTitle>
           <ExportButton label="Export to Excel" onClick={exportToExcel} disabled={tableData.length === 0} />
@@ -454,4 +455,10 @@ function HarvestDashboard() {
   );
 }
 
-export default HarvestDashboard;
+export default function HarvestDashboard() {
+  return (
+    <FormIdentityProvider form="harvest">
+      <HarvestDashboardPage />
+    </FormIdentityProvider>
+  );
+}

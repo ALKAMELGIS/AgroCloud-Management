@@ -267,7 +267,7 @@ function FertigationReports() {
   return (
     <Container maxWidth="lg">
       <Box>
-        <PageTitle sx={{ mb: 1 }}>
+        <PageTitle form="fertigation" sx={{ mb: 1 }}>
           Fertigation Reports
         </PageTitle>
         <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>

@@ -55,6 +55,7 @@ import { fertigationRecipeName } from '../../utils/fertigationEntryLabels';
 import InfoNote from '../../components/InfoNote';
 import PageTitle from '../../components/PageTitle';
 import ExportButton from '../../components/ExportButton';
+import { FormIdentityProvider } from '../../theme/formIdentity';
 
 const toNumber = (value) => {
   const num = Number(value);
@@ -75,7 +76,7 @@ function TabPanel({ children, value, index }) {
   );
 }
 
-function FertigationDashboard() {
+function FertigationDashboardPage() {
   const notify = useNotification();
   const exportOpsExcel = useOpsExcelExport();
   const { activeSiteId } = useActiveSite();
@@ -431,7 +432,7 @@ function FertigationDashboard() {
     <Container maxWidth="xl">
       <Box>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 3, mb: 3 }}>
-          <PageTitle>Fertigation Dashboard</PageTitle>
+          <PageTitle form="fertigation">Fertigation Dashboard</PageTitle>
           <Box>
             <ExportButton label="Export to Excel" onClick={exportToExcel} />
             <Button variant="outlined" startIcon={<Print />} onClick={() => window.print()}>
@@ -835,4 +836,10 @@ function FertigationDashboard() {
   );
 }
 
-export default FertigationDashboard;
+export default function FertigationDashboard() {
+  return (
+    <FormIdentityProvider form="fertigation">
+      <FertigationDashboardPage />
+    </FormIdentityProvider>
+  );
+}

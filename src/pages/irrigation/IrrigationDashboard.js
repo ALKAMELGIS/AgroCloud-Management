@@ -6,8 +6,9 @@ import { useActiveSite } from '../../contexts/ActiveSiteContext';
 import useSeasonListDates from '../../hooks/useSeasonListDates';
 import IrrigationDashboardView from '../dashboard/IrrigationDashboard';
 import PageTitle from '../../components/PageTitle';
+import { FormIdentityProvider } from '../../theme/formIdentity';
 
-export default function IrrigationDashboard() {
+function IrrigationDashboardPage() {
   const { activeSiteId, allSites } = useActiveSite();
   const [siteId, setSiteId] = useState(activeSiteId || '');
   const { startDate: dateFrom, endDate: dateTo, setStartDate: setDateFrom, setEndDate: setDateTo, seasonStart, seasonEnd } = useSeasonListDates();
@@ -18,7 +19,7 @@ export default function IrrigationDashboard() {
 
   return (
     <Box>
-      <PageTitle help="Water and cycles from Irrigation Entry (RC-108) plus separately entered pivot irrigation." sx={{ mb: 2 }}>Irrigation Dashboard</PageTitle>
+      <PageTitle form="irrigation" help="Water and cycles from Irrigation Entry (RC-108) plus separately entered pivot irrigation." sx={{ mb: 2 }}>Irrigation Dashboard</PageTitle>
 
       <Grid container spacing={2} sx={{ mb: 2 }}>
         <Grid size={{ xs: 12, sm: 4, md: 3 }}>
@@ -65,5 +66,13 @@ export default function IrrigationDashboard() {
         allFields={[]}
       />
     </Box>
+  );
+}
+
+export default function IrrigationDashboard() {
+  return (
+    <FormIdentityProvider form="irrigation">
+      <IrrigationDashboardPage />
+    </FormIdentityProvider>
   );
 }

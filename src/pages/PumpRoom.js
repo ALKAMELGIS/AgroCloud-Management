@@ -397,7 +397,7 @@ export default function PumpRoom() {
   return (
     <Box sx={{ width: '100%' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', mb: 1 }}>
-        <PageTitle>Pump Room</PageTitle>
+        <PageTitle form="pumpRoom">Pump Room</PageTitle>
         <FormPathButton form="pump-room" label="Pump Room" />
       </Box>
       {!canWrite && (

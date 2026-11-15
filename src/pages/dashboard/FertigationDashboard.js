@@ -6,9 +6,7 @@ import {
 } from '@mui/material';
 import { ChevronLeftOutlined as ChevronLeft, ChevronRightOutlined as ChevronRight } from '@mui/icons-material';
 import {
-  LineChart, Line, BarChart, Bar, Area, PieChart, Pie, Cell,
-  ComposedChart,
-  XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, Legend, ResponsiveContainer,
+  LineChart, Line, BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, ResponsiveContainer,
 } from 'recharts';
 import { listRecipesAll } from '../../utils/backendApi';
 import { fetchFertigationDashboardData } from './fertigationDashboardAdapter';
@@ -16,13 +14,17 @@ import { formatDate, toNumber } from './dashboardUtils';
 import DashboardSection, { DashboardChartBody } from '../../components/dashboard/DashboardSection';
 import DashboardStatCard from '../../components/dashboard/DashboardStatCard';
 import { excelTableSx, GutterCell } from '../../components/table/ExcelTable';
-import { FARM_GREEN, CHART_GRID, CHART_TICK, CHART_TOOLTIP, CHART_COLORS } from '../../components/dashboard/dashboardChartTheme';
+import { CHART_TOOLTIP } from '../../components/dashboard/dashboardChartTheme';
+import {
+  RankBars, ShareBar, byWeek, gridProps, lineProps, useFormColors, xAxisProps, yAxisProps,
+} from '../../components/dashboard/clearCharts';
 
 export default function FertigationDashboard({ fieldId, siteId, dateFrom, dateTo, allFields = [] }) {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sortConfig, setSortConfig] = useState({ key: 'date', dir: 'desc' });
   const [recipes, setRecipes] = useState([]);
+  const form = useFormColors();
   const [chartOffset, setChartOffset] = useState(-1);
 
   useEffect(() => {
@@ -107,25 +109,6 @@ export default function FertigationDashboard({ fieldId, siteId, dateFrom, dateTo
   const fertCanGoLeft = fertEffectiveOffset > 0;
   const fertCanGoRight = fertEffectiveOffset + FERT_VISIBLE < allTrendData.length;
 
-  const fieldComparisonData = useMemo(() => {
-    if (fieldId) return [];
-    const byField = {};
-    data.forEach(entry => {
-      const name = fieldMap[entry.fieldId] || entry.fieldId;
-      if (!byField[name]) byField[name] = { water: [], fert: [] };
-      const w = toNumber(entry.dailyWater);
-      if (w > 0) byField[name].water.push(w);
-      const f = toNumber(entry.totalFertilizer);
-      if (f > 0) byField[name].fert.push(f);
-    });
-    const avg = (arr) => arr.length ? parseFloat((arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(2)) : 0;
-    return Object.entries(byField).map(([name, vals]) => ({
-      name,
-      dailyWater: avg(vals.water),
-      totalFertilizer: avg(vals.fert),
-    })).sort((a, b) => a.name.localeCompare(b.name));
-  }, [data, fieldId, fieldMap]);
-
   const fertCompositionData = useMemo(() => {
     const totals = {};
     data.forEach(entry => {
@@ -139,21 +122,6 @@ export default function FertigationDashboard({ fieldId, siteId, dateFrom, dateTo
     return Object.entries(totals)
       .map(([name, total]) => ({ name, total: parseFloat(total.toFixed(2)) }))
       .sort((a, b) => b.total - a.total);
-  }, [data]);
-
-  const cumulativeData = useMemo(() => {
-    const byDate = {};
-    data.forEach(entry => {
-      const d = (entry.date || '').toString().split('T')[0];
-      if (!d) return;
-      const f = toNumber(entry.totalFertilizer);
-      if (f > 0) byDate[d] = (byDate[d] || 0) + f;
-    });
-    let cumulative = 0;
-    return Object.keys(byDate).sort().map(d => {
-      cumulative += byDate[d];
-      return { date: formatDate(d), cumulative: parseFloat(cumulative.toFixed(2)), daily: parseFloat(byDate[d].toFixed(2)) };
-    });
   }, [data]);
 
   const recipeUsageData = useMemo(() => {
@@ -197,26 +165,7 @@ export default function FertigationDashboard({ fieldId, siteId, dateFrom, dateTo
     return { chartData, fertNames };
   }, [data, fieldId, fieldMap]);
 
-  const weeklyData = useMemo(() => {
-    const byWeek = {};
-    data.forEach(entry => {
-      const wk = entry.weekNumber;
-      if (!wk) return;
-      if (!byWeek[wk]) byWeek[wk] = { water: 0, fert: 0 };
-      const w = toNumber(entry.dailyWater);
-      if (w > 0) byWeek[wk].water += w;
-      const f = toNumber(entry.totalFertilizer);
-      if (f > 0) byWeek[wk].fert += f;
-    });
-    return Object.keys(byWeek)
-      .map(Number)
-      .sort((a, b) => a - b)
-      .map(wk => ({
-        week: `W${wk}`,
-        water: parseFloat(byWeek[wk].water.toFixed(2)),
-        fertilizer: parseFloat(byWeek[wk].fert.toFixed(2)),
-      }));
-  }, [data]);
+  const weeklyData = useMemo(() => byWeek(data.map((e) => ({ date: e.date, value: toNumber(e.totalFertilizer) }))), [data]);
 
   const tableData = useMemo(() => {
     const rows = data.slice(0, 200).map(entry => ({
@@ -254,42 +203,26 @@ export default function FertigationDashboard({ fieldId, siteId, dateFrom, dateTo
     <Box>
       <Grid container spacing={1.5} sx={{ mb: 3 }}>
         <Grid size={{ xs: 6, sm: 4, md: 2 }}>
-          <DashboardStatCard title="Total Entries" value={stats.count} color="#333" />
+          <DashboardStatCard lead title="Total fertiliser" value={stats.totalFert} subtitle="kg" />
         </Grid>
         <Grid size={{ xs: 6, sm: 4, md: 2 }}>
-          <DashboardStatCard title="Avg Daily Water" value={stats.avgWater} subtitle="m³" />
+          <DashboardStatCard title="Average daily water" value={stats.avgWater} subtitle="m³" />
         </Grid>
         <Grid size={{ xs: 6, sm: 4, md: 2 }}>
-          <DashboardStatCard title="Avg Flow Rate" value={stats.avgFlow} color="#3b82f6" />
+          <DashboardStatCard title="Average flow rate" value={stats.avgFlow} />
         </Grid>
         <Grid size={{ xs: 6, sm: 4, md: 2 }}>
-          <DashboardStatCard title="Total Fertilizer" value={stats.totalFert} subtitle="kg" color="#f59e0b" />
+          <DashboardStatCard title="Average frequency" value={stats.avgFreq} />
         </Grid>
         <Grid size={{ xs: 6, sm: 4, md: 2 }}>
-          <DashboardStatCard title="Avg Frequency" value={stats.avgFreq} color="#2f6aa8" />
+          <DashboardStatCard title="Average valves" value={stats.avgValves} />
         </Grid>
         <Grid size={{ xs: 6, sm: 4, md: 2 }}>
-          <DashboardStatCard title="Avg Valves" value={stats.avgValves} color="#a84b07" />
+          <DashboardStatCard title="Entries" value={stats.count} />
         </Grid>
       </Grid>
 
-      <DashboardSection title="Daily Water Usage (m³)">
-        <DashboardChartBody height={340}>
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={trendData}>
-              <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} />
-              <XAxis dataKey="date" tick={{ fontSize: 11, fill: CHART_TICK }} />
-              <YAxis tick={{ fontSize: 11, fill: CHART_TICK }} />
-              <RTooltip contentStyle={CHART_TOOLTIP} />
-              <Legend />
-              <Line type="monotone" dataKey="dailyWater" name="Daily Water (m³)" stroke={FARM_GREEN} strokeWidth={2} dot={{ r: 3 }} connectNulls />
-              <Line type="monotone" dataKey="flowRate" name="Flow Rate" stroke="#4b8fc4" strokeWidth={2} dot={{ r: 3 }} connectNulls />
-            </LineChart>
-          </ResponsiveContainer>
-        </DashboardChartBody>
-      </DashboardSection>
-
-      <DashboardSection title="Total Fertilizer (kg)">
+      <DashboardSection title="Fertiliser by day · kg">
         <DashboardChartBody
           height={300}
           footer={allTrendData.length > FERT_VISIBLE ? (
@@ -307,129 +240,87 @@ export default function FertigationDashboard({ fieldId, siteId, dateFrom, dateTo
           ) : null}
         >
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={trendData}>
-              <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} />
-              <XAxis dataKey="date" tick={{ fontSize: 11, fill: CHART_TICK }} />
-              <YAxis tick={{ fontSize: 11, fill: CHART_TICK }} />
-              <RTooltip contentStyle={CHART_TOOLTIP} />
-              <Bar dataKey="totalFertilizer" name="Total Fertilizer (kg)" fill="#d08a1e" radius={[4, 4, 0, 0]} />
+            <BarChart data={trendData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+              <CartesianGrid {...gridProps} />
+              <XAxis dataKey="date" {...xAxisProps} />
+              <YAxis {...yAxisProps} />
+              <RTooltip contentStyle={CHART_TOOLTIP} cursor={{ fill: form.pale }} />
+              <Bar dataKey="totalFertilizer" name="Fertiliser (kg)" fill={form.base} radius={[4, 4, 0, 0]} maxBarSize={28} animationDuration={800} />
             </BarChart>
           </ResponsiveContainer>
         </DashboardChartBody>
       </DashboardSection>
 
-      {fertCompositionData.length > 0 && (
-        <DashboardSection title="Fertilizer Composition (Total kg)">
-          <DashboardChartBody height={Math.max(300, fertCompositionData.length * 32)}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={fertCompositionData} layout="vertical" margin={{ left: 120 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} />
-                <XAxis type="number" tick={{ fontSize: 11, fill: CHART_TICK }} />
-                <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: CHART_TICK }} width={120} />
-                <RTooltip contentStyle={CHART_TOOLTIP} />
-                <Bar dataKey="total" name="Total (kg)" radius={[0, 4, 4, 0]}>
-                  {fertCompositionData.map((_, idx) => (
-                    <Cell key={idx} fill={CHART_COLORS[idx % CHART_COLORS.length]} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </DashboardChartBody>
-        </DashboardSection>
-      )}
+      <Grid container spacing={2} sx={{ mb: { xs: 4, md: 5 } }}>
+        {fertCompositionData.length > 0 && (
+          <Grid size={{ xs: 12, lg: 6 }}>
+            <DashboardSection title="Which fertilisers · kg" sx={{ mb: 0, height: '100%' }}>
+              <Box sx={{ p: { xs: 3, sm: 4 } }}>
+                <RankBars items={fertCompositionData.map((r) => ({ label: r.name, value: r.total }))} showShare />
+              </Box>
+            </DashboardSection>
+          </Grid>
+        )}
+        {!fieldId && fertPerFieldData.chartData.length > 0 && (
+          <Grid size={{ xs: 12, lg: 6 }}>
+            <DashboardSection title="Fertiliser per field · kg" sx={{ mb: 0, height: '100%' }}>
+              <Box sx={{ p: { xs: 3, sm: 4 } }}>
+                <RankBars items={fertPerFieldData.chartData.map((row) => ({
+                  label: String(row.name),
+                  value: Math.round(fertPerFieldData.fertNames.reduce((t, fn) => t + (Number(row[fn]) || 0), 0) * 10) / 10,
+                }))} />
+              </Box>
+            </DashboardSection>
+          </Grid>
+        )}
+      </Grid>
 
-      {cumulativeData.length > 0 && (
-        <DashboardSection title="Cumulative Fertilizer Usage (kg)">
-          <DashboardChartBody height={340}>
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={cumulativeData}>
-                <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} />
-                <XAxis dataKey="date" tick={{ fontSize: 11, fill: CHART_TICK }} />
-                <YAxis tick={{ fontSize: 11, fill: CHART_TICK }} />
-                <RTooltip contentStyle={CHART_TOOLTIP} />
-                <Legend />
-                <Area type="monotone" dataKey="cumulative" name="Cumulative (kg)" stroke="#2f6aa8" fill="#2f6aa8" fillOpacity={0.15} strokeWidth={2} />
-                <Line type="monotone" dataKey="daily" name="Daily (kg)" stroke="#d08a1e" strokeWidth={1.5} dot={{ r: 2 }} />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </DashboardChartBody>
-        </DashboardSection>
-      )}
+      <Grid container spacing={2} sx={{ mb: { xs: 4, md: 5 } }}>
+        {weeklyData.length > 0 && (
+          <Grid size={{ xs: 12, lg: recipeUsageData.length > 0 ? 7 : 12 }}>
+            <DashboardSection title="Fertiliser by week · kg" sx={{ mb: 0, height: '100%' }}>
+              <DashboardChartBody height={280}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={weeklyData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                    <CartesianGrid {...gridProps} />
+                    <XAxis dataKey="week" {...xAxisProps} />
+                    <YAxis {...yAxisProps} />
+                    <RTooltip contentStyle={CHART_TOOLTIP} cursor={{ fill: form.pale }} />
+                    <Bar dataKey="value" name="Fertiliser (kg)" radius={[4, 4, 0, 0]} maxBarSize={44} animationDuration={800}>
+                      {weeklyData.map((_, i) => <Cell key={i} fill={i === weeklyData.length - 1 ? form.dark : form.light} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </DashboardChartBody>
+            </DashboardSection>
+          </Grid>
+        )}
+        {recipeUsageData.length > 0 && (
+          <Grid size={{ xs: 12, lg: weeklyData.length > 0 ? 5 : 12 }}>
+            <DashboardSection title="Recipes used · entries" sx={{ mb: 0, height: '100%' }}>
+              <Box sx={{ p: { xs: 3, sm: 4 } }}>
+                <ShareBar items={recipeUsageData.map((r) => ({ label: r.name, value: r.count }))} />
+              </Box>
+            </DashboardSection>
+          </Grid>
+        )}
+      </Grid>
 
-      {recipeUsageData.length > 0 && (
-        <DashboardSection title="Recipe Usage (number of entries)">
-          <DashboardChartBody height={300}>
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={recipeUsageData} dataKey="count" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`} labelLine={{ strokeWidth: 1 }}>
-                  {recipeUsageData.map((_, idx) => (
-                    <Cell key={idx} fill={CHART_COLORS[idx % CHART_COLORS.length]} />
-                  ))}
-                </Pie>
-                <RTooltip contentStyle={CHART_TOOLTIP} />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
-          </DashboardChartBody>
-        </DashboardSection>
-      )}
+      <DashboardSection title="Water by day · m³">
+        <DashboardChartBody height={300}>
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={trendData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+              <CartesianGrid {...gridProps} />
+              <XAxis dataKey="date" {...xAxisProps} />
+              <YAxis {...yAxisProps} />
+              <RTooltip contentStyle={CHART_TOOLTIP} />
+              <Line {...lineProps} dataKey="dailyWater" name="Water (m³)" stroke={form.base} />
+            </LineChart>
+          </ResponsiveContainer>
+        </DashboardChartBody>
+      </DashboardSection>
 
-      {weeklyData.length > 0 && (
-        <DashboardSection title="Weekly Fertilizer & Water Summary">
-          <DashboardChartBody height={320}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={weeklyData}>
-                <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} />
-                <XAxis dataKey="week" tick={{ fontSize: 11, fill: CHART_TICK }} />
-                <YAxis tick={{ fontSize: 11, fill: CHART_TICK }} />
-                <RTooltip contentStyle={CHART_TOOLTIP} />
-                <Legend />
-                <Bar dataKey="water" name="Water (m³)" fill={FARM_GREEN} radius={[4, 4, 0, 0]} />
-                <Bar dataKey="fertilizer" name="Fertilizer (kg)" fill="#d08a1e" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </DashboardChartBody>
-        </DashboardSection>
-      )}
-
-      {!fieldId && fertPerFieldData.chartData.length > 0 && fertPerFieldData.fertNames.length > 0 && (
-        <DashboardSection title="Fertilizer per Field (kg)">
-          <DashboardChartBody height={Math.max(340, fertPerFieldData.chartData.length * 40)}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={fertPerFieldData.chartData} layout="vertical" margin={{ left: 80 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} />
-                <XAxis type="number" tick={{ fontSize: 11, fill: CHART_TICK }} />
-                <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: CHART_TICK }} width={80} />
-                <RTooltip contentStyle={CHART_TOOLTIP} />
-                <Legend />
-                {fertPerFieldData.fertNames.slice(0, 8).map((fn, idx) => (
-                  <Bar key={fn} dataKey={fn} stackId="fert" fill={CHART_COLORS[idx % CHART_COLORS.length]} />
-                ))}
-              </BarChart>
-            </ResponsiveContainer>
-          </DashboardChartBody>
-        </DashboardSection>
-      )}
-
-      {!fieldId && fieldComparisonData.length > 0 && (
-        <DashboardSection title="Field Comparison (Avg Daily Water & Fertilizer)">
-          <DashboardChartBody height={340}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={fieldComparisonData}>
-                <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} />
-                <XAxis dataKey="name" tick={{ fontSize: 11, fill: CHART_TICK, angle: -30 }} height={60} />
-                <YAxis tick={{ fontSize: 11, fill: CHART_TICK }} />
-                <RTooltip contentStyle={CHART_TOOLTIP} />
-                <Legend />
-                <Bar dataKey="dailyWater" name="Avg Water (m³)" fill={FARM_GREEN} radius={[4, 4, 0, 0]} />
-                <Bar dataKey="totalFertilizer" name="Avg Fertilizer (kg)" fill="#d08a1e" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </DashboardChartBody>
-        </DashboardSection>
-      )}
-
-      <DashboardSection title="Recent Entries">
+      <DashboardSection title="Recent entries">
         <TableContainer sx={{ maxHeight: 400 }}>
           <Table size="small" sx={excelTableSx}>
             <TableHead>

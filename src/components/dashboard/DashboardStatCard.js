@@ -1,7 +1,14 @@
 import { Box, Paper, Typography } from '@mui/material';
+import { useFormIdentity } from '../../theme/formIdentity';
 
-/** KPI tile: small label, large tabular value, optional caption. */
-export default function DashboardStatCard({ title, value, subtitle, color }) {
+/**
+ * KPI tile: small label, large tabular value, optional caption. On a form page
+ * the first tile (`lead`) carries the form colour; `color` is kept for old callers
+ * but no longer paints anything, so tiles never compete with the charts.
+ */
+// eslint-disable-next-line no-unused-vars
+export default function DashboardStatCard({ title, value, subtitle, color, lead }) {
+  const form = useFormIdentity();
   return (
     <Paper
       variant="outlined"
@@ -12,6 +19,7 @@ export default function DashboardStatCard({ title, value, subtitle, color }) {
         position: 'relative',
         transition: 'border-color 200ms ease',
         '&:hover': { borderColor: 'border.strong' },
+        ...(lead && form ? { boxShadow: `inset 4px 0 0 ${form.base}` } : {}),
       }}
     >
       <Box sx={{ px: { xs: 4, sm: 5 }, py: { xs: 3.5, sm: 4.5 } }}>
@@ -29,7 +37,6 @@ export default function DashboardStatCard({ title, value, subtitle, color }) {
             gap: 1.5,
           }}
         >
-          <Box component="span" sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: color || 'primary.main', flexShrink: 0 }} />
           {title}
         </Typography>
         <Typography

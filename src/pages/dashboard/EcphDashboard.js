@@ -6,21 +6,52 @@ import {
 } from '@mui/material';
 import { ChevronLeftOutlined as ChevronLeft, ChevronRightOutlined as ChevronRight } from '@mui/icons-material';
 import {
-  LineChart, Line, BarChart, Bar,
-  XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, Legend, ResponsiveContainer,
+  LineChart, Line, BarChart, Bar, ReferenceArea,
+  XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, ResponsiveContainer,
 } from 'recharts';
 import { listEcphAll } from '../../utils/backendApi';
 import { formatDate, toNumber } from './dashboardUtils';
 import DashboardSection, { DashboardChartBody } from '../../components/dashboard/DashboardSection';
 import DashboardStatCard from '../../components/dashboard/DashboardStatCard';
 import { excelTableSx, GutterCell } from '../../components/table/ExcelTable';
-import { FARM_GREEN, CHART_GRID, CHART_TICK, CHART_TOOLTIP } from '../../components/dashboard/dashboardChartTheme';
+import { CHART_TOOLTIP } from '../../components/dashboard/dashboardChartTheme';
+import {
+  BandRows, ChartLegend, compareLineProps, gridProps, lineProps, useFormColors, xAxisProps, yAxisProps,
+} from '../../components/dashboard/clearCharts';
+import { COMPARE_GREY } from '../../theme/formIdentity';
+
+/** Default targets for drain water out of the root zone; shaded on the charts. */
+export const ECPH_TARGETS = { ecOut: [1.8, 2.6], phOut: [5.5, 6.5] };
+
+/** Mean of the last 7 days vs the 7 days before, per field, counted back from the latest reading. */
+function lastTwoWeeksByField(rows, key) {
+  const dates = rows.map((r) => (r.rawDate || '').toString().slice(0, 10)).filter(Boolean).sort();
+  if (!dates.length) return [];
+  const end = new Date(`${dates[dates.length - 1]}T00:00:00Z`).getTime();
+  const day = 86400000;
+  const acc = {};
+  rows.forEach((r) => {
+    const v = r[key];
+    if (!(v > 0)) return;
+    const t = new Date(`${(r.rawDate || '').toString().slice(0, 10)}T00:00:00Z`).getTime();
+    const age = Math.floor((end - t) / day);
+    if (age < 0 || age > 13) return;
+    const f = (acc[r.fieldName] = acc[r.fieldName] || { now: [], prev: [] });
+    (age < 7 ? f.now : f.prev).push(v);
+  });
+  const mean = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : NaN);
+  return Object.entries(acc)
+    .map(([label, f]) => ({ label: String(label), now: mean(f.now), prev: mean(f.prev) }))
+    .filter((r) => Number.isFinite(r.now))
+    .sort((a, b) => b.now - a.now);
+}
 
 export default function EcphDashboard({ fieldId, siteId, dateFrom, dateTo, allFields = [] }) {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sortConfig, setSortConfig] = useState({ key: 'date', dir: 'desc' });
   const [chartOffset, setChartOffset] = useState(-1);
+  const form = useFormColors();
 
   useEffect(() => {
     let cancelled = false;
@@ -114,21 +145,13 @@ export default function EcphDashboard({ fieldId, siteId, dateFrom, dateTo, allFi
   const ecphCanGoLeft = ecphEffectiveOffset > 0;
   const ecphCanGoRight = ecphEffectiveOffset + ECPH_VISIBLE < allTrendData.length;
 
-  const fieldComparisonData = useMemo(() => {
-    if (fieldId) return [];
-    const byField = {};
-    flatReadings.forEach(r => {
-      if (!byField[r.fieldName]) byField[r.fieldName] = { ecIn: [], phIn: [] };
-      if (r.ecIn > 0) byField[r.fieldName].ecIn.push(r.ecIn);
-      if (r.phIn > 0) byField[r.fieldName].phIn.push(r.phIn);
-    });
-    const avg = (arr) => arr.length ? parseFloat((arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(2)) : 0;
-    return Object.entries(byField).map(([name, vals]) => ({
-      name,
-      ecIn: avg(vals.ecIn),
-      phIn: avg(vals.phIn),
-    })).sort((a, b) => a.name.localeCompare(b.name));
-  }, [flatReadings, fieldId]);
+  const phByField = useMemo(() => (fieldId ? [] : lastTwoWeeksByField(flatReadings, 'phOut')), [flatReadings, fieldId]);
+  const ecByField = useMemo(() => (fieldId ? [] : lastTwoWeeksByField(flatReadings, 'ecOut')), [flatReadings, fieldId]);
+  const bandRange = (rows, band, pad) => {
+    const vals = rows.flatMap((r) => [r.now, r.prev]).filter(Number.isFinite);
+    const lo = Math.min(band[0] - pad, ...vals), hi = Math.max(band[1] + pad, ...vals);
+    return [Math.floor(lo * 2) / 2, Math.ceil(hi * 2) / 2];
+  };
 
   const tableData = useMemo(() => {
     const rows = flatReadings.slice(0, 200);
@@ -156,58 +179,87 @@ export default function EcphDashboard({ fieldId, siteId, dateFrom, dateTo, allFi
     <Box>
       <Grid container spacing={1.5} sx={{ mb: 3 }}>
         <Grid size={{ xs: 6, sm: 4, md: 2 }}>
-          <DashboardStatCard title="Avg EC In" value={stats.ecIn} />
+          <DashboardStatCard lead title="EC out" value={stats.ecOut} subtitle={`mS/cm · target ${ECPH_TARGETS.ecOut.join('–')}`} />
         </Grid>
         <Grid size={{ xs: 6, sm: 4, md: 2 }}>
-          <DashboardStatCard title="Avg EC Out" value={stats.ecOut} color="#f59e0b" />
+          <DashboardStatCard title="pH out" value={stats.phOut} subtitle={`target ${ECPH_TARGETS.phOut.join('–')}`} />
         </Grid>
         <Grid size={{ xs: 6, sm: 4, md: 2 }}>
-          <DashboardStatCard title="Avg pH In" value={stats.phIn} color="#3b82f6" />
+          <DashboardStatCard title="EC in" value={stats.ecIn} subtitle="mS/cm" />
         </Grid>
         <Grid size={{ xs: 6, sm: 4, md: 2 }}>
-          <DashboardStatCard title="Avg pH Out" value={stats.phOut} color="#2f6aa8" />
+          <DashboardStatCard title="pH in" value={stats.phIn} />
         </Grid>
         <Grid size={{ xs: 6, sm: 4, md: 2 }}>
-          <DashboardStatCard title="Avg Drain %" value={stats.drain} color="#a84b07" />
+          <DashboardStatCard title="Drain" value={stats.drain} />
         </Grid>
         <Grid size={{ xs: 6, sm: 4, md: 2 }}>
-          <DashboardStatCard title="Total Entries" value={stats.count} />
+          <DashboardStatCard title="Entries" value={stats.count} />
         </Grid>
       </Grid>
 
-      <DashboardSection title="EC Trends">
+      {phByField.length > 0 && (
+        <Grid container spacing={2} sx={{ mb: { xs: 4, md: 5 } }}>
+          <Grid size={{ xs: 12, lg: 6 }}>
+            <DashboardSection title="Is pH out in the target band?" sx={{ mb: 0, height: '100%' }}>
+              <Box sx={{ p: { xs: 3, sm: 4 } }}>
+                <BandRows rows={phByField} band={ECPH_TARGETS.phOut} min={bandRange(phByField, ECPH_TARGETS.phOut, 0.5)[0]} max={bandRange(phByField, ECPH_TARGETS.phOut, 0.5)[1]} decimals={1} />
+              </Box>
+            </DashboardSection>
+          </Grid>
+          <Grid size={{ xs: 12, lg: 6 }}>
+            <DashboardSection title="Is EC out in the target band?" sx={{ mb: 0, height: '100%' }}>
+              <Box sx={{ p: { xs: 3, sm: 4 } }}>
+                <BandRows rows={ecByField} band={ECPH_TARGETS.ecOut} min={bandRange(ecByField, ECPH_TARGETS.ecOut, 0.4)[0]} max={bandRange(ecByField, ECPH_TARGETS.ecOut, 0.4)[1]} decimals={2} unit="mS/cm" />
+              </Box>
+            </DashboardSection>
+          </Grid>
+        </Grid>
+      )}
+
+      <DashboardSection title="EC by day · mS/cm">
         <DashboardChartBody height={340}>
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={trendData}>
-              <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} />
-              <XAxis dataKey="date" tick={{ fontSize: 11, fill: CHART_TICK }} />
-              <YAxis tick={{ fontSize: 11, fill: CHART_TICK }} />
+          <ChartLegend items={[
+            { label: 'EC out', color: form.base },
+            { label: 'EC in', color: COMPARE_GREY, dashed: true },
+            { label: `Target ${ECPH_TARGETS.ecOut.join('–')}`, color: form.pale, band: true },
+          ]} />
+          <ResponsiveContainer width="100%" height="88%">
+            <LineChart data={trendData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+              <ReferenceArea y1={ECPH_TARGETS.ecOut[0]} y2={ECPH_TARGETS.ecOut[1]} fill={form.pale} fillOpacity={1} ifOverflow="hidden" />
+              <CartesianGrid {...gridProps} />
+              <XAxis dataKey="date" {...xAxisProps} />
+              <YAxis {...yAxisProps} domain={['auto', 'auto']} />
               <RTooltip contentStyle={CHART_TOOLTIP} />
-              <Legend />
-              <Line type="monotone" dataKey="ecIn" name="EC In" stroke={FARM_GREEN} strokeWidth={2} dot={{ r: 3 }} connectNulls />
-              <Line type="monotone" dataKey="ecOut" name="EC Out" stroke="#d08a1e" strokeWidth={2} dot={{ r: 3 }} connectNulls />
+              <Line {...compareLineProps} dataKey="ecIn" name="EC in" />
+              <Line {...lineProps} dataKey="ecOut" name="EC out" stroke={form.base} />
             </LineChart>
           </ResponsiveContainer>
         </DashboardChartBody>
       </DashboardSection>
 
-      <DashboardSection title="pH Trends">
+      <DashboardSection title="pH by day">
         <DashboardChartBody height={340}>
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={trendData}>
-              <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} />
-              <XAxis dataKey="date" tick={{ fontSize: 11, fill: CHART_TICK }} />
-              <YAxis tick={{ fontSize: 11, fill: CHART_TICK }} domain={['auto', 'auto']} />
+          <ChartLegend items={[
+            { label: 'pH out', color: form.base },
+            { label: 'pH in', color: COMPARE_GREY, dashed: true },
+            { label: `Target ${ECPH_TARGETS.phOut.join('–')}`, color: form.pale, band: true },
+          ]} />
+          <ResponsiveContainer width="100%" height="88%">
+            <LineChart data={trendData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+              <ReferenceArea y1={ECPH_TARGETS.phOut[0]} y2={ECPH_TARGETS.phOut[1]} fill={form.pale} fillOpacity={1} ifOverflow="hidden" />
+              <CartesianGrid {...gridProps} />
+              <XAxis dataKey="date" {...xAxisProps} />
+              <YAxis {...yAxisProps} domain={['auto', 'auto']} />
               <RTooltip contentStyle={CHART_TOOLTIP} />
-              <Legend />
-              <Line type="monotone" dataKey="phIn" name="pH In" stroke="#4b8fc4" strokeWidth={2} dot={{ r: 3 }} connectNulls />
-              <Line type="monotone" dataKey="phOut" name="pH Out" stroke="#2f6aa8" strokeWidth={2} dot={{ r: 3 }} connectNulls />
+              <Line {...compareLineProps} dataKey="phIn" name="pH in" />
+              <Line {...lineProps} dataKey="phOut" name="pH out" stroke={form.base} />
             </LineChart>
           </ResponsiveContainer>
         </DashboardChartBody>
       </DashboardSection>
 
-      <DashboardSection title="Drain %">
+      <DashboardSection title="Drain by day · %">
         <DashboardChartBody
           height={300}
           footer={allTrendData.length > ECPH_VISIBLE ? (
@@ -225,36 +277,18 @@ export default function EcphDashboard({ fieldId, siteId, dateFrom, dateTo, allFi
           ) : null}
         >
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={trendData}>
-              <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} />
-              <XAxis dataKey="date" tick={{ fontSize: 11, fill: CHART_TICK }} />
-              <YAxis tick={{ fontSize: 11, fill: CHART_TICK }} />
-              <RTooltip contentStyle={CHART_TOOLTIP} />
-              <Bar dataKey="drain" name="% Drain" fill="#b8523a" radius={[4, 4, 0, 0]} />
+            <BarChart data={trendData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+              <CartesianGrid {...gridProps} />
+              <XAxis dataKey="date" {...xAxisProps} />
+              <YAxis {...yAxisProps} unit="%" />
+              <RTooltip contentStyle={CHART_TOOLTIP} cursor={{ fill: form.pale }} />
+              <Bar dataKey="drain" name="Drain %" fill={form.base} radius={[4, 4, 0, 0]} maxBarSize={28} animationDuration={800} />
             </BarChart>
           </ResponsiveContainer>
         </DashboardChartBody>
       </DashboardSection>
 
-      {!fieldId && fieldComparisonData.length > 0 && (
-        <DashboardSection title="Field Comparison (Avg EC & pH In)">
-          <DashboardChartBody height={340}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={fieldComparisonData}>
-                <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} />
-                <XAxis dataKey="name" tick={{ fontSize: 11, fill: CHART_TICK, angle: -30 }} height={60} />
-                <YAxis tick={{ fontSize: 11, fill: CHART_TICK }} />
-                <RTooltip contentStyle={CHART_TOOLTIP} />
-                <Legend />
-                <Bar dataKey="ecIn" name="EC In" fill={FARM_GREEN} radius={[4, 4, 0, 0]} />
-                <Bar dataKey="phIn" name="pH In" fill="#4b8fc4" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </DashboardChartBody>
-        </DashboardSection>
-      )}
-
-      <DashboardSection title="Recent Readings">
+      <DashboardSection title="Recent readings">
         {/* No readings: a message instead of an empty header with a scrollbar under it. */}
         {tableData.length === 0 ? (
           <Typography variant="body2" color="text.secondary" sx={{ px: 4, py: 6, textAlign: 'center' }}>
