@@ -877,7 +877,7 @@ export default function GISMap() {
           </Alert>
         )}
 
-        <MapContainer
+        <MapContainer attributionControl={false}
           center={DEFAULT_CENTER}
           zoom={DEFAULT_ZOOM}
           zoomControl={false}

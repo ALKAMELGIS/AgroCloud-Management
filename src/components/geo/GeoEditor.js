@@ -551,9 +551,9 @@ export default function GeoEditor({ canEdit, canImport = false }) {
         endTools={endTools}
       >
         <Box sx={{ height: '100%', position: 'relative' }}>
-          <MapContainer center={[24.2, 55.75]} zoom={14} style={{ height: '100%', width: '100%' }} doubleClickZoom={!mode}>
+          <MapContainer center={[24.2, 55.75]} zoom={14} attributionControl={false} style={{ height: '100%', width: '100%' }} doubleClickZoom={!mode}>
             <MapLifecycle />
-            <TileLayer key={basemap} url={bm.url} attribution={bm.attribution} maxZoom={20} />
+            <TileLayer key={basemap} url={bm.url} maxZoom={20} />
             {layers && GEO_CLASSES.filter((c) => visible[c.key]).map((c) => {
               const feats = (layers[c.list] || [])
                 .filter((x) => x.geometry && !(session && session.id === x.id))

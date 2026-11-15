@@ -545,3 +545,4 @@ Pages:
 - Map editor, Attributes: **Forms on this feature** — every form (FORM_ID) recorded on the field, or on all fields inside a farm area / site / zone, with record count and last date, linking to the form (`GET /api/v1/geo/:cls/:id/forms`).
 - GIS Map feature card: features without Farm_Code reach their imported field through GlobalID (`fields.gis_external_id`); the card always sends the GlobalID.
 - After an import the master data is refreshed, so forms list the new fields at once.
+- Field picker map is a full map workspace: **Fields** (search by name or KeyID; hovering / focusing a row highlights and zooms to its shape; a click picks it), **Legend** (structure types present + the chosen field), **Basemap** (light, street, satellite, topographic), **Show all**, **My location** (GPS dot, to find the field you stand in). No credit line over the map: the basemap credit moved under the basemap list (also on GIS Map, GPS Tracking and the map editor).

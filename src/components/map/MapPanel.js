@@ -217,6 +217,12 @@ export function BasemapList({ value, onChange }) {
           <ListItemText primary={b.name || b.label} primaryTypographyProps={{ fontSize: '0.875rem' }} />
         </ListItemButton>
       ))}
+      {/* The basemap's credit lives here instead of over the map. */}
+      {(() => {
+        const t = String((BASEMAPS[value] || {}).attribution || '').replace(/<[^>]+>/g, '')
+          .replace(/&copy;/g, '©').replace(/&amp;/g, '&').replace(/&[a-z]+;/g, ' ').replace(/\s+/g, ' ').trim();
+        return t ? <Typography component="li" sx={{ listStyle: 'none', px: 3, pt: 1.5, fontSize: '0.6875rem', color: 'text.secondary' }}><bdi dir="ltr">{t}</bdi></Typography> : null;
+      })()}
     </List>
   );
 }

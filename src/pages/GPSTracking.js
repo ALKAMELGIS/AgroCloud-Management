@@ -357,7 +357,7 @@ export default function GPSTracking() {
               canWrite && { key: 'add', label: 'Add equipment', icon: <AddIcon />, onClick: () => setCreateOpen(true) },
             ]}
           >
-          <MapContainer center={DEFAULT_CENTER} zoom={12} zoomControl={false} style={{ height: '100%', width: '100%' }}>
+          <MapContainer attributionControl={false} center={DEFAULT_CENTER} zoom={12} zoomControl={false} style={{ height: '100%', width: '100%' }}>
             <ZoomControl position={mapZoomPosition(theme)} />
             <MapLifecycle />
             <MapResizeInvalidator revision={`${selectedId || ''}:${trackDate}`} />
