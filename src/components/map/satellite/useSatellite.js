@@ -75,7 +75,8 @@ export default function useSatellite() {
   const addArea = useCallback((feature) => {
     const id = `a${Date.now().toString(36)}`;
     const given = feature?.properties?.name;
-    const name = given && given !== 'Drawn AOI' ? given : `Area ${myAreas.length + 1}`;
+    const ar = typeof document !== 'undefined' && document.documentElement.lang === 'ar';
+    const name = given && given !== 'Drawn AOI' ? given : `${ar ? 'منطقة' : 'Area'} ${myAreas.length + 1}`;
     const f = { ...feature, properties: { ...(feature.properties || {}), name } };
     setMyAreas((list) => [...list, { id, name, feature: f, visible: true }]);
     setActiveArea(id); setAoi(f); setClip(true);
