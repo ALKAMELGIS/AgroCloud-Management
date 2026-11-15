@@ -87,28 +87,36 @@ ALTER TABLE shifts ENABLE ROW LEVEL SECURITY;
 
 -- RLS policies: users can only see rows in their organization
 -- Note: these require the app to SET app.current_org_id before queries
-CREATE POLICY IF NOT EXISTS tenant_isolation_users ON users
+DROP POLICY IF EXISTS tenant_isolation_users ON users;
+CREATE POLICY tenant_isolation_users ON users
   USING (organization_id = current_setting('app.current_org_id', true)::uuid OR organization_id IS NULL);
 
-CREATE POLICY IF NOT EXISTS tenant_isolation_fields ON fields
+DROP POLICY IF EXISTS tenant_isolation_fields ON fields;
+CREATE POLICY tenant_isolation_fields ON fields
   USING (organization_id = current_setting('app.current_org_id', true)::uuid OR organization_id IS NULL);
 
-CREATE POLICY IF NOT EXISTS tenant_isolation_harvests ON harvests
+DROP POLICY IF EXISTS tenant_isolation_harvests ON harvests;
+CREATE POLICY tenant_isolation_harvests ON harvests
   USING (organization_id = current_setting('app.current_org_id', true)::uuid OR organization_id IS NULL);
 
-CREATE POLICY IF NOT EXISTS tenant_isolation_fertigation ON fertigation_entries
+DROP POLICY IF EXISTS tenant_isolation_fertigation ON fertigation_entries;
+CREATE POLICY tenant_isolation_fertigation ON fertigation_entries
   USING (organization_id = current_setting('app.current_org_id', true)::uuid OR organization_id IS NULL);
 
-CREATE POLICY IF NOT EXISTS tenant_isolation_ecph ON ecph_entries
+DROP POLICY IF EXISTS tenant_isolation_ecph ON ecph_entries;
+CREATE POLICY tenant_isolation_ecph ON ecph_entries
   USING (organization_id = current_setting('app.current_org_id', true)::uuid OR organization_id IS NULL);
 
-CREATE POLICY IF NOT EXISTS tenant_isolation_tasks ON tasks
+DROP POLICY IF EXISTS tenant_isolation_tasks ON tasks;
+CREATE POLICY tenant_isolation_tasks ON tasks
   USING (organization_id = current_setting('app.current_org_id', true)::uuid OR organization_id IS NULL);
 
-CREATE POLICY IF NOT EXISTS tenant_isolation_costs ON cost_entries
+DROP POLICY IF EXISTS tenant_isolation_costs ON cost_entries;
+CREATE POLICY tenant_isolation_costs ON cost_entries
   USING (organization_id = current_setting('app.current_org_id', true)::uuid OR organization_id IS NULL);
 
-CREATE POLICY IF NOT EXISTS tenant_isolation_shifts ON shifts
+DROP POLICY IF EXISTS tenant_isolation_shifts ON shifts;
+CREATE POLICY tenant_isolation_shifts ON shifts
   USING (organization_id = current_setting('app.current_org_id', true)::uuid OR organization_id IS NULL);
 
 -- Default org for existing data (migration convenience)

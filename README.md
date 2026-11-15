@@ -34,6 +34,10 @@ Precision agriculture platform for managing farm operations end-to-end: harvest 
 | Mobile | Expo SDK 54, React Native |
 | CI/CD | GitHub Actions, Docker, Railway/Nixpacks |
 
+## Company computer (full version)
+
+Step-by-step install on Windows with PostgreSQL + PostGIS: [docs/INSTALL_COMPANY_PC.md](docs/INSTALL_COMPANY_PC.md).
+
 ## Quick Start
 
 ### Prerequisites
