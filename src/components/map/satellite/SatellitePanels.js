@@ -369,6 +369,32 @@ export function AoiPanel({ sat, mapRef, fields = [], structures = [] }) {
                 : sat.drawing === 'rectangle' ? (isAr ? 'اسحب لرسم المستطيل' : 'Drag to draw the rectangle') : (isAr ? 'اسحب من المركز لرسم الدائرة' : 'Drag from the centre to draw the circle')}
             </Typography>
           )}
+          <Box sx={{ border: 1, borderColor: sat.withStructures ? alpha('#1f7a4d', 0.35) : 'divider', bgcolor: sat.withStructures ? alpha('#1f7a4d', 0.05) : 'transparent' }}>
+            <FormControlLabel sx={{ m: 0, px: 1.5, minHeight: 48, width: '100%', justifyContent: 'space-between' }} labelPlacement="start"
+              control={<Switch checked={sat.withStructures} onChange={(e) => { sat.setWithStructures(e.target.checked); if (e.target.checked) sat.setShow(true); }} />}
+              label={(
+                <Box>
+                  <Typography sx={{ fontSize: '0.8125rem', fontWeight: 500 }}>{isAr ? 'أظهر حقول Agro_Structures أيضاً' : 'Also show Agro_Structures'}</Typography>
+                  <Typography sx={{ fontSize: '0.6875rem', color: 'text.secondary' }}>{isAr ? 'المؤشر داخل منطقتي وداخل هذه الحقول' : 'Index inside my area and inside these fields'}</Typography>
+                </Box>
+              )} />
+            {sat.withStructures && (
+              <Box role="group" aria-label="Structure_Type" sx={{ display: 'grid', borderTop: 1, borderColor: 'divider' }}>
+                {STRUCT_TYPES.map((t) => {
+                  const on = sat.structTypes.includes(t.code);
+                  return (
+                    <Box component="label" key={t.code} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minHeight: 40, px: 1.5, cursor: 'pointer' }}>
+                      <input type="checkbox" checked={on} onChange={() => toggleType(t.code)} style={{ width: 16, height: 16, accentColor: '#1f7a4d', margin: 0 }} />
+                      <Box component="span" aria-hidden sx={t.swatch} />
+                      <Box component="span" sx={{ flex: 1, fontSize: '0.8125rem' }}><bdi dir="ltr">{t.name}</bdi></Box>
+                      <Box component="span" sx={{ fontSize: '0.6875rem', color: 'text.secondary' }}><bdi dir="ltr">{t.code}</bdi></Box>
+                      <Box component="span" sx={{ fontSize: '0.75rem', minWidth: 28, textAlign: 'end', fontVariantNumeric: 'tabular-nums' }}>{counts[t.code] || 0}</Box>
+                    </Box>
+                  );
+                })}
+              </Box>
+            )}
+          </Box>
           <Box sx={{ border: 1, borderColor: 'divider' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, height: 40, bgcolor: alpha(DRAWN, 0.08), borderBottom: 1, borderColor: 'divider' }}>
               <Typography sx={{ flex: 1, fontSize: '0.8125rem', fontWeight: 600, color: DRAWN }}>{isAr ? 'مناطقي' : 'My areas'}</Typography>
@@ -527,7 +553,8 @@ export function MetadataPanel({ sat }) {
     ['Resolution', '10 m (visible, NIR) · 20 m (SWIR)'],
     ['Revisit', '≈ 5 days'],
     ['AOI', sat.aoi ? `${sat.aoi.properties?.name || 'AOI'} · ${aoiAreaHa(sat.aoi).toLocaleString('en-US', { maximumFractionDigits: 2 })} ha` : '—'],
-    ['Clip', sat.aoiMode === 'structures' ? (sat.structClip ? `Agro_Structures · ${sat.structTypes.join(', ')}` : 'No') : (sat.aoi ? 'My area' : '—')],
+    ['Clip', sat.aoiMode === 'structures' ? (sat.structClip ? `Agro_Structures · ${sat.structTypes.join(', ')}` : 'No')
+      : [sat.aoi ? 'My area' : null, sat.withStructures ? `Agro_Structures · ${sat.structTypes.join(', ')}` : null].filter(Boolean).join(' + ') || '—'],
   ].filter(Boolean);
   return (
     <Box component="dl" sx={{ ...section, m: 0, display: 'grid', gridTemplateColumns: 'auto 1fr', columnGap: 2, rowGap: 1 }}>

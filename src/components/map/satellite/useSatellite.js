@@ -33,14 +33,16 @@ export default function useSatellite() {
   const [aoiMode, setAoiMode] = useState(saved.aoiMode === 'drawn' ? 'drawn' : 'structures');
   const [structTypes, setStructTypes] = useState(Array.isArray(saved.structTypes) ? saved.structTypes : [1006, 1007]);
   const [structClip, setStructClip] = useState(saved.structClip ?? true);
+  // "Area I draw" can also show the index inside the Agro_Structures fields (PIVOT, Farm Plots).
+  const [withStructures, setWithStructures] = useState(saved.withStructures ?? false);
   const [myAreas, setMyAreas] = useState(() => {
     try { const v = JSON.parse(window.localStorage.getItem(AREAS_KEY) || '[]'); return Array.isArray(v) ? v : []; } catch { return []; }
   });
   const [activeArea, setActiveArea] = useState(saved.activeArea || null);
 
   useEffect(() => {
-    try { window.localStorage.setItem(KEY, JSON.stringify({ index, from, to, maxcc, opacity, show, aoi, clip, aoiMode, structTypes, structClip, activeArea })); } catch { /* ignore */ }
-  }, [index, from, to, maxcc, opacity, show, aoi, clip, aoiMode, structTypes, structClip, activeArea]);
+    try { window.localStorage.setItem(KEY, JSON.stringify({ index, from, to, maxcc, opacity, show, aoi, clip, aoiMode, structTypes, structClip, withStructures, activeArea })); } catch { /* ignore */ }
+  }, [index, from, to, maxcc, opacity, show, aoi, clip, aoiMode, structTypes, structClip, withStructures, activeArea]);
   useEffect(() => {
     try { window.localStorage.setItem(AREAS_KEY, JSON.stringify(myAreas)); } catch { /* ignore */ }
   }, [myAreas]);
@@ -98,7 +100,7 @@ export default function useSatellite() {
     status, indices, current, tileKey,
     index, setIndex, from, setFrom, to, setTo, maxcc, setMaxcc, opacity, setOpacity, show, setShow,
     scene, setScene, time, aoi, setAoi, clearAoi, wkt, clip, setClip, drawing, setDrawing, compare, setCompare,
-    aoiMode, setAoiMode, structTypes, setStructTypes, structClip, setStructClip,
+    aoiMode, setAoiMode, structTypes, setStructTypes, structClip, setStructClip, withStructures, setWithStructures,
     myAreas, activeArea, addArea, selectArea, updateArea, removeArea,
     ready: status.configured && Boolean(tileKey),
   };

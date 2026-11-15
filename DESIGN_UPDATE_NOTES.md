@@ -566,3 +566,9 @@ Pages:
 - WMS layer: `updateWhenZooming:false`, `keepBuffer:4` (no requests for intermediate zoom levels).
 - ClippedWMS: Leaflet's `_abortLoading` dropped every canvas tile of the old zoom (a canvas has no `complete` flag). Now only tiles still loading are dropped, so the old image stays until the new one is ready.
 - Test (wheel zoom, 700 ms tile delay): blank frames 92 → 0 in clip mode; 0 in plain mode.
+
+## Round 53 — Area I draw + Agro_Structures together
+- "Area I draw" has a new switch: "Also show Agro_Structures" (off by default, remembered on this device).
+- When on, the live index shows inside the drawn area AND inside PIVOT 1006 / Farm Plots 1007 (each type can be ticked off). Both are clipped inside each tile (the drawn area joins the field shapes), so no server GEOMETRY cut hides the fields.
+- With the switch on, the fields show their index even before an area is drawn; the legend stays visible.
+- Area facts (BSI/NDVI stats) stay those of the drawn area. Metadata "Clip" reads "My area + Agro_Structures · 1006, 1007".

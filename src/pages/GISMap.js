@@ -930,7 +930,7 @@ export default function GISMap() {
         </MapContainer>
         <CompareSwipe sat={sat} />
         {/* Index legend: vertical, top-left corner (below the zoom buttons in Arabic / the warning banner). */}
-        {!(sat.aoiMode === 'drawn' && !sat.aoi) && <MapIndexLegend sat={sat} top={theme.direction === 'rtl' || orphans.length > 0 ? 96 : 12} />}
+        {!(sat.aoiMode === 'drawn' && !sat.aoi && !sat.withStructures) && <MapIndexLegend sat={sat} top={theme.direction === 'rtl' || orphans.length > 0 ? 96 : 12} />}
         {/* Bottom dock: legend · soil bar, and the time series across the map. */}
         <Box sx={{
           position: 'absolute', insetInline: 12, bottom: 22, zIndex: 1000, display: 'flex', flexDirection: 'column', gap: 1,
