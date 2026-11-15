@@ -552,3 +552,11 @@ Pages:
 
 - The demo / APK no longer draws invented satellite tiles (the coloured squares), sample acquisition dates or a sample time series. Without a configuration ID on the device, the satellite tools say so and point to Settings → API keys → Satellite imagery; with it, everything comes from Sentinel Hub on the device: index tiles (WMS + the same evalscripts as the server), acquisition dates and cloud cover (WFS), and now the **time series** too — for each acquisition date the index is rendered for the area (WMS clipped with GEOMETRY) and its mean / min / max computed from the pixels.
 - Checked with the owner's configuration on 15 Nov 2026: capabilities read (30 layers), NDVI image returned for the MH farm, 22 Sentinel-2 dates between 15 Aug and 13 Nov 2026 over pivot MH126 (PIVOT-5) with mean NDVI 0.33–0.90. The ID is still never written into the code, the demo or the APK.
+
+## Round 51 — satellite AOI: Agro_Structures fields or my own areas (approved design)
+
+- GIS Map → Area of interest has two sources, switched at the top of the panel:
+  - **Agro_Structures**: only Structure_Type **1006 PIVOT** and **1007 Farm Plots** (checkboxes with counts). "Clip the image to these fields" shows the index only inside those fields: the satellite panes get a CSS `clip-path` built from the fields' shapes in map pixels (redrawn after each zoom / pan, fields outside the view skipped), so hundreds of fields clip without a long WMS request. A searchable list of those fields; a click makes the field the AOI (zoom, outline, statistics).
+  - **Area I draw**: the user's own layer, **My areas**, not linked to Agro_Structures — draw a polygon, rectangle or circle, or upload GeoJSON / KML; each area can be shown / hidden, renamed (double-click), deleted, exported as GeoJSON; the active one clips the image on the server (WMS GEOMETRY). Kept on the device (`agrocloud_my_aois`).
+- Under both: the AOI's facts — name, area, date, source, and the index mean (min – max) for the chosen date or the latest one of the period, read live from Sentinel-2.
+- Design: canvas "AgroCloud · Satellite AOI clip" (boards A and B).

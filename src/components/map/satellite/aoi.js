@@ -77,3 +77,34 @@ export function parseLatLng(text) {
   const lng = Number(m[2]);
   return Math.abs(lat) <= 90 && Math.abs(lng) <= 180 ? [lat, lng] : null;
 }
+
+/** Structure_Type of an Agro_Structures feature (code or label) → its code (1000–1007), else null. */
+const STRUCT = [[1000, /green/], [1001, /net|shade/], [1002, /glass/], [1003, /retract/], [1004, /cravo/], [1005, /date|palm/], [1006, /pivot/], [1007, /plot|open|field/]];
+export function structureCodeOf(props) {
+  const raw = props?.Structure_Type ?? props?.structure_type ?? props?.STRUCTURE_TYPE;
+  if (raw === null || raw === undefined || String(raw).trim() === '') return null;
+  const v = String(raw).trim();
+  if (/^\d+$/.test(v)) return Number(v);
+  const hit = STRUCT.find(([, re]) => re.test(v.toLowerCase()));
+  return hit ? hit[0] : null;
+}
+
+/** Every outer ring of a Polygon / MultiPolygon feature, as [lng, lat] pairs. */
+export function allRings(geo) {
+  const g = geo?.type === 'Feature' ? geo.geometry : geo;
+  if (!g) return [];
+  if (g.type === 'Polygon') return [g.coordinates[0]];
+  if (g.type === 'MultiPolygon') return g.coordinates.map((p) => p[0]);
+  return [];
+}
+
+/** A circle drawn on the map as a polygon (64 points). */
+export function circleFeature([lng, lat], radiusM, name = 'AOI') {
+  const R = 6378137;
+  const ring = [];
+  for (let i = 0; i <= 64; i += 1) {
+    const b = (i / 64) * 2 * Math.PI;
+    ring.push([lng + ((radiusM * Math.sin(b)) / (R * Math.cos((lat * Math.PI) / 180))) * (180 / Math.PI), lat + ((radiusM * Math.cos(b)) / R) * (180 / Math.PI)]);
+  }
+  return ringToFeature(ring, name);
+}

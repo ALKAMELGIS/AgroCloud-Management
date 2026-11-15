@@ -1,12 +1,12 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import {
-  Alert, Autocomplete, Box, Button, ButtonBase, Chip, CircularProgress, Divider, FormControlLabel, List, ListItemButton,
+  Alert, Box, Button, ButtonBase, Chip, CircularProgress, FormControlLabel, List, ListItemButton,
   ListItemText, Slider, Stack, Switch, Tab, Tabs, TextField, Tooltip as MuiTooltip, IconButton, Typography,
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import {
-  CloudOutlined as CloudIcon, DrawOutlined as DrawIcon, UploadFileOutlined as UploadIcon, ZoomInMapOutlined as ZoomIcon,
+  CloudOutlined as CloudIcon, UploadFileOutlined as UploadIcon, ZoomInMapOutlined as ZoomIcon,
   DeleteOutlineRounded as ClearIcon, CheckRounded as CheckIcon, CloseRounded as CloseIconSmall,
   ImageOutlined as FigureIcon, TableChartOutlined as TableIcon,
 } from '@mui/icons-material';
@@ -16,6 +16,7 @@ import HelpTip from '../../HelpTip';
 import ExportButton from '../../ExportButton';
 import * as api from './satelliteApi';
 import { aoiAreaHa, aoiBbox, parseLatLng, readAoiFile, ringToFeature, outerRing } from './aoi';
+import { useIsArabic } from '../../../i18n/shellLabels';
 
 const GROUPS = [
   { key: 'all', label: 'All layers' },
@@ -190,72 +191,246 @@ export function DatesPanel({ sat, mapRef }) {
 }
 
 /** Area of interest: draw, upload, pick a field, go to coordinates; clip / mask. */
-export function AoiPanel({ sat, mapRef, fields = [] }) {
+const STRUCT_TYPES = [
+  { code: 1006, name: 'PIVOT', swatch: { width: 14, height: 14, borderRadius: '50%', border: '2px solid #f2c600', bgcolor: '#9ccc65' } },
+  { code: 1007, name: 'Farm Plots', swatch: { width: 15, height: 11, border: '2px solid #4ce600', bgcolor: '#c5e1a5' } },
+];
+const DRAWN = '#2f5f8a';
+
+/** Index statistics (mean, min, max) of the AOI on the chosen date, or the latest date of the period. */
+function useAoiStats(sat) {
+  const [st, setSt] = useState(null);
+  useEffect(() => {
+    if (!sat.status.configured || !sat.wkt || !sat.current || sat.current.visual) { setSt(null); return undefined; }
+    let alive = true;
+    setSt({ busy: true });
+    const from = sat.scene || sat.from;
+    const to = sat.scene || sat.to;
+    api.getStats({ index: sat.index, geometry: sat.wkt, from, to, maxcc: sat.maxcc })
+      .then((rows) => { if (alive) setSt(rows?.length ? { ...rows[rows.length - 1] } : { none: true }); })
+      .catch((e) => { if (alive) setSt({ error: e.message }); });
+    return () => { alive = false; };
+  }, [sat.status.configured, sat.wkt, sat.index, sat.scene, sat.from, sat.to, sat.maxcc, sat.current]); // eslint-disable-line react-hooks/exhaustive-deps
+  return st;
+}
+
+function AoiFacts({ sat, accent }) {
+  const isAr = useIsArabic();
+  const st = useAoiStats(sat);
+  if (!sat.aoi) return null;
+  const n = (v) => (v === null || v === undefined ? '—' : Number(v).toFixed(2));
+  return (
+    <Box component="dl" sx={{ m: 0, display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr)', columnGap: 2, rowGap: 1, p: 1.5, bgcolor: 'action.hover', fontSize: '0.75rem' }}>
+      <Typography component="dt" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>{isAr ? 'المنطقة' : 'Area'}</Typography>
+      <Typography component="dd" sx={{ m: 0, fontSize: '0.75rem', fontWeight: 600 }}>
+        {sat.aoi.properties?.name || 'AOI'} · <bdi dir="ltr">{aoiAreaHa(sat.aoi).toLocaleString('en-US', { maximumFractionDigits: 1 })} ha</bdi>
+      </Typography>
+      <Typography component="dt" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>{isAr ? 'التاريخ' : 'Date'}</Typography>
+      <Typography component="dd" sx={{ m: 0, fontSize: '0.75rem' }}><bdi dir="ltr">{st?.date || sat.scene || `${sat.from} → ${sat.to}`}</bdi></Typography>
+      <Typography component="dt" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>{isAr ? 'المصدر' : 'Source'}</Typography>
+      <Typography component="dd" sx={{ m: 0, fontSize: '0.75rem' }}><bdi dir="ltr">Sentinel-2 L2A · 10 m</bdi></Typography>
+      {sat.current && !sat.current.visual && (
+        <>
+          <Typography component="dt" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}><bdi dir="ltr">{sat.current.key}</bdi></Typography>
+          <Typography component="dd" sx={{ m: 0, fontSize: '0.75rem', fontWeight: 600, color: accent }}>
+            {st?.busy ? <CircularProgress size={12} /> : st?.error ? <span style={{ fontWeight: 400 }}>{st.error}</span> : st?.none ? (isAr ? 'لا صورة صافية' : 'No clear image') : (
+              <bdi dir="ltr">{n(st?.mean)} <span style={{ fontWeight: 400, color: 'var(--sheet-ink-3)' }}>({n(st?.min)} – {n(st?.max)})</span></bdi>
+            )}
+          </Typography>
+        </>
+      )}
+    </Box>
+  );
+}
+
+export function AoiPanel({ sat, mapRef, fields = [], structures = [] }) {
+  const isAr = useIsArabic();
   const fileRef = useRef(null);
-  const [coord, setCoord] = useState('');
   const [error, setError] = useState(null);
-  const area = sat.aoi ? aoiAreaHa(sat.aoi) : 0;
+  const [query, setQuery] = useState('');
+  const [renaming, setRenaming] = useState(null);
+  const [coord, setCoord] = useState('');
   const zoomTo = (feature) => {
     const ring = outerRing(feature);
     if (ring && mapRef.current) mapRef.current.fitBounds(L.latLngBounds(ring.map(([lng, lat]) => [lat, lng])), { padding: [40, 40], maxZoom: 17 });
   };
-  const pickField = (f) => {
-    const ring = outerRing(f?.feature);
+  const drawn = sat.aoiMode === 'drawn';
+  const accent = drawn ? DRAWN : '#1f7a4d';
+  const counts = useMemo(() => {
+    const c = {}; structures.forEach((s) => { c[s.code] = (c[s.code] || 0) + 1; }); return c;
+  }, [structures]);
+  const shownStructures = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return structures.filter((s) => sat.structTypes.includes(s.code) && (!q || `${s.label} ${s.key}`.toLowerCase().includes(q)));
+  }, [structures, sat.structTypes, query]);
+  const pickStructure = (s) => {
+    const ring = outerRing(s.feature);
     if (!ring) return;
-    const feat = ringToFeature(ring, f.label);
-    sat.setAoi(feat);
-    zoomTo(feat);
+    const f = ringToFeature(ring, s.label);
+    sat.setAoi(f); zoomTo(f);
   };
+  const toggleType = (code) => sat.setStructTypes((t) => (t.includes(code) ? t.filter((x) => x !== code) : [...t, code]));
+  const setMode = (m) => { sat.setAoiMode(m); sat.setDrawing(false); sat.setAoi(m === 'drawn' ? (sat.myAreas.find((a) => a.id === sat.activeArea)?.feature || null) : null); };
+  const exportArea = () => {
+    if (!sat.aoi) return;
+    const url = URL.createObjectURL(new Blob([JSON.stringify({ type: 'FeatureCollection', features: [sat.aoi] })], { type: 'application/geo+json' }));
+    const a = document.createElement('a'); a.href = url; a.download = `${(sat.aoi.properties?.name || 'aoi').replace(/[^\w؀-ۿ-]+/g, '_')}.geojson`; a.click(); URL.revokeObjectURL(url);
+  };
+  const tab = (on, color) => ({
+    height: 40, gap: 1, fontSize: '0.8125rem', fontWeight: on ? 600 : 400, bgcolor: on ? color : 'background.paper', color: on ? '#fff' : 'text.primary',
+    '&:hover': { bgcolor: on ? color : 'action.hover' },
+  });
+  const drawTool = (shape, label, icon) => (
+    <ButtonBase key={shape} aria-pressed={sat.drawing === shape} onClick={() => sat.setDrawing(sat.drawing === shape ? false : shape)}
+      sx={{ height: 56, flexDirection: 'column', gap: 0.5, fontSize: '0.6875rem', border: 1, borderColor: sat.drawing === shape ? DRAWN : 'divider', bgcolor: sat.drawing === shape ? alpha(DRAWN, 0.1) : 'background.paper', color: sat.drawing === shape ? DRAWN : 'text.primary' }}>
+      {icon}{label}
+    </ButtonBase>
+  );
   return (
-    <Box>
-      <Box sx={section}>
-        <Typography sx={{ fontSize: '0.8125rem', color: 'text.secondary', mb: 1.5 }}>Draw the area to monitor, upload it, or use a field.</Typography>
-        <Stack spacing={1}>
-          <Button variant={sat.drawing ? 'contained' : 'outlined'} startIcon={<DrawIcon />} onClick={() => sat.setDrawing(!sat.drawing)}>
-            {sat.drawing ? 'Click points on the map… (finish on the first point)' : 'Draw AOI on the map'}
-          </Button>
-          <Button variant="outlined" startIcon={<UploadIcon />} onClick={() => fileRef.current?.click()}>Upload AOI (GeoJSON / KML)</Button>
-          <input ref={fileRef} type="file" accept=".geojson,.json,.kml" hidden onChange={async (e) => {
-            const file = e.target.files?.[0];
-            e.target.value = '';
-            if (!file) return;
-            try { setError(null); const f = await readAoiFile(file); sat.setAoi(f); zoomTo(f); } catch (err) { setError(err.message); }
-          }} />
-          {fields.length > 0 && (
-            <Autocomplete
-              size="small"
-              options={fields}
-              getOptionLabel={(o) => o.label}
-              onChange={(_, v) => v && pickField(v)}
-              renderInput={(params) => <TextField {...params} label="Use a field as AOI" />}
-            />
+    <Box sx={{ ...section, display: 'grid', gap: 2 }}>
+      <Box role="tablist" sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', border: 1, borderColor: 'divider' }}>
+        <ButtonBase role="tab" aria-selected={!drawn} onClick={() => setMode('structures')} sx={tab(!drawn, '#1f7a4d')}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><circle cx="8" cy="9" r="5" /><rect x="12" y="12" width="9" height="8" /></svg>
+          <bdi dir="ltr">Agro_Structures</bdi>
+        </ButtonBase>
+        <ButtonBase role="tab" aria-selected={drawn} onClick={() => setMode('drawn')} sx={{ ...tab(drawn, DRAWN), borderInlineStart: 1, borderColor: 'divider' }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M4 18 9 5l11 4-4 10z" /></svg>
+          {isAr ? 'منطقة أرسمها' : 'Area I draw'}
+        </ButtonBase>
+      </Box>
+
+      {!drawn ? (
+        <>
+          <Box role="group" aria-label="Structure_Type" sx={{ display: 'grid', gap: 0.5 }}>
+            <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}><bdi dir="ltr">Structure_Type</bdi></Typography>
+            {STRUCT_TYPES.map((t) => {
+              const on = sat.structTypes.includes(t.code);
+              return (
+                <Box component="label" key={t.code} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minHeight: 44, px: 1.5, cursor: 'pointer', border: 1, borderColor: on ? alpha('#1f7a4d', 0.35) : 'divider', bgcolor: on ? alpha('#1f7a4d', 0.07) : 'transparent' }}>
+                  <input type="checkbox" checked={on} onChange={() => toggleType(t.code)} style={{ width: 18, height: 18, accentColor: '#1f7a4d', margin: 0 }} />
+                  <Box component="span" aria-hidden sx={t.swatch} />
+                  <Box component="span" sx={{ flex: 1, fontWeight: 500, fontSize: '0.8125rem' }}><bdi dir="ltr">{t.name}</bdi></Box>
+                  <Box component="span" sx={{ fontSize: '0.6875rem', color: 'text.secondary' }}><bdi dir="ltr">{t.code}</bdi></Box>
+                  <Box component="span" sx={{ fontSize: '0.75rem', minWidth: 28, textAlign: 'end', fontVariantNumeric: 'tabular-nums' }}>{counts[t.code] || 0}</Box>
+                </Box>
+              );
+            })}
+          </Box>
+          <FormControlLabel sx={{ m: 0, justifyContent: 'space-between' }} labelPlacement="start"
+            control={<Switch checked={sat.structClip} onChange={(e) => { sat.setStructClip(e.target.checked); if (e.target.checked) sat.setShow(true); }} />}
+            label={<Typography sx={{ fontSize: '0.8125rem' }}>{isAr ? 'قصّ الصورة على حدود هذه الحقول' : 'Clip the image to these fields'}</Typography>} />
+          <Box sx={{ border: 1, borderColor: 'divider' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, height: 40, bgcolor: 'action.hover', borderBottom: 1, borderColor: 'divider' }}>
+              <TextField variant="standard" fullWidth value={query} onChange={(e) => setQuery(e.target.value)} placeholder={isAr ? 'بحث بالاسم أو الرمز' : 'Search name or code'}
+                InputProps={{ disableUnderline: true, sx: { fontSize: '0.75rem' } }} inputProps={{ 'aria-label': 'Search fields' }} />
+              <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', fontVariantNumeric: 'tabular-nums' }}>{shownStructures.length}</Typography>
+            </Box>
+            <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0, maxHeight: 260, overflow: 'auto' }}>
+              {shownStructures.length === 0 && (
+                <Typography component="li" sx={{ p: 2, fontSize: '0.75rem', color: 'text.secondary' }}>
+                  {isAr ? 'لا حقول من هذين النوعين في الطبقات الظاهرة.' : 'No fields of these types in the visible layers.'}
+                </Typography>
+              )}
+              {shownStructures.slice(0, 400).map((s) => {
+                const sel = sat.aoi?.properties?.name === s.label;
+                const t = STRUCT_TYPES.find((x) => x.code === s.code);
+                return (
+                  <Box component="li" key={s.key}>
+                    <ButtonBase onClick={() => pickStructure(s)} sx={{ width: '100%', justifyContent: 'flex-start', gap: 1.25, px: 1.5, minHeight: 38, textAlign: 'start', bgcolor: sel ? alpha('#1f7a4d', 0.1) : 'transparent', boxShadow: sel ? 'inset -2px 0 0 #1f7a4d' : 'none', '&:hover': { bgcolor: 'action.hover' } }}>
+                      <Box component="span" aria-hidden sx={{ ...t?.swatch, width: 11, height: t?.code === 1006 ? 11 : 9 }} />
+                      <Box component="span" sx={{ flex: 1, minWidth: 0, fontSize: '0.75rem', fontWeight: sel ? 600 : 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</Box>
+                      <Box component="span" sx={{ fontSize: '0.6875rem', color: 'text.secondary' }}><bdi dir="ltr">{s.code2 || ''}</bdi></Box>
+                    </ButtonBase>
+                  </Box>
+                );
+              })}
+            </Box>
+          </Box>
+        </>
+      ) : (
+        <>
+          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 0.75 }}>
+            {drawTool('polygon', isAr ? 'مضلع' : 'Polygon', <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M4 18 9 5l11 4-4 10z" /></svg>)}
+            {drawTool('rectangle', isAr ? 'مستطيل' : 'Rectangle', <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M4 6h16v12H4z" /></svg>)}
+            {drawTool('circle', isAr ? 'دائرة' : 'Circle', <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><circle cx="12" cy="12" r="8" /></svg>)}
+            <ButtonBase onClick={() => fileRef.current?.click()} sx={{ height: 56, flexDirection: 'column', gap: 0.5, fontSize: '0.6875rem', border: 1, borderColor: 'divider' }}>
+              <UploadIcon sx={{ fontSize: 20 }} />{isAr ? 'رفع ملف' : 'Upload'}
+            </ButtonBase>
+            <input ref={fileRef} type="file" accept=".geojson,.json,.kml" hidden onChange={async (e) => {
+              const file = e.target.files?.[0];
+              e.target.value = '';
+              if (!file) return;
+              try { setError(null); const f = await readAoiFile(file); sat.addArea({ ...f, properties: { ...(f.properties || {}), name: file.name.replace(/\.[^.]+$/, '') } }); zoomTo(f); } catch (err) { setError(err.message); }
+            }} />
+          </Box>
+          {sat.drawing && (
+            <Typography sx={{ fontSize: '0.75rem', color: DRAWN }}>
+              {sat.drawing === 'polygon' ? (isAr ? 'انقر لإضافة النقاط، وأنهِ على النقطة الأولى' : 'Click points; finish on the first point')
+                : sat.drawing === 'rectangle' ? (isAr ? 'اسحب لرسم المستطيل' : 'Drag to draw the rectangle') : (isAr ? 'اسحب من المركز لرسم الدائرة' : 'Drag from the centre to draw the circle')}
+            </Typography>
           )}
-          <TextField
-            size="small" label="Go to coordinates (lat, lng)" placeholder="24.2134, 55.7612" value={coord}
-            onChange={(e) => setCoord(e.target.value)}
+          <Box sx={{ border: 1, borderColor: 'divider' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, height: 40, bgcolor: alpha(DRAWN, 0.08), borderBottom: 1, borderColor: 'divider' }}>
+              <Typography sx={{ flex: 1, fontSize: '0.8125rem', fontWeight: 600, color: DRAWN }}>{isAr ? 'مناطقي' : 'My areas'}</Typography>
+              <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>{sat.myAreas.length}</Typography>
+            </Box>
+            <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0, maxHeight: 260, overflow: 'auto' }}>
+              {sat.myAreas.length === 0 && (
+                <Typography component="li" sx={{ p: 2, fontSize: '0.75rem', color: 'text.secondary' }}>
+                  {isAr ? 'ارسم منطقة أو ارفع ملفاً. تُحفظ هنا ولا ترتبط بطبقة Agro_Structures.' : 'Draw an area or upload a file. It is kept here, apart from Agro_Structures.'}
+                </Typography>
+              )}
+              {sat.myAreas.map((a) => {
+                const sel = a.id === sat.activeArea;
+                return (
+                  <Box component="li" key={a.id} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, pe: 0.5, minHeight: 44, borderTop: 1, borderColor: 'divider', '&:first-of-type': { borderTop: 0 }, bgcolor: sel ? alpha(DRAWN, 0.08) : 'transparent', boxShadow: sel ? `inset -2px 0 0 ${DRAWN}` : 'none', opacity: a.visible ? 1 : 0.6 }}>
+                    <IconButton size="small" aria-label={a.visible ? (isAr ? 'إخفاء' : 'Hide') : (isAr ? 'إظهار' : 'Show')} onClick={() => sat.updateArea(a.id, { visible: !a.visible })} sx={{ color: a.visible ? DRAWN : 'text.disabled' }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">{a.visible ? <path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Zm10-3a3 3 0 1 0 0 6 3 3 0 0 0 0-6" /> : <path d="M3 3l18 18M10.6 6.1A10 10 0 0 1 12 6c6 0 10 6 10 6a17 17 0 0 1-3 3.6M6.6 6.6C3.8 8.4 2 12 2 12s4 7 10 7a9.6 9.6 0 0 0 4.4-1.1" />}</svg>
+                    </IconButton>
+                    <Box component="span" aria-hidden sx={{ width: 14, height: 11, border: `2px dashed ${DRAWN}`, bgcolor: sel ? alpha(DRAWN, 0.25) : 'transparent', flexShrink: 0 }} />
+                    {renaming === a.id ? (
+                      <TextField variant="standard" autoFocus defaultValue={a.name} sx={{ flex: 1, mx: 1 }} inputProps={{ 'aria-label': isAr ? 'اسم المنطقة' : 'Area name', style: { fontSize: '0.8125rem' } }}
+                        onBlur={(e) => { sat.updateArea(a.id, { name: e.target.value.trim() || a.name }); setRenaming(null); }}
+                        onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') setRenaming(null); }} />
+                    ) : (
+                      <ButtonBase onClick={() => { sat.selectArea(a.id); zoomTo(a.feature); }} onDoubleClick={() => setRenaming(a.id)}
+                        sx={{ flex: 1, minWidth: 0, justifyContent: 'flex-start', gap: 1, px: 1, minHeight: 40, textAlign: 'start' }}>
+                        <Box component="span" sx={{ flex: 1, minWidth: 0, fontSize: '0.8125rem', fontWeight: sel ? 600 : 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</Box>
+                        <Box component="span" sx={{ fontSize: '0.75rem', color: 'text.secondary', fontVariantNumeric: 'tabular-nums' }}><bdi dir="ltr">{aoiAreaHa(a.feature).toLocaleString('en-US', { maximumFractionDigits: 1 })} ha</bdi></Box>
+                      </ButtonBase>
+                    )}
+                    <IconButton size="small" aria-label={isAr ? 'إعادة تسمية' : 'Rename'} onClick={() => setRenaming(a.id)}>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z" /></svg>
+                    </IconButton>
+                    <IconButton size="small" aria-label={isAr ? 'حذف' : 'Delete'} onClick={() => sat.removeArea(a.id)}>
+                      <ClearIcon sx={{ fontSize: 17 }} />
+                    </IconButton>
+                  </Box>
+                );
+              })}
+            </Box>
+          </Box>
+          <TextField size="small" label={isAr ? 'اذهب إلى إحداثيات (خط العرض، خط الطول)' : 'Go to coordinates (lat, lng)'} placeholder="24.2134, 55.7612" value={coord}
+            onChange={(e) => setCoord(e.target.value)} inputProps={{ dir: 'ltr' }}
             onKeyDown={(e) => {
               if (e.key !== 'Enter') return;
               const ll = parseLatLng(coord);
-              if (ll && mapRef.current) mapRef.current.setView(ll, 15); else setError('Write the coordinates as: latitude, longitude');
-            }}
-          />
-        </Stack>
-        {error && <Alert severity="error" sx={{ mt: 1.5 }}>{error}</Alert>}
-      </Box>
-      {sat.aoi && (
-        <>
-          <Divider />
-          <Box sx={section}>
-            <Typography sx={label}>Current AOI</Typography>
-            <Typography sx={{ fontSize: '0.875rem', fontWeight: 600 }}>{sat.aoi.properties?.name || 'AOI'}</Typography>
-            <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}><bdi>{`${area.toLocaleString('en-US', { maximumFractionDigits: 2 })} ha`}</bdi></Typography>
-            <FormControlLabel sx={{ mt: 1 }} control={<Switch checked={sat.clip} onChange={(e) => sat.setClip(e.target.checked)} />} label={<Typography sx={{ fontSize: '0.8125rem' }}>Clip image to AOI (mask)</Typography>} />
-            <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
-              <Button size="small" startIcon={<ZoomIcon />} onClick={() => zoomTo(sat.aoi)}>Zoom to AOI</Button>
-              <Button size="small" color="error" startIcon={<ClearIcon />} onClick={sat.clearAoi}>Clear</Button>
-            </Stack>
-          </Box>
+              if (ll && mapRef.current) mapRef.current.setView(ll, 15); else setError(isAr ? 'اكتب الإحداثيات هكذا: خط العرض، خط الطول' : 'Write the coordinates as: latitude, longitude');
+            }} />
+          <FormControlLabel sx={{ m: 0, justifyContent: 'space-between' }} labelPlacement="start" disabled={!sat.aoi}
+            control={<Switch checked={Boolean(sat.clip && sat.aoi)} onChange={(e) => { sat.setClip(e.target.checked); if (e.target.checked) sat.setShow(true); }} />}
+            label={<Typography sx={{ fontSize: '0.8125rem' }}>{isAr ? 'قصّ الصورة على المنطقة' : 'Clip the image to the area'}</Typography>} />
         </>
+      )}
+
+      {error && <Alert severity="error">{error}</Alert>}
+      <AoiFacts sat={sat} accent={accent} />
+      {sat.aoi && (
+        <Stack direction="row" spacing={1}>
+          <Button size="small" startIcon={<ZoomIcon />} onClick={() => zoomTo(sat.aoi)}>{isAr ? 'تكبير إلى المنطقة' : 'Zoom to area'}</Button>
+          {drawn && <Button size="small" onClick={exportArea}><bdi dir="ltr">GeoJSON</bdi></Button>}
+          {!drawn && <Button size="small" color="inherit" startIcon={<ClearIcon />} onClick={() => sat.setAoi(null)}>{isAr ? 'إلغاء التحديد' : 'Clear'}</Button>}
+        </Stack>
       )}
     </Box>
   );
@@ -350,7 +525,7 @@ export function MetadataPanel({ sat }) {
     ['Resolution', '10 m (visible, NIR) · 20 m (SWIR)'],
     ['Revisit', '≈ 5 days'],
     ['AOI', sat.aoi ? `${sat.aoi.properties?.name || 'AOI'} · ${aoiAreaHa(sat.aoi).toLocaleString('en-US', { maximumFractionDigits: 2 })} ha` : '—'],
-    ['Clip to AOI', sat.clip && sat.aoi ? 'Yes' : 'No'],
+    ['Clip', sat.aoiMode === 'structures' ? (sat.structClip ? `Agro_Structures · ${sat.structTypes.join(', ')}` : 'No') : (sat.clip && sat.aoi ? 'My area' : 'No')],
   ].filter(Boolean);
   return (
     <Box component="dl" sx={{ ...section, m: 0, display: 'grid', gridTemplateColumns: 'auto 1fr', columnGap: 2, rowGap: 1 }}>

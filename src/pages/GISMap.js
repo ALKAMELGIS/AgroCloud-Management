@@ -45,6 +45,7 @@ import useSatellite from '../components/map/satellite/useSatellite';
 import { SoilDock, SoilMapPicker } from '../components/map/soil/SoilPanel';
 import { TerrainOutlined as SoilIcon } from '@mui/icons-material';
 import SatelliteMapLayers from '../components/map/satellite/SatelliteMapLayers';
+import { structureCodeOf } from '../components/map/satellite/aoi';
 import {
   NotConfigured, LayersPanel, DatesPanel, AoiPanel, ComparePanel, TimeSeriesDock, MetadataPanel, MapIndexLegend, CompareSwipe, downloadImage,
 } from '../components/map/satellite/SatellitePanels';
@@ -791,6 +792,20 @@ export default function GISMap() {
       return { key: `${layer.id}-${i}`, label: `${name} · ${layer.name}`, feature: f };
     }))
     .slice(0, 2000);
+  // Agro_Structures fields that the satellite AOI can use: PIVOT (1006) and Farm Plots (1007) only.
+  const aoiStructures = useMemo(() => layers.filter((l) => l.isVisible).flatMap((layer) => (featureData[layer.id]?.features || [])
+    .filter((f) => /Polygon$/.test(f?.geometry?.type || ''))
+    .map((f, i) => {
+      const p = f.properties || {};
+      const code = structureCodeOf(p);
+      if (code !== 1006 && code !== 1007) return null;
+      const clean = (v) => (v === null || v === undefined || /^<?null>?$/i.test(String(v).trim()) ? '' : String(v).trim());
+      const name = clean(p.Farm_Name) || clean(p.Farm_Code) || clean(p.ProjectCode) || `#${clean(p.OBJECTID) || i + 1}`;
+      const code2 = [clean(p.ZONE_ID), clean(p.Farm_Code)].filter(Boolean).join('-');
+      return { key: `${layer.id}-${i}`, label: `${name} · ${layer.name}`, name, code, code2, feature: f };
+    })
+    .filter(Boolean)), [layers, featureData]);
+  const clipFeatures = useMemo(() => aoiStructures.filter((s) => sat.structTypes.includes(s.code)).map((s) => s.feature), [aoiStructures, sat.structTypes]);
   const soilFeatures = visibleLayers.flatMap((layer) => featureData[layer.id]?.features || []);
   const satNeedsSetup = sat.status.loaded && !sat.status.configured;
   const satPanel = (content) => (satNeedsSetup ? <NotConfigured isAdmin={authUser?.role === 'ceo'} /> : content);
@@ -802,7 +817,7 @@ export default function GISMap() {
     },
     { key: 'sat-div1', divider: true },
     { key: 'sat-dates', label: 'Imagery date & scenes', icon: <DateIcon />, content: satPanel(<DatesPanel sat={sat} mapRef={mapRef} />) },
-    { key: 'sat-aoi', label: 'Area of interest (AOI)', icon: <AoiIcon />, badge: sat.aoi ? '1' : undefined, content: <AoiPanel sat={sat} mapRef={mapRef} fields={aoiFields} /> },
+    { key: 'sat-aoi', label: 'Area of interest (AOI)', icon: <AoiIcon />, badge: sat.aoi ? '1' : undefined, content: <AoiPanel sat={sat} mapRef={mapRef} fields={aoiFields} structures={aoiStructures} /> },
     { key: 'sat-compare', label: 'Change detection (compare dates)', icon: <CompareIcon />, content: satPanel(<ComparePanel sat={sat} mapRef={mapRef} />) },
     { key: 'sat-series', label: 'Time series', icon: <SeriesIcon />, pressed: seriesOn, onClick: () => setSeriesOn((v) => !v) },
     { key: 'sat-meta', label: 'Image metadata', icon: <InfoIcon />, content: <MetadataPanel sat={sat} /> },
@@ -910,7 +925,7 @@ export default function GISMap() {
             );
           })}
 
-          <SatelliteMapLayers sat={sat} />
+          <SatelliteMapLayers sat={sat} clipFeatures={clipFeatures} />
           <SoilMapPicker active={soilOn} point={soilPoint} onPick={setSoilPoint} />
         </MapContainer>
         <CompareSwipe sat={sat} />
