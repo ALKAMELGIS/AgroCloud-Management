@@ -39,7 +39,10 @@ const fieldFreezeSx = {
     backgroundColor: 'background.paper',
     boxShadow: '4px 0 6px -4px rgba(0,0,0,0.28)',
   },
-  '&& .MuiTableCell-head.col-frozen-0': { zIndex: 4 },
+  // excelTableSx makes header cells static (the whole head is pinned); the Field
+  // header has to be sticky sideways again, or it scrolls away while the body
+  // cells stay and cover the next columns.
+  '&& .MuiTableCell-head.col-frozen-0': { position: 'sticky', left: 0, zIndex: 4 },
 };
 
 const totalRowSx = {
