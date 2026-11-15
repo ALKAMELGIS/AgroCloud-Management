@@ -57,7 +57,7 @@ export default function ArcgisImportDialog({ open, onClose, onDone }) {
   const problems = iss ? [
     iss.missingKeys ? (isAr ? `${n(iss.missingKeys)} بلا ZONE_ID أو Farm_Code (تُترك)` : `${n(iss.missingKeys)} without ZONE_ID or Farm_Code (skipped)`) : null,
     iss.noGeometry ? (isAr ? `${n(iss.noGeometry)} بلا شكل (تُترك)` : `${n(iss.noGeometry)} without a shape (skipped)`) : null,
-    iss.duplicates?.length ? (isAr ? `مفاتيح مكررة، أُخذ الأول: ${iss.duplicates.slice(0, 8).join(', ')}` : `Duplicate keys, first one kept: ${iss.duplicates.slice(0, 8).join(', ')}`) + (iss.duplicates.length > 8 ? ' …' : '') : null,
+    iss.duplicates?.length ? (isAr ? `${n(iss.duplicates.length)} مفتاح مكرر، أُضيف للثاني ProjectCode أو رقمه: ${iss.duplicates.slice(0, 8).join(', ')}` : `${n(iss.duplicates.length)} duplicate keys, the second one gets its ProjectCode or number: ${iss.duplicates.slice(0, 8).join(', ')}`) + (iss.duplicates.length > 8 ? ' …' : '') : null,
     iss.unknownStructure?.length ? (isAr ? `أنواع غير معروفة (منطقة باسمها، بلا نوع فرعي): ${iss.unknownStructure.join(', ')}` : `Unknown types (own farm area, no subtype): ${iss.unknownStructure.join(', ')}`) : null,
   ].filter(Boolean) : [];
 
@@ -98,6 +98,15 @@ export default function ArcgisImportDialog({ open, onClose, onDone }) {
               {done ? (isAr ? 'تم الاستيراد' : 'Imported') : (isAr ? 'نتيجة الفحص، لم يُحفظ شيء' : 'Check result, nothing saved')}
               <Box component="span" sx={{ fontWeight: 400, color: 'text.secondary' }}> · {n(report.features)} {isAr ? 'عنصر' : 'features'}</Box>
             </Typography>
+            {report.layer?.source && (
+              <Typography sx={{ fontSize: '0.75rem', color: report.layer.source === 'sample' ? 'warning.dark' : 'text.secondary' }}>
+                {{
+                  live: isAr ? 'المصدر: الطبقة على ArcGIS Online مباشرة' : 'Source: the layer on ArcGIS Online, live',
+                  copy: isAr ? 'المصدر: نسخة من الطبقة محفوظة مع التطبيق (15 نوفمبر 2026)، لأن ArcGIS غير متاح من هنا' : 'Source: copy of the layer shipped with the app (15 Nov 2026); ArcGIS is not reachable from here',
+                  sample: isAr ? 'تنبيه: ArcGIS غير متاح، هذه أشكال نموذجية وليست الطبقة' : 'Warning: ArcGIS is not reachable; these are sample shapes, not the layer',
+                }[report.layer.source]}
+              </Typography>
+            )}
             <Box component="table" sx={{ borderCollapse: 'collapse', fontSize: '0.8125rem', width: '100%', '& tr + tr > *': { borderTop: 1, borderColor: 'divider' } }}>
               <Box component="thead">
                 <Box component="tr">
@@ -120,6 +129,10 @@ export default function ArcgisImportDialog({ open, onClose, onDone }) {
               {report.fields.adopted > 0 && <li>{isAr ? `${n(report.fields.adopted)} حقل مُدخل يدوياً رُبط بالطبقة بالاسم` : `${n(report.fields.adopted)} hand-entered fields linked by name`}{report.fields.rekeyed ? (isAr ? ` وأخذ KeyID الطبقة` : ', given the layer KeyID') : ''}</li>}
               {report.fields.moved > 0 && <li>{isAr ? `${n(report.fields.moved)} حقل نُقل إلى منطقة نوعه` : `${n(report.fields.moved)} fields moved to the farm area of their type`}</li>}
               {buildParents && <li>{isAr ? `حدود: ${n(report.parents.farm_area)} منطقة مزرعة، ${n(report.parents.site)} موقع، ${n(report.parents.zone)} منطقة` : `Outlines: ${n(report.parents.farm_area)} farm areas, ${n(report.parents.site)} sites, ${n(report.parents.zone)} zones`}</li>}
+              {iss?.noFarmCode > 0 && <li>{isAr ? `${n(iss.noFarmCode)} بلا Farm_Code ← KeyID من Farm_Name (أو ProjectCode)` : `${n(iss.noFarmCode)} without Farm_Code → KeyID from Farm_Name (or ProjectCode)`}</li>}
+              {iss?.noZone > 0 && <li>{isAr ? `${n(iss.noZone)} بلا ZONE_ID ← منطقة لكل دولة: ` : `${n(iss.noZone)} without ZONE_ID → one zone per country: `}
+                {Object.entries(iss.noZoneByCountry || {}).map(([k, v]) => `${k} ${n(v)}`).join(isAr ? '، ' : ', ')}
+                {iss.countryFromLocation ? (isAr ? ` (الدولة لـ ${n(iss.countryFromLocation)} من موقع الشكل لأنها فارغة)` : ` (country of ${n(iss.countryFromLocation)} taken from where the shape lies, as it is empty)`) : ''}</li>}
               {iss?.notApplicable > 0 && <li>{isAr ? `${n(iss.notApplicable)} بلا موقع (Not Applicable) ← موقع «غير مخصص»` : `${n(iss.notApplicable)} without a site (Not Applicable) → "Unassigned" site`}</li>}
             </Box>
             {Object.keys(report.bySubtype || {}).length > 0 && (

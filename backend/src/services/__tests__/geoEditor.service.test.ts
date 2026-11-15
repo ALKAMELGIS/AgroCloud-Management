@@ -30,25 +30,36 @@ describe('geo model', () => {
   it('builds the field KeyID from ZONE_ID and Farm_Code', () => {
     expect(fieldKey('mh', 'GH-01')).toBe('MH-GH-01');
     expect(fieldKey('MH', 'mh-gh-01')).toBe('MH-GH-01');
+    expect(fieldKey('RS', 'Botancal Garden')).toBe('RS-BOTANCAL-GARDEN');
     expect(isNotApplicable('Not Applicable')).toBe(true);
     expect(isNotApplicable('Site 1')).toBe(false);
   });
 
   it('plans zones, sites, farm areas by structure and fields, and reports problems', () => {
     const { rows, issues } = planImport([
-      f({ ZONE_ID: 'MH', SITE: 1, Farm_Code: 'GH-01', Farm_Name: 'GH 01', Structure_Type: 1000, GlobalID: '{A}' }),
-      f({ ZONE_ID: 'MH', SITE: 1, Farm_Code: 'NH-01', Structure_Type: 'Nethouse' }),
-      f({ ZONE_ID: 'MH', SITE: 3, Farm_Code: 'DF-01', Structure_Type: 'Dates Farm' }),
-      f({ ZONE_ID: 'MH', SITE: 1, Farm_Code: 'gh-01', Structure_Type: 1000 }),
-      f({ ZONE_ID: '', Farm_Code: 'X' }),
-      f({ ZONE_ID: 'AD', Farm_Code: 'P1', Site_Code: 'AD-S2', Structure_Type: 'Odd' }),
-      f({ ZONE_ID: 'AD', Farm_Code: 'P2' }, null),
-    ], mapping, { site: new Map([['1', 'Site 1'], ['3', 'Not Applicable']]) });
-    expect(rows.map((r) => r.key)).toEqual(['MH-GH-01', 'MH-NH-01', 'MH-DF-01', 'AD-P1']);
-    expect(rows[0]).toMatchObject({ siteName: 'Site 1', siteKey: 'SITE 1', structure: 1000, areaName: 'Greenhouse', name: 'GH 01', globalId: '{A}' });
-    expect(rows[1]).toMatchObject({ structure: 1001, areaName: 'Nethouse', name: 'NH-01' });
-    expect(rows[2]).toMatchObject({ unassigned: true, siteName: 'Unassigned', areaName: 'Dates Farm' });
-    expect(rows[3]).toMatchObject({ siteKey: 'AD-S2', siteName: 'AD-S2', structure: null, areaName: 'Odd' });
-    expect(issues).toEqual({ missingKeys: 1, noGeometry: 1, duplicates: ['MH-GH-01'], notApplicable: 1, unknownStructure: ['Odd'] });
+      f({ OBJECTID: 1, ZONE_ID: 'MH', SITE: 1, Site_Code: 'U1V01', Farm_Code: 'UOMAHNH001', Farm_Name: 'NH 01', Structure_Type: 1001, GlobalID: '{A}' }),
+      f({ OBJECTID: 2, ZONE_ID: 'MH', SITE: 2, Farm_Code: 'MH126', Farm_Name: 'PIVOT-5', Structure_Type: 1006 }),
+      f({ OBJECTID: 3, ZONE_ID: 'KE', SITE: 3, Farm_Code: 'KE08', Farm_Name: '<Null>', Structure_Type: 1000 }),
+      f({ OBJECTID: 4, ZONE_ID: 'MH', SITE: 2, Farm_Code: 'mh126', Structure_Type: 1006 }),
+      f({ OBJECTID: 5, ZONE_ID: 'AD', SITE: 2, Farm_Name: 'FB-NH03-18', ProjectCode: 'PRJ113', Structure_Type: 1001 }),
+      f({ OBJECTID: 6, Country: 3, Farm_Name: 'RH GH5', ProjectCode: 'PRJ134', Structure_Type: 'Odd' }),
+      f({ OBJECTID: 7, Farm_Name: 'Botancal Garden', ProjectCode: 'PRJ135' }),
+      f({ OBJECTID: 10, Farm_Name: '101B' }, { type: 'Polygon', coordinates: [[[19.5, 45.5], [19.51, 45.5], [19.51, 45.51], [19.5, 45.5]]] }),
+      f({ OBJECTID: 8, Farm_Name: 'Botancal Garden', ProjectCode: 'PRJ136' }),
+      f({ OBJECTID: 9, ZONE_ID: 'AD', Farm_Code: 'P2' }, null),
+    ], mapping, { site: new Map([['1', 'Site 1'], ['2', 'Site 2'], ['3', 'Not Applicable']]) });
+    expect(rows.map((r) => r.key)).toEqual([
+      'MH-UOMAHNH001', 'MH-MH126', 'KE-KE08', 'MH-MH126-OID4', 'AD-FB-NH03-18', 'MA-RH-GH5', 'UAE-NA-BOTANCAL-GARDEN', 'RS-101B', 'UAE-NA-BOTANCAL-GARDEN-PRJ136',
+    ]);
+    expect(rows[0]).toMatchObject({ siteName: 'Site 1', siteKey: 'U1V01', structure: 1001, areaName: 'Nethouse', name: 'NH 01', globalId: '{A}', keySource: 'farm_code' });
+    expect(rows[2]).toMatchObject({ unassigned: true, siteName: 'Unassigned', name: 'KE08' });
+    expect(rows[4]).toMatchObject({ zone: 'AD', keySource: 'farm_name', siteName: 'Site 2' });
+    expect(rows[5]).toMatchObject({ zone: 'MA', zoneName: 'Morocco', structure: null, areaName: 'Odd', unassigned: true });
+    expect(rows[6]).toMatchObject({ zone: 'UAE-NA', zoneName: 'UAE – unassigned' });
+    expect(rows[7]).toMatchObject({ zone: 'RS', zoneName: 'Serbia' });
+    expect(issues).toMatchObject({
+      missingKeys: 0, noGeometry: 1, duplicates: ['MH-MH126', 'UAE-NA-BOTANCAL-GARDEN'], notApplicable: 5, unknownStructure: ['Odd'],
+      noFarmCode: 5, noZone: 4, noZoneByCountry: { Morocco: 1, 'UAE – unassigned': 2, Serbia: 1 }, countryFromLocation: 3,
+    });
   });
 });

@@ -49,42 +49,125 @@ export function isNotApplicable(label: unknown): boolean {
 
 /** Same rule as the database function geo_field_key(). */
 export function fieldKey(zone: string, farm: string): string {
-  const z = zone.trim().toUpperCase();
-  const f = farm.trim().toUpperCase();
+  const z = zone.trim().toUpperCase().replace(/\s+/g, '-');
+  const f = farm.trim().toUpperCase().replace(/\s+/g, '-');
   return (f.startsWith(`${z}-`) ? f : `${z}-${f}`).slice(0, 40);
 }
 
 export type PlanRow = {
-  zone: string; siteKey: string; siteName: string; siteCode: string | null; unassigned: boolean;
+  zone: string; zoneName: string; siteKey: string; siteName: string; siteCode: string | null; unassigned: boolean;
   structure: number | null; areaName: string; farmCode: string; key: string; name: string;
+  /** Where farmCode came from: the layer's Farm_Code, or a stand-in when it is empty. */
+  keySource: 'farm_code' | 'farm_name' | 'project_code' | 'object_id';
   globalId: string | null; geometry: any;
 };
-export type PlanIssues = { missingKeys: number; noGeometry: number; duplicates: string[]; notApplicable: number; unknownStructure: string[] };
+export type PlanIssues = {
+  missingKeys: number; noGeometry: number; duplicates: string[]; notApplicable: number; unknownStructure: string[];
+  /** Features without Farm_Code / ZONE_ID that were given a stand-in key or a country zone. */
+  noFarmCode: number; noZone: number; noZoneByCountry: Record<string, number>;
+  /** Country empty in the layer, taken from where the shape lies. */
+  countryFromLocation: number;
+};
 
 const polygonal = (g: any) => g && (g.type === 'Polygon' || g.type === 'MultiPolygon') && Array.isArray(g.coordinates) && g.coordinates.length > 0;
+
+/** Zones for features without ZONE_ID: one per country (Country domain of Agro_Structures). */
+export const COUNTRY_ZONES: Record<string, [string, string]> = {
+  1: ['UAE-NA', 'UAE – unassigned'], 2: ['RS', 'Serbia'], 3: ['MA', 'Morocco'], 4: ['MR', 'Mauritania'],
+  5: ['ET', 'Ethiopia'], 8: ['ET', 'Ethiopia'], 6: ['SA', 'Saudi Arabia'], 9: ['SA', 'Saudi Arabia'],
+  7: ['TZ', 'Tanzania'], 10: ['SL', 'Sierra Leone'],
+};
+const NO_COUNTRY: [string, string] = ['UNASSIGNED', 'Unassigned'];
+
+/** Rough country boxes [west, south, east, north] for features whose Country is empty (first match wins). */
+const COUNTRY_BOXES: Array<[string, [number, number, number, number]]> = [
+  ['1', [51, 22.4, 56.5, 26.4]],     // UAE
+  ['2', [18.8, 42.2, 23.1, 46.2]],   // Serbia
+  ['4', [-17.2, 14.6, -4.8, 21.3]],  // Mauritania (south of Morocco's box)
+  ['3', [-17.2, 21.3, -0.9, 36]],    // Morocco
+  ['6', [34.5, 16.3, 55.7, 32.2]],   // Saudi Arabia
+  ['5', [33, 3.4, 48, 15]],          // Ethiopia
+  ['7', [29.3, -11.8, 40.5, -0.9]],  // Tanzania
+  ['10', [-13.4, 6.9, -10.2, 10]],   // Sierra Leone
+];
+function countryFromShape(g: any): string | null {
+  const ring = g.type === 'Polygon' ? g.coordinates[0] : g.coordinates[0]?.[0];
+  if (!ring?.length) return null;
+  const x = ring.reduce((a: number, c: number[]) => a + c[0], 0) / ring.length;
+  const y = ring.reduce((a: number, c: number[]) => a + c[1], 0) / ring.length;
+  const hit = COUNTRY_BOXES.find(([, b]) => x >= b[0] && x <= b[2] && y >= b[1] && y <= b[3]);
+  return hit ? hit[0] : null;
+}
+
+/** Layer text that means "empty" (ArcGIS exports often carry the literal "<Null>"). */
+const clean = (v: unknown) => {
+  const t = v === null || v === undefined ? '' : String(v).trim();
+  return /^<?null>?$|^none$|^n\/a$|^-$/i.test(t) ? '' : t;
+};
+const pick = (p: Record<string, any>, ...names: string[]) => {
+  const keys = Object.keys(p);
+  for (const n of names) {
+    const k = keys.find((x) => x.toLowerCase() === n.toLowerCase());
+    if (k && clean(p[k])) return clean(p[k]);
+  }
+  return '';
+};
 
 /** Pure: features + key mapping + coded-value domains → rows to apply and the issues found. */
 export function planImport(
   features: SourceFeature[], mapping: KeyMapping,
   domains: { site?: Map<string, string>; structure?: Map<string, string> } = {},
 ): { rows: PlanRow[]; issues: PlanIssues } {
-  const issues: PlanIssues = { missingKeys: 0, noGeometry: 0, duplicates: [], notApplicable: 0, unknownStructure: [] };
+  const issues: PlanIssues = {
+    missingKeys: 0, noGeometry: 0, duplicates: [], notApplicable: 0, unknownStructure: [], noFarmCode: 0, noZone: 0, noZoneByCountry: {}, countryFromLocation: 0,
+  };
   const seen = new Set<string>();
   const unknown = new Set<string>();
   const rows: PlanRow[] = [];
   const get = (p: Record<string, any>, role: keyof KeyMapping) => {
     const f = mapping[role];
-    const v = f ? p[f] : undefined;
-    return v === null || v === undefined ? '' : String(v).trim();
+    return f ? clean(p[f]) : '';
   };
   features.forEach((ft) => {
     const p = ft.properties || {};
-    const zone = get(p, 'zoneId').toUpperCase();
-    const farm = get(p, 'farmCode');
-    if (!zone || !farm) { issues.missingKeys += 1; return; }
     if (!polygonal(ft.geometry)) { issues.noGeometry += 1; return; }
-    const key = fieldKey(zone, farm);
-    if (seen.has(key)) { issues.duplicates.push(key); return; }
+    const oid = pick(p, 'OBJECTID', 'FID');
+    const globalId = get(p, 'globalId') || pick(p, 'GlobalID') || null;
+
+    // Zone: ZONE_ID, or one zone per country for features without it.
+    let zone = get(p, 'zoneId').toUpperCase();
+    let zoneName = zone;
+    if (!zone) {
+      let country = pick(p, 'Country');
+      if (!country || country === '0') {
+        country = countryFromShape(ft.geometry) || '';
+        if (country) issues.countryFromLocation += 1;
+      }
+      const [code, name] = COUNTRY_ZONES[country] || NO_COUNTRY;
+      zone = code; zoneName = name;
+      issues.noZone += 1;
+      issues.noZoneByCountry[name] = (issues.noZoneByCountry[name] || 0) + 1;
+    }
+
+    // Field key: Farm_Code, else Farm_Name, else ProjectCode, else OBJECTID.
+    let farm = get(p, 'farmCode');
+    let keySource: PlanRow['keySource'] = 'farm_code';
+    if (!farm) {
+      issues.noFarmCode += 1;
+      const name = get(p, 'farmName');
+      const prj = pick(p, 'ProjectCode');
+      if (name) { farm = name; keySource = 'farm_name'; } else if (prj) { farm = prj; keySource = 'project_code'; } else if (oid) { farm = `OID${oid}`; keySource = 'object_id'; }
+    }
+    if (!farm) { issues.missingKeys += 1; return; }
+    farm = farm.replace(/\s+/g, ' ');
+    let key = fieldKey(zone, farm);
+    if (seen.has(key)) {
+      // Same key twice: keep both, the second one distinguished by its ProjectCode / OBJECTID.
+      issues.duplicates.push(key);
+      const tag = pick(p, 'ProjectCode') || (oid ? `OID${oid}` : String(seen.size));
+      farm = `${farm}-${tag}`;
+      key = fieldKey(zone, farm);
+    }
     seen.add(key);
 
     const siteRaw = get(p, 'site');
@@ -104,8 +187,8 @@ export function planImport(
       : (domains.structure?.get(stRaw) || stRaw || 'Other');
 
     rows.push({
-      zone, siteKey, siteName, siteCode: unassigned ? null : siteCode, unassigned, structure, areaName,
-      farmCode: farm, key, name: get(p, 'farmName') || farm, globalId: get(p, 'globalId') || null, geometry: ft.geometry,
+      zone, zoneName, siteKey, siteName, siteCode: unassigned ? null : siteCode, unassigned, structure, areaName,
+      farmCode: farm, key, keySource, name: get(p, 'farmName') || farm, globalId, geometry: ft.geometry,
     });
   });
   issues.unknownStructure = [...unknown];
@@ -124,7 +207,7 @@ export async function applyPlan(orgId: string, actor: Actor, plan: { rows: PlanR
     features: plan.rows.length,
     zones: count(), sites: count(), farmAreas: count(),
     fields: { created: 0, matched: 0, adopted: 0, moved: 0, rekeyed: 0 },
-    shapes: { imported: 0, keptEdited: 0, repaired: 0 },
+    shapes: { imported: 0, unchanged: 0, keptEdited: 0, repaired: 0 },
     parents: { farm_area: 0, site: 0, zone: 0 },
     bySubtype: {} as Record<string, { name: string; count: number }>,
     issues: plan.issues,
@@ -140,7 +223,7 @@ export async function applyPlan(orgId: string, actor: Actor, plan: { rows: PlanR
 
     for (const r of plan.rows) {
       // eslint-disable-next-line no-await-in-loop
-      const zoneId = await ensureZone(client, orgId, r.zone, zoneIds, report);
+      const zoneId = await ensureZone(client, orgId, r.zone, r.zoneName, zoneIds, report);
       // eslint-disable-next-line no-await-in-loop
       const siteId = await ensureSite(client, orgId, zoneId, r, siteIds, report);
       // eslint-disable-next-line no-await-in-loop
@@ -164,7 +247,7 @@ export async function applyPlan(orgId: string, actor: Actor, plan: { rows: PlanR
   return report;
 }
 
-async function ensureZone(c: PoolClient, orgId: string, zone: string, cache: Map<string, string>, report: any) {
+async function ensureZone(c: PoolClient, orgId: string, zone: string, zoneName: string, cache: Map<string, string>, report: any) {
   if (cache.has(zone)) return cache.get(zone)!;
   const found = await c.query(
     `SELECT id, deleted_at FROM countries WHERE UPPER(code) = $1 AND (organization_id = $2 OR organization_id IS NULL)
@@ -175,7 +258,7 @@ async function ensureZone(c: PoolClient, orgId: string, zone: string, cache: Map
     await c.query('UPDATE countries SET deleted_at = NULL, organization_id = COALESCE(organization_id, $2) WHERE id = $1', [id, orgId]);
     report.zones.matched += 1;
   } else {
-    id = (await c.query('INSERT INTO countries (name, code, organization_id, subtype_code) VALUES ($1, $3, $2, 1) RETURNING id', [zone, orgId, zone.slice(0, 10)])).rows[0].id;
+    id = (await c.query('INSERT INTO countries (name, code, organization_id, subtype_code) VALUES ($1, $3, $2, 1) RETURNING id', [zoneName || zone, orgId, zone.slice(0, 10)])).rows[0].id;
     report.zones.created += 1;
   }
   cache.set(zone, id);
@@ -243,8 +326,12 @@ async function upsertField(
   fieldTypes: Map<string, string | null>, report: any, opts: ImportOptions,
 ) {
   const gj = JSON.stringify(r.geometry);
-  // 1. The relationship key.
-  let row = (await c.query(
+  // 1. The feature's GlobalID (stable even when keys are edited in ArcGIS), then the relationship key.
+  let row = r.globalId ? (await c.query(
+    `SELECT id, farm_area_id, key_id, polygon IS NOT NULL AS has_shape, geom_source, polygon AS g
+       FROM fields WHERE organization_id = $1 AND gis_external_id = $2 AND deleted_at IS NULL LIMIT 1`,
+    [orgId, r.globalId])).rows[0] : undefined;
+  if (!row) row = (await c.query(
     `SELECT id, farm_area_id, key_id, polygon IS NOT NULL AS has_shape, geom_source, polygon AS g
        FROM fields WHERE organization_id = $1 AND UPPER(gis_zone_id) = $2 AND UPPER(gis_farm_code) = UPPER($3) AND deleted_at IS NULL LIMIT 1`,
     [orgId, r.zone, r.farmCode])).rows[0];
@@ -299,6 +386,10 @@ async function upsertField(
     [row.id, r.zone, r.farmCode, r.siteCode, r.globalId, r.structure, typeId]);
   // Shapes drawn or edited in AgroCloud win unless the import is told to replace them.
   if (row.has_shape && row.geom_source === 'agrocloud' && !opts.overwrite) { report.shapes.keptEdited += 1; return; }
+  if (row.has_shape) {
+    const same = (await c.query(`SELECT ST_Equals(polygon, ${GEOM_SQL.replace('$GEOM', '$2')}) AS eq FROM fields WHERE id = $1`, [row.id, gj])).rows[0]?.eq;
+    if (same) { report.shapes.unchanged += 1; return; }
+  }
   await c.query(
     `UPDATE fields SET polygon = ${GEOM_SQL.replace('$GEOM', '$2')}, geom_source = 'arcgis', geom_updated_at = NOW(),
             latitude = ST_Y(ST_PointOnSurface(${GEOM_SQL.replace('$GEOM', '$2')})), longitude = ST_X(ST_PointOnSurface(${GEOM_SQL.replace('$GEOM', '$2')}))
@@ -312,26 +403,26 @@ async function history(c: PoolClient, orgId: string, actor: Actor, id: string, k
   await c.query(
     `INSERT INTO geo_edit_history (organization_id, class_key, feature_id, key_id, operation, geom_before, geom_after, attrs, edited_by)
      VALUES ($1, 'field', $2, $3, 'import', $4, ${GEOM_SQL.replace('$GEOM', '$5')}, $6, $7)`,
-    [orgId, id, key, before, gj, JSON.stringify({ source: 'arcgis', zone: r.zone, farm_code: r.farmCode, global_id: r.globalId, structure: r.structure }), actor.userId]);
+    [orgId, id, key, before, gj, JSON.stringify({ source: 'arcgis', zone: r.zone, farm_code: r.farmCode, key_source: r.keySource, global_id: r.globalId, structure: r.structure }), actor.userId]);
 }
 
 const PARENT_STEPS = [
-  { cls: 'farm_area', table: 'farm_areas', bufferM: 3, org: 'p.site_id IN (SELECT id FROM sites WHERE organization_id = $1)',
+  { cls: 'farm_area', table: 'farm_areas', bufferM: 5, org: 'p.site_id IN (SELECT id FROM sites WHERE organization_id = $1)',
     kids: 'SELECT f.farm_area_id AS pid, f.polygon AS g FROM fields f WHERE f.deleted_at IS NULL AND f.polygon IS NOT NULL' },
-  { cls: 'site', table: 'sites', bufferM: 10, org: 'p.organization_id = $1',
+  { cls: 'site', table: 'sites', bufferM: 15, org: 'p.organization_id = $1',
     kids: 'SELECT fa.site_id AS pid, fa.geom AS g FROM farm_areas fa WHERE fa.deleted_at IS NULL AND fa.geom IS NOT NULL' },
-  { cls: 'zone', table: 'countries', bufferM: 20, org: 'p.organization_id = $1',
+  { cls: 'zone', table: 'countries', bufferM: 30, org: 'p.organization_id = $1',
     kids: 'SELECT s.country_id AS pid, s.geom AS g FROM sites s WHERE s.deleted_at IS NULL AND s.geom IS NOT NULL' },
 ] as const;
 
-/** Outline farm areas, sites and zones (empty, or earlier built by an import) from what lies inside them. */
+/** Outline farm areas, sites and zones (empty, or earlier built by an import) around what lies inside them: the buffered union of their contents, so scattered places do not become one huge hull. */
 async function buildParents(c: PoolClient, orgId: string, actor: Actor, report: any) {
   for (const s of PARENT_STEPS) {
     // eslint-disable-next-line no-await-in-loop
     const r = await c.query(
       `WITH kids AS (${s.kids}),
             outl AS (SELECT k.pid, ST_Multi(ST_CollectionExtract(ST_MakeValid(
-                       ST_Buffer(ST_ConvexHull(ST_Collect(k.g))::geography, ${s.bufferM})::geometry), 3)) AS g
+                       ST_SimplifyPreserveTopology(ST_Union(ST_Buffer(k.g::geography, ${s.bufferM})::geometry), 0.00002)), 3)) AS g
                        FROM kids k GROUP BY k.pid),
             upd AS (UPDATE ${s.table} p SET geom = outl.g, geom_source = 'arcgis', geom_updated_at = NOW()
                       FROM outl WHERE p.id = outl.pid AND p.deleted_at IS NULL AND ${s.org}
@@ -398,5 +489,5 @@ export async function importFromArcgis(orgId: string, actor: Actor, input: Impor
     site: codedMap(layer, mapping.site), structure: codedMap(layer, mapping.structureType),
   });
   const report = await applyPlan(orgId, actor, plan, input);
-  return { layer: { name: layer.name, id: layerIndex, url: `${baseUrl}/${layerIndex}` }, mapping, ...report };
+  return { layer: { name: layer.name, id: layerIndex, url: `${baseUrl}/${layerIndex}`, source: 'live' }, mapping, ...report };
 }

@@ -29,4 +29,7 @@ m = json.load(open('manifest.json'))
 m.update({'short_name': 'AgroCloud', 'name': 'AgroCloud Management', 'start_url': './', 'scope': './'})
 json.dump(m, open('manifest.json', 'w'), ensure_ascii=False, indent=2)
 PY
+# Copy of the structures layer for pages that may not read ArcGIS directly.
+cp ../demo/agro_structures.meta.json . 2>/dev/null || true
+cp ../demo/agro_structures.geojson . 2>/dev/null || true
 echo "build-demo ready"

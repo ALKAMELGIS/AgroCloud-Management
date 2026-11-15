@@ -159,9 +159,11 @@ UPDATE farm_areas fa SET key_id = x.k FROM (
 -- already starting with the zone is used as it is), otherwise SITE-Fnnn.
 CREATE OR REPLACE FUNCTION geo_field_key(zone TEXT, farm TEXT) RETURNS TEXT
 LANGUAGE sql IMMUTABLE AS $$
-  SELECT CASE WHEN NULLIF(TRIM(zone), '') IS NULL OR NULLIF(TRIM(farm), '') IS NULL THEN NULL
-              WHEN UPPER(TRIM(farm)) LIKE UPPER(TRIM(zone)) || '-%' THEN LEFT(UPPER(TRIM(farm)), 40)
-              ELSE LEFT(UPPER(TRIM(zone)) || '-' || UPPER(TRIM(farm)), 40) END
+  WITH k AS (SELECT regexp_replace(UPPER(TRIM(zone)), '\s+', '-', 'g') AS z, regexp_replace(UPPER(TRIM(farm)), '\s+', '-', 'g') AS f)
+  SELECT CASE WHEN NULLIF(k.z, '') IS NULL OR NULLIF(k.f, '') IS NULL THEN NULL
+              WHEN k.f LIKE k.z || '-%' THEN LEFT(k.f, 40)
+              ELSE LEFT(k.z || '-' || k.f, 40) END
+    FROM k
 $$;
 
 UPDATE fields f SET key_id = x.k FROM (

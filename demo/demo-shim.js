@@ -78,23 +78,13 @@
   function geoStore(){
     var st=null; try{ st=JSON.parse(localStorage.getItem(GEO_KEY)||'null'); }catch(e){}
     if(st) return st;
-    st={}; var lon0=55.74,lat0=24.20;
-    var mh=countries.filter(function(c){return c.code==='MH';})[0];
-    var s1=sites.filter(function(x){return mh&&x.countryId===mh.id&&x.name==='Site 1';})[0];
-    if(s1){
-      st[s1.id]={geometry:geoRect(lon0-0.001,lat0-0.001,0.009,0.0095),subtype:1,src:'arcgis',history:[]};
-      areas.filter(function(a){return a.siteId===s1.id;}).forEach(function(a,ai){
-        st[a.id]={geometry:ai?geoRect(lon0-0.0005,lat0+0.004,0.0078,0.004):geoRect(lon0-0.0005,lat0-0.0005,0.0102-0.001,0.0045),subtype:ai?1001:1000,src:'arcgis',history:[]};
-        fields.filter(function(f){return f.farmAreaId===a.id;}).forEach(function(f,k){
-          st[f.id]={geometry:ai?geoRect(lon0+k*0.0024,lat0+0.0045,0.002,0.003):geoRect(lon0+k*0.0016,lat0,0.0012,0.0035),subtype:ai?1001:1000,src:'arcgis',history:[]};
-        });
-      });
-    }
+    /* Starts empty: shapes come from drawing or from "Import from ArcGIS" (the real layer). */
+    st={};
     try{ localStorage.setItem(GEO_KEY,JSON.stringify(st)); }catch(e){}
     return st;
   }
   function geoSave(st){ try{ localStorage.setItem(GEO_KEY,JSON.stringify(st)); }catch(e){} }
-  function geoFieldKey(z,fc){ z=String(z).trim().toUpperCase(); fc=String(fc).trim().toUpperCase(); return (fc.indexOf(z+'-')===0?fc:z+'-'+fc).slice(0,40); }
+  function geoFieldKey(z,fc){ z=String(z).trim().toUpperCase().replace(/\s+/g,'-'); fc=String(fc).trim().toUpperCase().replace(/\s+/g,'-'); return (fc.indexOf(z+'-')===0?fc:z+'-'+fc).slice(0,40); }
   function geoKeys(){ var k={};
     countries.forEach(function(c){ k[c.id]=c.code.replace(/\s+/g,''); });
     countries.forEach(function(c){ sites.filter(function(x){return x.countryId===c.id;}).forEach(function(x,i){ k[x.id]=k[c.id]+'-S'+('0'+(i+1)).slice(-2);
@@ -283,7 +273,10 @@
         drawingInfo:m.drawingInfo&&m.drawingInfo.renderer?{renderer:m.drawingInfo.renderer,transparency:Number(m.drawingInfo.transparency)||0}:null,
         typeIdField:m.typeIdField||null,types:(m.types||[]).map(function(t){return {id:t.id,name:t.name};}),
         fields:(m.fields||[]).map(function(f){return {name:f.name,alias:f.alias||f.name,type:f.type,domain:f.domain&&f.domain.codedValues?f.domain.codedValues.map(function(c){return {code:c.code,name:c.name};}):null};})};
-    }).catch(function(){ META=null; return null; });
+    }).catch(function(){
+      /* Not reachable from here (e.g. inside a page that may not call ArcGIS): the copy shipped with the app. */
+      return of('./agro_structures.meta.json').then(function(r){ if(!r.ok) throw new Error('no copy'); return r.json(); }).catch(function(){ META=null; return null; });
+    });
     return META;
   }
   /* Raw values are kept (the layer's renderer matches on its codes); labels are decoded on screen. */
@@ -301,7 +294,12 @@
       if(!fs.length) throw new Error('empty');
       fs.forEach(function(f,i){ if(f.id===undefined) f.id=(f.properties&&f.properties.OBJECTID)||i; });
       return {type:'FeatureCollection',features:fs,_live:true};
-    }).catch(function(){ LIVE=null; return DEMOFC; });
+    }).catch(function(){
+      /* The copy of the real layer shipped with the app (read from ArcGIS on the date in its name), else the samples. */
+      return of('./agro_structures.geojson').then(function(r){ if(!r.ok) throw new Error('no copy'); return r.json(); })
+        .then(function(fc){ if(!fc||!(fc.features||[]).length) throw new Error('empty'); fc.features.forEach(function(f,i){ if(f.id===undefined) f.id=(f.properties&&f.properties.OBJECTID)||i; }); fc._snapshot=true; return fc; })
+        .catch(function(){ LIVE=null; return DEMOFC; });
+    });
     return LIVE;
   }
   function jsonRes(x){ return new Response(JSON.stringify(x),{status:200,headers:{'Content-Type':'application/json'}}); }
@@ -361,6 +359,10 @@
     var h=ST_TYPES.filter(function(t){return t[2].test(l);})[0]; return h?h[0]:null; }
   function codedOf(meta,name){ var m={}; if(!meta) return m; (meta.fields||[]).forEach(function(f){ if(f.name===name&&f.domain) f.domain.forEach(function(c){ m[String(c.code)]=String(c.name); }); });
     if(meta.typeIdField===name) (meta.types||[]).forEach(function(t){ m[String(t.id)]=String(t.name); }); return m; }
+  var COUNTRY_Z={1:['UAE-NA','UAE – unassigned'],2:['RS','Serbia'],3:['MA','Morocco'],4:['MR','Mauritania'],5:['ET','Ethiopia'],8:['ET','Ethiopia'],6:['SA','Saudi Arabia'],9:['SA','Saudi Arabia'],7:['TZ','Tanzania'],10:['SL','Sierra Leone']};
+  var COUNTRY_BOX=[['1',[51,22.4,56.5,26.4]],['2',[18.8,42.2,23.1,46.2]],['4',[-17.2,14.6,-4.8,21.3]],['3',[-17.2,21.3,-0.9,36]],['6',[34.5,16.3,55.7,32.2]],['5',[33,3.4,48,15]],['7',[29.3,-11.8,40.5,-0.9]],['10',[-13.4,6.9,-10.2,10]]];
+  function countryAt(g){ var r=g.type==='Polygon'?g.coordinates[0]:(g.coordinates[0]||[])[0]; if(!r||!r.length) return null; var x=0,y=0; r.forEach(function(c){x+=c[0];y+=c[1];}); x/=r.length; y/=r.length;
+    var h=COUNTRY_BOX.filter(function(b){ var q=b[1]; return x>=q[0]&&x<=q[2]&&y>=q[1]&&y<=q[3]; })[0]; return h?h[0]:null; }
   function demoImport(fc,meta,opt){
     var C=JSON.parse(JSON.stringify(countries)),S=JSON.parse(JSON.stringify(sites)),A=JSON.parse(JSON.stringify(areas)),Fl=JSON.parse(JSON.stringify(fields));
     var st=JSON.parse(JSON.stringify(geoStore())), now=new Date().toISOString(), n=Date.now().toString(36);
@@ -368,15 +370,20 @@
     var siteDom=codedOf(meta,'SITE'), stDom=codedOf(meta,'Structure_Type');
     var rep={dryRun:!!opt.dryRun,layer:{name:'Agro_Structures',id:21,live:!!fc._live},features:0,zones:{created:0,matched:0},sites:{created:0,matched:0},farmAreas:{created:0,matched:0},
       fields:{created:0,matched:0,adopted:0,moved:0,rekeyed:0},shapes:{imported:0,keptEdited:0,repaired:0},parents:{farm_area:0,site:0,zone:0},bySubtype:{},
-      issues:{missingKeys:0,noGeometry:0,duplicates:[],notApplicable:0,unknownStructure:[]},overlaps:[]};
+      issues:{missingKeys:0,noGeometry:0,duplicates:[],notApplicable:0,unknownStructure:[],noFarmCode:0,noZone:0,noZoneByCountry:{},countryFromLocation:0},overlaps:[]};
     var seen={}, unk={}, cz={}, cs={}, ca={}, seq=0, uid=function(p){ seq++; return 'imp'+p+n+seq; };
     var hist=function(id,op){ st[id]=st[id]||{history:[]}; (st[id].history=st[id].history||[]).push({id:Date.now()+seq++,operation:op,edited_at:now,edited_by_name:'Demo Manager',area_ha:geoArea(st[id].geometry)}); };
     (fc.features||[]).forEach(function(ft){
-      var p=ft.properties||{}, g=ft.geometry, zone=String(p.ZONE_ID||'').trim().toUpperCase(), farm=String(p.Farm_Code||'').trim();
-      if(!zone||!farm){ rep.issues.missingKeys++; return; }
+      var p=ft.properties||{}, g=ft.geometry, cl=function(v){ var t=v===null||v===undefined?'':String(v).trim(); return /^<?null>?$|^none$|^n\/a$|^-$/i.test(t)?'':t; };
       if(!g||(g.type!=='Polygon'&&g.type!=='MultiPolygon')){ rep.issues.noGeometry++; return; }
-      var key=geoFieldKey(zone,farm); if(seen[key]){ rep.issues.duplicates.push(key); return; } seen[key]=1; rep.features++;
-      var sRaw=p.SITE===null||p.SITE===undefined?'':String(p.SITE).trim(), sLab=siteDom[sRaw]||sRaw, sCode=String(p.Site_Code||'').trim();
+      var zone=cl(p.ZONE_ID).toUpperCase(), zoneName=zone, oid=cl(p.OBJECTID);
+      if(!zone){ var ctry=cl(p.Country); if(!ctry||ctry==='0'){ ctry=countryAt(g)||''; if(ctry) rep.issues.countryFromLocation++; } var cz2=COUNTRY_Z[ctry]||['UNASSIGNED','Unassigned']; zone=cz2[0]; zoneName=cz2[1]; rep.issues.noZone++; rep.issues.noZoneByCountry[zoneName]=(rep.issues.noZoneByCountry[zoneName]||0)+1; }
+      var farm=cl(p.Farm_Code), ks='farm_code';
+      if(!farm){ rep.issues.noFarmCode++; if(cl(p.Farm_Name)){ farm=cl(p.Farm_Name); ks='farm_name'; } else if(cl(p.ProjectCode)){ farm=cl(p.ProjectCode); ks='project_code'; } else if(oid){ farm='OID'+oid; ks='object_id'; } }
+      if(!farm){ rep.issues.missingKeys++; return; }
+      farm=farm.replace(/\s+/g,' ');
+      var key=geoFieldKey(zone,farm); if(seen[key]){ rep.issues.duplicates.push(key); farm=farm+'-'+(cl(p.ProjectCode)||('OID'+oid)); key=geoFieldKey(zone,farm); } seen[key]=1; rep.features++;
+      var sRaw=p.SITE===null||p.SITE===undefined?'':String(p.SITE).trim(), sLab=siteDom[sRaw]||sRaw, sCode=cl(p.Site_Code);
       var un=/not\s*applic|^n\s*\/?\s*a$|^none$/i.test(sLab)||(!sLab&&!sCode); if(un) rep.issues.notApplicable++;
       var sName=un?'Unassigned':(/^\d+$/.test(sLab)?'Site '+sLab:(sLab||sCode||'Site')), sKey=un?'__U':(sCode||sName).toUpperCase();
       var sc=stCode(p.Structure_Type,stDom), aName=sc?ST_TYPES.filter(function(t){return t[0]===sc;})[0][1]:((stDom[String(p.Structure_Type)]||p.Structure_Type||'Other')+'');
@@ -384,7 +391,7 @@
       if(sc){ rep.bySubtype[sc]=rep.bySubtype[sc]||{name:aName,count:0}; rep.bySubtype[sc].count++; }
       // zone
       var z=cz[zone]; if(!z){ z=C.filter(function(c){return String(c.code).toUpperCase()===zone;})[0];
-        if(z) rep.zones.matched++; else { z={id:uid('c'),name:zone,code:zone}; C.push(z); im.countries.push(z); rep.zones.created++; } cz[zone]=z; }
+        if(z) rep.zones.matched++; else { z={id:uid('c'),name:zoneName||zone,code:zone}; C.push(z); im.countries.push(z); rep.zones.created++; } cz[zone]=z; }
       // site
       var sk=z.id+'|'+sKey, s=cs[sk]; if(!s){ s=S.filter(function(x){return x.countryId===z.id&&((!un&&x.gis_site_code&&x.gis_site_code.toUpperCase()===sKey)||x.name.toLowerCase()===sName.toLowerCase());})[0];
         if(s){ rep.sites.matched++; if(!un&&!s.gis_site_code) s.gis_site_code=sKey; } else { s={id:uid('s'),name:sName,countryId:z.id,country_id:z.id,location:zone,gis_site_code:un?null:sKey}; S.push(s); im.sites.push(s); rep.sites.created++; }
@@ -394,10 +401,10 @@
         if(a) rep.farmAreas.matched++; else { a={id:uid('a'),name:aName,siteId:s.id,site_id:s.id}; A.push(a); im.areas.push(a); rep.farmAreas.created++; }
         st[a.id]=st[a.id]||{history:[]}; if(!st[a.id].subtype) st[a.id].subtype=sc; ca[ak]=a; }
       // field
-      var f=Fl.filter(function(x){return x.gis_zone_id&&String(x.gis_zone_id).toUpperCase()===zone&&String(x.gis_farm_code||'').toUpperCase()===farm.toUpperCase();})[0];
+      var gid=cl(p.GlobalID), f=(gid&&Fl.filter(function(x){return x.gis_external_id===gid;})[0])||Fl.filter(function(x){return x.gis_zone_id&&String(x.gis_zone_id).toUpperCase()===zone&&String(x.gis_farm_code||'').toUpperCase()===farm.toUpperCase();})[0];
       if(f){ rep.fields.matched++; if(f.farmAreaId!==a.id){ f.farmAreaId=a.id; f.farm_area_id=a.id; im.moves[f.id]=a.id; rep.fields.moved++; } }
-      else { var nm=String(p.Farm_Name||farm).trim(); if(Fl.some(function(x){return x.farmAreaId===a.id&&x.name.toLowerCase()===nm.toLowerCase();})) nm=farm;
-        f={id:uid('f'),name:nm,farmAreaId:a.id,farm_area_id:a.id,area:null,gis_zone_id:zone,gis_farm_code:farm}; Fl.push(f); im.fields.push(f); rep.fields.created++; }
+      else { var nm=cl(p.Farm_Name)||farm; if(Fl.some(function(x){return x.farmAreaId===a.id&&x.name.toLowerCase()===nm.toLowerCase();})) nm=farm;
+        f={id:uid('f'),name:nm,farmAreaId:a.id,farm_area_id:a.id,area:null,gis_zone_id:zone,gis_farm_code:farm,gis_external_id:gid||null}; Fl.push(f); im.fields.push(f); rep.fields.created++; }
       st[f.id]=st[f.id]||{history:[]}; if(sc) st[f.id].subtype=sc;
       if(st[f.id].geometry&&st[f.id].src==='agrocloud'&&!opt.overwrite){ rep.shapes.keptEdited++; return; }
       st[f.id].geometry=g.type==='Polygon'?{type:'MultiPolygon',coordinates:[g.coordinates]}:g; st[f.id].src='arcgis'; st[f.id].at=now; hist(f.id,'import'); rep.shapes.imported++;
@@ -443,7 +450,7 @@
     }
     if(isApi(url)&&/\/geo\/import\/arcgis(\?|$)/.test(url)&&init&&init.method==='POST'){
       var ib={}; try{ ib=init.body?JSON.parse(init.body):{}; }catch(e){}
-      return Promise.all([liveLayer(),liveMeta()]).then(function(r){ return jsonRes(ok(demoImport(r[0]||DEMOFC,r[1]||DEMO_META,ib))); });
+      return Promise.all([liveLayer(),liveMeta()]).then(function(r){ var fc=r[0]||DEMOFC, rp=demoImport(fc,r[1]||DEMO_META,ib); rp.layer.source=fc._live?'live':fc._snapshot?'copy':'sample'; return jsonRes(ok(rp)); });
     }
     if(isApi(url)&&/\/gis\/layers\/demo-struct\/features(\?|$)/.test(url)){
       return liveLayer().then(function(fc){ return jsonRes(ok(fc)); });
@@ -452,7 +459,7 @@
     if(isApi(url)&&/\/gis\/layers(\?|$)/.test(url)&&(!init||!init.method||init.method==='GET')){
       return liveLayer().then(function(fc){
         var live=fc&&fc._live;
-        return jsonRes(ok([{id:'demo-struct',name:live?'Agro_Structures (ArcGIS Online · live)':'Agro_Structures (sample, ArcGIS not reachable)',
+        return jsonRes(ok([{id:'demo-struct',name:live?'Agro_Structures (ArcGIS Online · live)':(fc&&fc._snapshot)?'Agro_Structures (ArcGIS copy · 15 Nov 2026)':'Agro_Structures (sample, ArcGIS not reachable)',
           sourceType:'arcgis_feature_service',featureCount:(fc&&fc.features||[]).length,isVisible:true,style:{color:'#1f7a4d',fillOpacity:0.25}}]));
       });
     }
