@@ -51,6 +51,7 @@ import ReadOnlyBanner from '../../components/ReadOnlyBanner';
 import { isReadOnlyOnPage, PAGE_KEYS } from '../../utils/roleAccess';
 import InfoNote from '../../components/InfoNote';
 import PageTitle from '../../components/PageTitle';
+import FormPathButton from '../../components/feeds/FormDataPath';
 import ExportButton from '../../components/ExportButton';
 
 /** When true, every planting grid cell renders disabled (view-only roles, closed season). */
@@ -1074,9 +1075,12 @@ export default function CropHistory() {
   /* ─── RENDER ─── */
   return (
     <Box sx={{ maxWidth: 1760, mx: 'auto' }}>
-      <PageTitle help="Manage crop rotation history and planting/transplant records." sx={{ mb: 2 }}>
-        Crop Rotation & Planting
-      </PageTitle>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', mb: 2 }}>
+        <PageTitle help="Manage crop rotation history and planting/transplant records.">
+          Crop Rotation & Planting
+        </PageTitle>
+        <FormPathButton form="crop-rotation" label="Crop Rotation" />
+      </Box>
 
       <Paper sx={{ p: 2, mb: 2, display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
         <TextField size="small" select label="Site" value={siteFilter}

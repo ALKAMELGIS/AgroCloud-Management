@@ -6,6 +6,7 @@ import app from './app';
 import { jobQueue } from './jobs/queue';
 import { initWebSocket } from './websocket';
 import { startPHIScheduler } from './services/phiScheduler.service';
+import { startFeedSync } from './services/formFeeds.service';
 import { startWebhookWorker } from './jobs/webhookQueue';
 import { shutdownBullMQ } from './jobs/bullQueue';
 import { runMigrations } from './db/migrate';
@@ -52,6 +53,7 @@ runMigrations()
       logger.info({ port: config.port }, 'Backend server started');
       jobQueue.start();
       startPHIScheduler();
+      startFeedSync();
       startWebhookWorker();
     });
   })

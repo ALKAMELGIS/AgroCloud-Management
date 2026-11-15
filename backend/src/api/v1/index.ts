@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { feedsRouter } from './feeds.routes';
 import { authRouter } from './auth.routes';
 import { microsoftAuthRouter } from './microsoft-auth.routes';
 import { passwordResetRouter } from './password-reset.routes';
@@ -168,6 +169,8 @@ router.use('/webhooks', webhooksRouter);
 
 // Data export - requires auth (handled in router)
 router.use('/export', exportRouter);
+// Data paths of the forms (own key per form, or signed in)
+router.use('/feeds', feedsRouter);
 
 // Predictions & recommendations - requires auth (handled in router)
 router.use('/predictions', predictionsRouter);

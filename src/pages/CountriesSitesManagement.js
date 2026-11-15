@@ -49,6 +49,7 @@ import GeoEditor from '../components/geo/GeoEditor';
 import { useSearchParams } from 'react-router-dom';
 import { Tabs, Tab } from '@mui/material';
 import { INTEGRATION_ADMIN_ROLES } from '../utils/roleAccess';
+import DataFeedsTab from '../components/feeds/DataFeedsTab';
 
 const ZONE_FROZEN_WIDTHS = [220];
 const SITE_FROZEN_WIDTHS = [180];
@@ -79,7 +80,7 @@ function CountriesSitesManagement() {
   const [searchParams, setSearchParams] = useSearchParams();
   const canConfigureGis = INTEGRATION_ADMIN_ROLES.includes(user?.role);
   const rawTab = searchParams.get('tab');
-  const tab = rawTab === 'map' ? 'map' : (canConfigureGis && rawTab === 'gis' ? 'gis' : 'zones');
+  const tab = rawTab === 'map' ? 'map' : (canConfigureGis && (rawTab === 'gis' || rawTab === 'feeds') ? rawTab : 'zones');
   const setTab = (v) => {
     const next = new URLSearchParams(searchParams);
     if (v === 'zones') next.delete('tab'); else next.set('tab', v);
@@ -264,13 +265,14 @@ function CountriesSitesManagement() {
           {tab === 'zones' && <ExportButton label={t('zoneAccess.exportExcel')} onClick={handleExport} />}
         </Box>
 
-        <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: tab === 'map' ? 0 : 2.5, borderBottom: 1, borderColor: 'divider' }}>
+        <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="scrollable" allowScrollButtonsMobile sx={{ mb: tab === 'map' ? 0 : 2.5, borderBottom: 1, borderColor: 'divider' }}>
           <Tab value="zones" label="Zones & Sites" />
           <Tab value="map" label="Map" />
           {canConfigureGis && <Tab value="gis" label="GIS configuration" />}
+          {canConfigureGis && <Tab value="feeds" label="Data feeds" />}
         </Tabs>
 
-        {tab === 'map' ? <GeoEditor canEdit={isCeo || isFarmManager} canImport={isCeo} /> : tab === 'gis' ? <GisRelationshipConfig /> : (<>
+        {tab === 'map' ? <GeoEditor canEdit={isCeo || isFarmManager} canImport={isCeo} /> : tab === 'gis' ? <GisRelationshipConfig /> : tab === 'feeds' ? <Box sx={{ px: { xs: 2, md: 3 }, pb: 4 }}><DataFeedsTab /></Box> : (<>
 
         {scopeNote ? (
           <InfoNote mode="line" severity="info" sx={{ mb: 2 }}>{scopeNote}</InfoNote>

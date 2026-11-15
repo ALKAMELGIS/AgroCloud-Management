@@ -21,6 +21,7 @@ export default function HarvestEntryToolbar({
   onDateFromChange,
   onDateToChange,
   onExport,
+  extraActions = null,
 }) {
   const { isPhone } = useAppLayout();
 
@@ -127,7 +128,7 @@ export default function HarvestEntryToolbar({
       <FilterBar
         chips={chips}
         onClear={clearAll}
-        actions={exportButton}
+        actions={<>{extraActions}{exportButton}</>}
         search={(
           <Typography variant="body2" sx={{ alignSelf: 'center', flex: 1, color: 'text.secondary', fontVariantNumeric: 'tabular-nums' }}>
             <bdi>{dateFrom}</bdi> → <bdi>{dateTo}</bdi>
@@ -154,6 +155,7 @@ export default function HarvestEntryToolbar({
       </Typography>
       {filterFields}
       {exportButton}
+      {extraActions}
     </Toolbar>
   );
 }

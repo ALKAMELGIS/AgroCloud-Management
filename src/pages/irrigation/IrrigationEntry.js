@@ -27,6 +27,7 @@ import { DeleteSelectedButton, RowSelectCell, SelectAllCheckbox, deleteIdsSequen
 import { useRowSelection } from '../../hooks/useRowSelection';
 import ReadOnlyBanner from '../../components/ReadOnlyBanner';
 import { PAGE_KEYS } from '../../utils/roleAccess';
+import FormPathButton from '../../components/feeds/FormDataPath';
 import InfoNote from '../../components/InfoNote';
 
 // Unified with the app font (theme FONT_SANS via CSS variable).
@@ -665,6 +666,8 @@ export default function IrrigationEntry() {
             setImportDateRange(null);
           }}
             sx={{ width: 90, '& input': { fontFamily: FONT, fontSize: '12px', py: 0.5 } }} />
+          <Box sx={{ flex: 1 }} />
+          <FormPathButton form="irrigation" label="Irrigation Entry" />
         </Box>
         <Tabs
           value={structureTabValue}

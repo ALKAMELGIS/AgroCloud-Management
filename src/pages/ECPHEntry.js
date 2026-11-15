@@ -38,6 +38,7 @@ import useReadOnlyMode from '../hooks/useReadOnlyMode';
 import ReadOnlyBanner from '../components/ReadOnlyBanner';
 import { PAGE_KEYS } from '../utils/roleAccess';
 import PageTitle from '../components/PageTitle';
+import FormPathButton from '../components/feeds/FormDataPath';
 import { FormSection, FormGrid, FormActions, FormSteps, FormStep, HintLabel, calcFieldSx, span } from '../components/form/FormLayout';
 
 const SELECT_SX = { '& .MuiSelect-select': { whiteSpace: 'nowrap' } };
@@ -335,9 +336,12 @@ function ECPHEntry() {
     <Container maxWidth="lg">
       <Box>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, flexWrap: 'wrap', gap: 1 }}>
-          <PageTitle>
-            EC/PH Entry
-          </PageTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+            <PageTitle>
+              EC/PH Entry
+            </PageTitle>
+            <FormPathButton form="ecph" label="EC/PH Entry" />
+          </Box>
           {entryTab === 'entry' && <ToggleButtonGroup
             value={viewMode}
             exclusive

@@ -53,6 +53,7 @@ import { IRRIGATION_STRUCTURES } from '../../utils/fieldTypeHelpers';
 import { useActiveSiteStructures } from '../../hooks/useActiveSiteStructures';
 import InfoNote from '../../components/InfoNote';
 import PageTitle from '../../components/PageTitle';
+import FormPathButton from '../../components/feeds/FormDataPath';
 
 // Week number calculation helper
 const getWeekNumber = (date) => {
@@ -375,9 +376,12 @@ function FertigationEntry() {
     <Container maxWidth="xl">
       <Box>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2, mb: 2 }}>
-          <PageTitle>
-            Fertigation Entry
-          </PageTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+            <PageTitle>
+              Fertigation Entry
+            </PageTitle>
+            <FormPathButton form="fertigation" label="Fertigation Entry" />
+          </Box>
           {isNethouseOrGh && entryTab === 'entry' && (
           <ToggleButtonGroup
             value={viewMode}

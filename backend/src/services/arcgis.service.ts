@@ -373,3 +373,30 @@ export async function queryJson(
   if (data.error) throw new AppError(`ArcGIS query error: ${data.error.message || JSON.stringify(data.error)}`, 'EXTERNAL_SERVICE_ERROR', 502);
   return data;
 }
+
+/**
+ * POST to an ArcGIS REST endpoint (form-encoded). Used only by the form feeds to
+ * write their own related tables (addToDefinition, addFeatures, deleteFeatures);
+ * the token goes in the body, never the URL, and the address passes the same SSRF check.
+ */
+export async function arcgisPost(url: string, params: Record<string, string>, token?: string | null): Promise<any> {
+  const clean = sanitizeUrl(url);
+  await assertSafeArcgisUrl(clean);
+  const body = new URLSearchParams({ f: 'json', ...params, ...(token ? { token } : {}) });
+  logger.info({ host: new URL(clean).host, path: new URL(clean).pathname }, 'ArcGIS write');
+  const res = await fetch(clean, {
+    method: 'POST', redirect: 'error', body,
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'AgroCloud/1.0' },
+  });
+  if (!res.ok) throw new AppError(`ArcGIS returned HTTP ${res.status}`, 'EXTERNAL_SERVICE_ERROR', 502);
+  let data: any;
+  try { data = JSON.parse(await res.text()); } catch { throw new AppError('ArcGIS returned a non-JSON response', 'EXTERNAL_SERVICE_ERROR', 502); }
+  if (data.error) {
+    const code = Number(data.error.code);
+    const msg = data.error.message || JSON.stringify(data.error);
+    throw new AppError(code === 498 || code === 499 || code === 403
+      ? `ArcGIS refused the change (${msg}). The saved token needs owner or admin rights on this service.`
+      : `ArcGIS error: ${msg}`, 'EXTERNAL_SERVICE_ERROR', 502);
+  }
+  return data;
+}

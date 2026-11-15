@@ -25,6 +25,7 @@ import { buildPumpExportSheets, pumpExportFilename } from '../utils/pumpRoomExce
 import { computePumpTotals, parsePumpsFromRow, pumpCellUsage } from '../utils/pumpRoomMath';
 import * as XLSX from 'xlsx';
 import PageTitle from '../components/PageTitle';
+import FormPathButton from '../components/feeds/FormDataPath';
 import ExportButton from '../components/ExportButton';
 
 const PUMP_FROZEN_WIDTHS = [160, 140, 110];
@@ -395,7 +396,10 @@ export default function PumpRoom() {
 
   return (
     <Box sx={{ width: '100%' }}>
-      <PageTitle sx={{ mb: 1 }}>Pump Room</PageTitle>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', mb: 1 }}>
+        <PageTitle>Pump Room</PageTitle>
+        <FormPathButton form="pump-room" label="Pump Room" />
+      </Box>
       {!canWrite && (
         <ReadOnlyBanner message="View only — only the data-entry worker can edit the pump room." />
       )}

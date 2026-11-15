@@ -109,6 +109,17 @@
   function body(url,method,reqBody){
     var path=url.replace(/^https?:\/\/[^/]+/,'').replace(/^.*\/api\/v1/,'').split('?')[0];
     var q={}; (url.split('?')[1]||'').split('&').forEach(function(p){var kv=p.split('='); if(kv[0]) q[decodeURIComponent(kv[0])]=decodeURIComponent(kv[1]||'');});
+    // Data paths of the forms (no server in the demo: paths show [your-server], ArcGIS writes need the real server).
+    var FEEDS=[['ecph','EC/PH Entry','/ecph-entry','field'],['fertigation','Fertigation Entry','/fertigation/entry','field'],['irrigation','Irrigation Entry','/irrigation/entry','field'],['harvest','Harvest Entry','/harvest/entry','field'],['crop-rotation','Crop Rotation','/admin/crop-history','field'],['pump-room','Pump Room','/pump-room','site']];
+    var fdSt=function(){ try{ return JSON.parse(localStorage.getItem('agro_demo_feeds_v1')||'{}'); }catch(e){ return {}; } };
+    var fdSave=function(x){ try{ localStorage.setItem('agro_demo_feeds_v1',JSON.stringify(x)); }catch(e){} };
+    if(path==='/feeds'){ var fs0=fdSt(); return ok(FEEDS.map(function(f){ var c=fs0[f[0]]||{}; return {form:f[0],label:f[1],page:f[2],relation:'1:N',linkBy:f[3],key:f[3]==='field'?'GlobalID → STRUCT_GLOBALID':'Site KeyID → SITE_KEYID',records:0,arcgisTableUrl:c.url||null,syncMode:c.mode||'off',includeNames:false,lastSyncedAt:null,lastSyncCount:null,lastError:null,keys:c.keys||[],demo:true}; })); }
+    var fdm=path.match(/^\/feeds\/([a-z-]+)(?:\/(keys|sync|arcgis-table))?$/), fdk=path.match(/^\/feeds\/keys\/([^/]+)$/);
+    if(fdk&&method==='DELETE'){ var fs1=fdSt(); Object.keys(fs1).forEach(function(k){ fs1[k].keys=(fs1[k].keys||[]).filter(function(x){return x.id!==fdk[1];}); }); fdSave(fs1); return ok(null); }
+    if(fdm&&method!=='GET'){ var fs2=fdSt(), fc=fs2[fdm[1]]=fs2[fdm[1]]||{};
+      if(fdm[2]==='keys'){ var hex=''; for(var hi=0;hi<48;hi++) hex+='0123456789abcdef'[Math.floor(Math.random()*16)]; var raw='feed_'+fdm[1].replace(/-/g,'')+'_'+hex; var kk={id:'k'+Date.now(),form:fdm[1],key_prefix:raw.slice(0,raw.indexOf('_',5)+5),created_at:new Date().toISOString(),last_used:null}; fc.keys=[kk].concat(fc.keys||[]); fdSave(fs2); return ok(Object.assign({key:raw},kk)); }
+      if(fdm[2]) return {success:false,error:{code:'DEMO',message:'The demo has no server. Creating and syncing ArcGIS tables runs on the AgroCloud server with an ArcGIS owner token.'}};
+      if(reqBody&&reqBody.syncMode) fc.mode=reqBody.syncMode; if(reqBody&&reqBody.arcgisTableUrl!==undefined) fc.url=reqBody.arcgisTableUrl||null; fdSave(fs2); return ok(null); }
     if(path==='/geo/model') return ok({subtypes:GEO_SUB,domains:GEO_DOM});
     if(path==='/geo/layers') return ok(geoItems());
     var gfm=path.match(/^\/geo\/(zone|site|farm_area|field)\/([^/]+)\/forms$/);
@@ -490,7 +501,7 @@
       return liveLayer().then(function(fc){ return fc&&(fc._live||fc._snapshot)?liveMeta():null; }).then(function(m){ return jsonRes(ok(m||DEMO_META)); });
     }
     if(isApi(url)){ var m=(init&&init.method)||'GET'; var b=null; try{b=init&&init.body?JSON.parse(init.body):null;}catch(e){}
-      return Promise.resolve(new Response(JSON.stringify(body(url,m,b)),{status:200,headers:{'Content-Type':'application/json'}})); }
+      var rb=body(url,m,b); return Promise.resolve(new Response(JSON.stringify(rb),{status:rb&&rb.success===false&&rb.error&&rb.error.code==='DEMO'?400:200,headers:{'Content-Type':'application/json'}})); }
     if(/socket\.io/.test(url)) return Promise.reject(new TypeError('demo: offline'));
     return of.apply(this,arguments);
   };

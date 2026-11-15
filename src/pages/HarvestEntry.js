@@ -39,6 +39,7 @@ import {
 } from '../utils/backendApi';
 import usePhiHarvestSave from '../components/harvest/usePhiHarvestSave';
 import HarvestEntryToolbar from '../components/harvest/HarvestEntryToolbar';
+import FormPathButton from '../components/feeds/FormDataPath';
 import useOpsExcelExport from '../hooks/useOpsExcelExport';
 import { OPS_EXPORT } from '../utils/companyExcelExport';
 import { buildHarvestExcelSheets } from '../utils/harvestExcelExport';
@@ -1657,6 +1658,7 @@ function HarvestEntry() {
           onDateFromChange={handleDateFromChange}
           onDateToChange={handleDateToChange}
           onExport={handleExport}
+          extraActions={<FormPathButton form="harvest" label="Harvest Entry" />}
         />
         {currentTab?.component === 'daily' ? (
           <DailyWorksheetTab siteId={activeSiteId} key={`dw-${refreshKey}`} />
