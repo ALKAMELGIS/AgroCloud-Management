@@ -560,3 +560,9 @@ Pages:
   - **Area I draw** (the index shows nothing until an area is drawn or picked, then only inside it — always clipped): the user's own layer, **My areas**, not linked to Agro_Structures — draw a polygon, rectangle or circle, or upload GeoJSON / KML; each area can be shown / hidden, renamed (double-click), deleted, exported as GeoJSON; the active one clips the image on the server (WMS GEOMETRY). Kept on the device (`agrocloud_my_aois`).
 - Under both: the AOI's facts — name, area, date, source, and the index mean (min – max) for the chosen date or the latest one of the period, read live from Sentinel-2.
 - Design: canvas "AgroCloud · Satellite AOI clip" (boards A and B).
+
+## Round 52 — Live index stays visible while zooming
+- Map: `fadeAnimation={false}` so loaded tiles become active right away and are kept until the new zoom level loads.
+- WMS layer: `updateWhenZooming:false`, `keepBuffer:4` (no requests for intermediate zoom levels).
+- ClippedWMS: Leaflet's `_abortLoading` dropped every canvas tile of the old zoom (a canvas has no `complete` flag). Now only tiles still loading are dropped, so the old image stays until the new one is ready.
+- Test (wheel zoom, 700 ms tile delay): blank frames 92 → 0 in clip mode; 0 in plain mode.

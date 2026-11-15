@@ -46,8 +46,22 @@ const ClippedWMS = L.TileLayer.WMS.extend({
     };
     img.onload = draw;
     img.onerror = () => done(null, canvas);
+    canvas._img = img;
     img.src = this.getTileUrl(coords);
     return canvas;
+  },
+  // Leaflet's own version drops every tile of another zoom whose <img> is not
+  // "complete"; a canvas has no such flag, so it dropped the loaded tiles too and
+  // the image blinked out at each zoom step. Only tiles still loading are dropped.
+  _abortLoading() {
+    Object.keys(this._tiles).forEach((key) => {
+      const t = this._tiles[key];
+      if (t.coords.z === this._tileZoom || t.loaded) return;
+      if (t.el._img) { t.el._img.onload = null; t.el._img.onerror = null; t.el._img.src = ''; }
+      L.DomUtil.remove(t.el);
+      delete this._tiles[key];
+      this.fire('tileabort', { tile: t.el, coords: t.coords });
+    });
   },
 });
 
@@ -64,6 +78,9 @@ function clipShapes(features) {
 function wmsLayer(sat, time, pane, shapes) {
   const opts = {
     layers: 'S2', format: 'image/png', transparent: true, version: '1.3.0', tileSize: 512, maxZoom: 20,
+    // Satellite tiles take a second or more: keep the loaded ones on screen while zooming,
+    // and ask for the new level only once the zoom settles (no blank frames, no wasted requests).
+    updateWhenZooming: false, keepBuffer: 4,
     k: sat.tileKey, index: sat.index, time, maxcc: sat.maxcc, opacity: sat.opacity, pane,
   };
   // Drawn areas clip on the server (GEOMETRY); Agro_Structures fields clip inside each tile.
