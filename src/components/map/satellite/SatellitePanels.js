@@ -270,7 +270,7 @@ export function AoiPanel({ sat, mapRef, fields = [], structures = [] }) {
     sat.setAoi(f); zoomTo(f);
   };
   const toggleType = (code) => sat.setStructTypes((t) => (t.includes(code) ? t.filter((x) => x !== code) : [...t, code]));
-  const setMode = (m) => { sat.setAoiMode(m); sat.setDrawing(false); sat.setAoi(m === 'drawn' ? (sat.myAreas.find((a) => a.id === sat.activeArea)?.feature || null) : null); };
+  const setMode = (m) => { sat.setAoiMode(m); sat.setDrawing(false); sat.setShow(true); sat.setAoi(m === 'drawn' ? (sat.myAreas.find((a) => a.id === sat.activeArea)?.feature || null) : null); };
   const exportArea = () => {
     if (!sat.aoi) return;
     const url = URL.createObjectURL(new Blob([JSON.stringify({ type: 'FeatureCollection', features: [sat.aoi] })], { type: 'application/geo+json' }));
@@ -417,9 +417,11 @@ export function AoiPanel({ sat, mapRef, fields = [], structures = [] }) {
               const ll = parseLatLng(coord);
               if (ll && mapRef.current) mapRef.current.setView(ll, 15); else setError(isAr ? 'اكتب الإحداثيات هكذا: خط العرض، خط الطول' : 'Write the coordinates as: latitude, longitude');
             }} />
-          <FormControlLabel sx={{ m: 0, justifyContent: 'space-between' }} labelPlacement="start" disabled={!sat.aoi}
-            control={<Switch checked={Boolean(sat.clip && sat.aoi)} onChange={(e) => { sat.setClip(e.target.checked); if (e.target.checked) sat.setShow(true); }} />}
-            label={<Typography sx={{ fontSize: '0.8125rem' }}>{isAr ? 'قصّ الصورة على المنطقة' : 'Clip the image to the area'}</Typography>} />
+          {!sat.aoi && (
+            <Alert severity="info" icon={false} sx={{ py: 0.5, fontSize: '0.75rem' }}>
+              {isAr ? 'يظهر المؤشر داخل المنطقة فقط. ارسمها أو اخترها من «مناطقي».' : 'The index shows only inside the area. Draw it or pick one from My areas.'}
+            </Alert>
+          )}
         </>
       )}
 
@@ -525,7 +527,7 @@ export function MetadataPanel({ sat }) {
     ['Resolution', '10 m (visible, NIR) · 20 m (SWIR)'],
     ['Revisit', '≈ 5 days'],
     ['AOI', sat.aoi ? `${sat.aoi.properties?.name || 'AOI'} · ${aoiAreaHa(sat.aoi).toLocaleString('en-US', { maximumFractionDigits: 2 })} ha` : '—'],
-    ['Clip', sat.aoiMode === 'structures' ? (sat.structClip ? `Agro_Structures · ${sat.structTypes.join(', ')}` : 'No') : (sat.clip && sat.aoi ? 'My area' : 'No')],
+    ['Clip', sat.aoiMode === 'structures' ? (sat.structClip ? `Agro_Structures · ${sat.structTypes.join(', ')}` : 'No') : (sat.aoi ? 'My area' : '—')],
   ].filter(Boolean);
   return (
     <Box component="dl" sx={{ ...section, m: 0, display: 'grid', gridTemplateColumns: 'auto 1fr', columnGap: 2, rowGap: 1 }}>

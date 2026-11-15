@@ -67,7 +67,8 @@ function wmsLayer(sat, time, pane, shapes) {
     k: sat.tileKey, index: sat.index, time, maxcc: sat.maxcc, opacity: sat.opacity, pane,
   };
   // Drawn areas clip on the server (GEOMETRY); Agro_Structures fields clip inside each tile.
-  if (sat.aoiMode === 'drawn' && sat.clip && sat.wkt) opts.geometry = sat.wkt;
+  // A drawn area always clips: the index shows only inside it.
+  if (sat.aoiMode === 'drawn' && sat.wkt) opts.geometry = sat.wkt;
   if (shapes) return new ClippedWMS(WMS_URL, { ...opts, clipShapes: shapes });
   return L.tileLayer.wms(WMS_URL, opts);
 }
@@ -87,6 +88,8 @@ export default function SatelliteMapLayers({ sat, clipFeatures = null }) {
   // Main image.
   useEffect(() => {
     if (!sat.ready || !sat.show) return undefined;
+    // "Area I draw": nothing until an area is drawn (or picked from My areas).
+    if (sat.aoiMode === 'drawn' && !sat.wkt) return undefined;
     ensurePane(map, 'satellite', 350);
     const layer = wmsLayer(sat, sat.time, 'satellite', shapes).addTo(map);
     return () => { layer.remove(); };
@@ -101,6 +104,7 @@ export default function SatelliteMapLayers({ sat, clipFeatures = null }) {
   // Compare: the second date on its own pane, clipped by the swipe position.
   useEffect(() => {
     if (!sat.ready || !sat.show || !sat.compare.on || !sat.compare.date) return undefined;
+    if (sat.aoiMode === 'drawn' && !sat.wkt) return undefined;
     const pane = ensurePane(map, 'satellite-compare', 351);
     const layer = wmsLayer(sat, `${sat.compare.date}/${sat.compare.date}`, 'satellite-compare', shapes).addTo(map);
     const rtl = document.documentElement.dir === 'rtl';
