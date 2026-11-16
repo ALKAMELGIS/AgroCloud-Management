@@ -341,7 +341,7 @@ export default function StandardChart({ spec, height = 250 }) {
   return (
     <Box sx={{
       bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 2,
-      p: { xs: 1.75, sm: 2 }, display: 'flex', flexDirection: 'column', gap: 1, height: '100%', minWidth: 0,
+      p: { xs: 4, sm: 5 }, display: 'flex', flexDirection: 'column', gap: 3, height: '100%', minWidth: 0,
     }}>
       <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
         <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -381,7 +381,7 @@ export default function StandardChart({ spec, height = 250 }) {
 export function StandardChartGrid({ charts }) {
   return (
     <Box sx={{
-      display: 'grid', gap: 2, mb: { xs: 4, md: 5 },
+      display: 'grid', gap: { xs: 3, md: 4 }, mb: { xs: 6, md: 8 },
       gridTemplateColumns: { xs: 'minmax(0,1fr)', md: 'repeat(2, minmax(0,1fr))', xl: 'repeat(3, minmax(0,1fr))' },
     }}>
       {charts.map((c) => <StandardChart key={c.id} spec={c} />)}

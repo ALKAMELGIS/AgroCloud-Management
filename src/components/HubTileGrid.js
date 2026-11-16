@@ -18,18 +18,18 @@ function HubTile({ tile, onOpen, L }) {
         position: 'relative',
         display: 'flex',
         alignItems: 'center',
-        gap: 3,
+        gap: { xs: 2.5, sm: 3 },
         width: '100%',
-        minHeight: { xs: 60, sm: 64 },
-        px: { xs: 3, sm: 3.5 },
-        py: 2.5,
+        minHeight: { xs: 72, sm: 80 },
+        px: { xs: 3, sm: 4 },
+        py: 3,
         textAlign: 'start',
         borderRadius: 2,
         bgcolor: 'background.paper',
         border: '1px solid',
         borderColor: 'divider',
         boxShadow: t.shadows[1],
-        transition: 'border-color 200ms ease, box-shadow 220ms ease, transform 220ms cubic-bezier(0.22,1,0.36,1)',
+        transition: 'border-color 160ms ease, box-shadow 160ms ease',
         '& .hub-arrow': {
           opacity: 0,
           transform: t.direction === 'rtl' ? 'translateX(4px) scaleX(-1)' : 'translateX(-4px)',
@@ -37,8 +37,7 @@ function HubTile({ tile, onOpen, L }) {
         },
         '&:hover, &.Mui-focusVisible': {
           borderColor: alpha(t.palette.primary.main, 0.35),
-          boxShadow: t.shadows[5],
-          transform: 'translateY(-2px)',
+          boxShadow: t.shadows[3],
           '& .hub-arrow': { opacity: 1, transform: t.direction === 'rtl' ? 'translateX(0) scaleX(-1)' : 'translateX(0)' },
           '& .hub-icon': { bgcolor: 'primary.main', color: 'primary.contrastText' },
         },
@@ -49,8 +48,8 @@ function HubTile({ tile, onOpen, L }) {
       <Box
           className="hub-icon"
           sx={(t) => ({
-            width: 36,
-            height: 36,
+            width: 40,
+            height: 40,
             flexShrink: 0,
             borderRadius: 1.5,
             display: 'grid',
@@ -60,11 +59,11 @@ function HubTile({ tile, onOpen, L }) {
             transition: 'background-color 200ms ease, color 200ms ease',
           })}
         >
-          <Icon sx={{ fontSize: 20 }} />
+          <Icon sx={{ fontSize: 22 }} />
       </Box>
       <Typography
         component="span"
-        sx={{ flex: 1, minWidth: 0, fontWeight: 600, fontSize: { xs: '0.875rem', sm: '0.9375rem' }, color: 'text.primary', lineHeight: 1.3, letterSpacing: '-0.01em' }}
+        sx={{ flex: 1, minWidth: 0, fontWeight: 600, fontSize: { xs: '0.875rem', sm: '0.9375rem' }, color: 'text.primary', lineHeight: 1.35 }}
       >
         {L(tile.label)}
       </Typography>
@@ -91,7 +90,7 @@ export default function HubTileGrid({ sections, title = 'Home', recent = [] }) {
       <Typography component="h1" sx={srOnly}>{L(title)}</Typography>
 
       {recent.length > 0 && (
-        <Box component="section" aria-label="Recently opened" sx={{ mb: { xs: 4, md: 4.5 } }}>
+        <Box component="section" aria-label="Recently opened" sx={{ mb: { xs: 5, md: 6 } }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2.5 }}>
             <RecentIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
             <Typography variant="h6" component="h2" sx={{ fontSize: '1rem', fontWeight: 600 }}>
@@ -159,8 +158,8 @@ export default function HubTileGrid({ sections, title = 'Home', recent = [] }) {
       )}
 
       {sections.map((section) => (
-        <Box component="section" key={section.title} sx={{ mb: { xs: 4, md: 4.5 } }} aria-label={section.title}>
-          <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 3, mb: 2.5 }}>
+        <Box component="section" key={section.title} sx={{ mb: { xs: 5, md: 6 } }} aria-label={section.title}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, mb: 3 }}>
             <Typography variant="h6" component="h2" sx={{ fontSize: '1rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
               {L(calmTitle(section.title))}
             </Typography>
@@ -172,11 +171,13 @@ export default function HubTileGrid({ sections, title = 'Home', recent = [] }) {
           <Box
             sx={{
               display: 'grid',
-              gap: { xs: 2.5, sm: 3 },
+              gap: { xs: 2.5, sm: 3, md: 4 },
+              // Phones 2 and tablets 3 per row; on wide screens each section's cards
+              // share the full row, so no section leaves an empty gap at the end.
               gridTemplateColumns: {
                 xs: 'repeat(2, minmax(0, 1fr))',
                 sm: 'repeat(3, minmax(0, 1fr))',
-                md: 'repeat(auto-fill, minmax(232px, 1fr))',
+                lg: 'repeat(auto-fit, minmax(200px, 1fr))',
               },
             }}
           >

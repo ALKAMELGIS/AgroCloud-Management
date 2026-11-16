@@ -87,7 +87,7 @@ function MeterRow({ label, m, decimals }) {
   const dot = m.status === 'none' ? '#9aa39c' : m.status === 'good' ? '#1f7a4d' : STATUS[m.status].color;
   return (
     <Tooltip title={`${label} ${Number.isFinite(m.value) ? m.value.toFixed(decimals) : '–'} · target ${m.lo}–${m.hi}`} arrow>
-      <Box sx={{ display: 'grid', gridTemplateColumns: 'max-content minmax(0,1fr) 40px', alignItems: 'center', gap: 1 }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: 'max-content minmax(0,1fr) 44px', alignItems: 'center', columnGap: 3 }}>
         <Typography noWrap sx={{ fontSize: 11, color: 'text.secondary', minWidth: 44 }}>{label}</Typography>
         <Box dir="ltr" sx={{ position: 'relative', height: 8, borderRadius: 1, bgcolor: 'action.hover' }}>
           <Box style={{ left: `${m.bandLeft}%`, width: `${m.bandWidth}%` }} sx={{ position: 'absolute', top: 0, bottom: 0, bgcolor: BAND_BG, borderRadius: 1 }} />
@@ -222,18 +222,8 @@ export default function FarmMonitor({
         </Box>
       )}
     >
-      <Box sx={{ px: { xs: 2, sm: 2.5 }, pt: 2, pb: 2.5 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2.5, mb: 2, flexWrap: 'wrap', fontSize: 12, color: 'text.secondary' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-            <Box component="span" sx={{ width: 22, height: 8, borderRadius: 1, bgcolor: BAND_BG }} />
-            Target band · dot is the latest reading
-          </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}><PhiIcon sx={{ fontSize: 15 }} />PHI days left</Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}><BugIcon sx={{ fontSize: 15 }} />Pest found</Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}><SprayIcon sx={{ fontSize: 15 }} />Sprayed today</Box>
-        </Box>
-
-        <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { xs: 'repeat(auto-fill, minmax(156px, 1fr))', sm: 'repeat(auto-fill, minmax(220px, 1fr))' } }}>
+      <Box sx={{ p: { xs: 4, sm: 5 } }}>
+        <Box sx={{ display: 'grid', gap: { xs: 3, md: 4 }, gridTemplateColumns: { xs: 'repeat(auto-fill, minmax(160px, 1fr))', sm: 'repeat(auto-fill, minmax(240px, 1fr))' } }}>
         {visibleFields.map((field, idx) => {
           const hasPHI = field.active_phi_count > 0;
           const refDateObj = refNow(dateTo);
@@ -274,7 +264,7 @@ export default function FarmMonitor({
                 cursor: 'pointer', borderRadius: 2, bgcolor: 'background.paper', overflow: 'hidden',
                 border: '1px solid', borderColor: selected ? HEADER_GREEN : 'divider',
                 boxShadow: selected ? `0 0 0 2px ${HEADER_GREEN}` : 'none',
-                display: 'flex', flexDirection: 'column', minWidth: 0,
+                display: 'flex', flexDirection: 'column', minWidth: 0, userSelect: 'none',
                 transition: 'border-color 150ms ease, box-shadow 150ms ease',
                 '&:hover': { borderColor: HEADER_GREEN },
                 '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
@@ -282,7 +272,7 @@ export default function FarmMonitor({
                 '@media (prefers-reduced-motion: reduce)': { animation: 'none' },
               }}
             >
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.75, py: 1.25, bgcolor: selected ? HEADER_GREEN_SELECTED : HEADER_GREEN, color: '#fff' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, px: 4, py: 3, bgcolor: selected ? HEADER_GREEN_SELECTED : HEADER_GREEN, color: '#fff' }}>
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Typography noWrap sx={{ fontSize: 14, fontWeight: 600, fontFamily: MONO, lineHeight: 1.3, color: '#fff' }}>{field.name}</Typography>
                   <Typography noWrap sx={{ fontSize: 12, color: 'rgba(255,255,255,0.78)' }}>
@@ -291,14 +281,14 @@ export default function FarmMonitor({
                 </Box>
                 <StatusChip status={overall}>{stale ? (ecphDate ? 'Stale' : 'No data') : STATUS_WORD[overall]}</StatusChip>
               </Box>
-              <Box sx={{ p: 1.75, pt: 1.5, display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+              <Box sx={{ px: 4, pt: 3.5, pb: 3, display: 'flex', flexDirection: 'column', gap: 3, flex: 1 }}>
 
-              <Box sx={{ display: 'grid', gap: 1 }} onClick={openEcph}>
+              <Box sx={{ display: 'grid', gap: 2.5 }} onClick={openEcph}>
                 <MeterRow label="EC out" m={ec} decimals={2} />
                 <MeterRow label="pH out" m={ph} decimals={1} />
               </Box>
 
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minHeight: 20, flexWrap: 'wrap' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, height: 28, mt: 'auto', pt: 2.5, borderTop: '1px solid', borderColor: 'divider' }}>
                 <Typography sx={{ fontSize: 11, color: 'text.secondary', flex: 1, minWidth: 0 }} noWrap>
                   {readingAge(ecphDate, dateTo)}
                 </Typography>
@@ -333,6 +323,16 @@ export default function FarmMonitor({
             </Box>
           );
         })}
+        </Box>
+
+        <Box sx={{ display: 'flex', alignItems: 'center', columnGap: 5, rowGap: 2, mt: 5, pt: 4, borderTop: '1px solid', borderColor: 'divider', flexWrap: 'wrap', fontSize: 12, color: 'text.secondary' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+            <Box component="span" sx={{ width: 22, height: 8, borderRadius: 1, bgcolor: BAND_BG }} />
+            Target band · dot is the latest reading
+          </Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}><PhiIcon sx={{ fontSize: 15 }} />PHI days left</Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}><BugIcon sx={{ fontSize: 15 }} />Pest found</Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}><SprayIcon sx={{ fontSize: 15 }} />Sprayed today</Box>
         </Box>
 
       {/* Field Summary Popup */}
