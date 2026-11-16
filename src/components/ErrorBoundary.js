@@ -18,6 +18,19 @@ class ErrorBoundary extends Component {
   }
 
   componentDidCatch(error, errorInfo) {
+    // After an update, a page opened earlier asks for code files that no longer
+    // exist. Reload once to fetch the new version instead of showing an error.
+    const msg = `${error?.name || ''} ${error?.message || ''}`;
+    if (/ChunkLoadError|Loading (CSS )?chunk|dynamically imported module|Importing a module script failed/i.test(msg)) {
+      try {
+        const last = Number(sessionStorage.getItem('agro_chunk_reload') || 0);
+        if (Date.now() - last > 30000) {
+          sessionStorage.setItem('agro_chunk_reload', String(Date.now()));
+          window.location.reload();
+          return;
+        }
+      } catch { /* storage blocked: show the normal message */ }
+    }
     this.setState({ errorInfo });
     captureException(error, { componentStack: errorInfo?.componentStack });
     // eslint-disable-next-line no-console

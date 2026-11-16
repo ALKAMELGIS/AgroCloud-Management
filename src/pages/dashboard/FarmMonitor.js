@@ -1,15 +1,18 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Box, Card, CardContent, Chip, Grid, ToggleButton, ToggleButtonGroup,
+  Box, Card, Chip, Grid, ToggleButton, ToggleButtonGroup,
   Typography, Tooltip, IconButton, CircularProgress,
 } from '@mui/material';
+import { keyframes } from '@mui/system';
 import {
   BugReportOutlined as BugIcon,
   OpacityOutlined as SprayIcon,
-  CloudQueueOutlined as CloudIcon,
+  HourglassBottomOutlined as PhiIcon,
   RefreshOutlined as RefreshIcon,
 } from '@mui/icons-material';
+import { StatusChip } from '../../components/dashboard/clearCharts';
+import { STATUS } from '../../theme/formIdentity';
 import FieldWeatherStrip from '../../components/dashboard/FieldWeatherStrip';
 import DashboardSection from '../../components/dashboard/DashboardSection';
 
@@ -32,11 +35,83 @@ function getEcPhColor(value, threshold) {
   return '#4caf50';
 }
 
+/** "Now" for this view: today, or the end of the chosen range when it lies in the past. */
+function refNow(refDate) {
+  const now = new Date();
+  if (!refDate) return now;
+  const end = new Date(refDate);
+  return Number.isNaN(end.getTime()) || end > now ? now : end;
+}
+
 function isStale(dateStr, refDate) {
   if (!dateStr) return true;
   const d = new Date(dateStr);
-  const ref = refDate ? new Date(refDate) : new Date();
+  const ref = refNow(refDate);
   return (ref - d) / (1000 * 60 * 60 * 24) > 3;
+}
+
+
+const MONO = '"IBM Plex Mono", monospace';
+const BAND_BG = '#d9ece3';
+const STATUS_WORD = { good: 'In range', warn: 'Watch', out: 'Out', none: 'No data' };
+/** Used when no target is set for the crop: the same bands as the EC/pH dashboard. */
+const DEFAULT_BANDS = { ec: [1.8, 2.6], ph: [5.5, 6.5] };
+const rise = keyframes`from { opacity: 0; transform: translateY(6px); }`;
+
+/** One reading against its band: status, band and where the dot sits (0–100%). */
+function meter(value, threshold, fallback, stale) {
+  const v = value == null || value === '' ? NaN : Number(value);
+  const lo = threshold?.warningMin != null ? Number(threshold.warningMin) : fallback[0];
+  const hi = threshold?.warningMax != null ? Number(threshold.warningMax) : fallback[1];
+  const span = hi - lo || 1;
+  const min = lo - span * 0.6, max = hi + span * 0.6;
+  const pct = (x) => Math.min(100, Math.max(0, ((x - min) / (max - min)) * 100));
+  let status = 'none';
+  if (Number.isFinite(v) && !stale) {
+    const color = threshold ? getEcPhColor(v, threshold) : null;
+    if (color === '#f44336') status = 'out';
+    else if (color === '#ff9800') status = 'warn';
+    else if (color === '#4caf50') status = 'good';
+    else if (v < lo || v > hi) status = 'out';
+    else if (v <= lo + span * 0.1 || v >= hi - span * 0.1) status = 'warn';
+    else status = 'good';
+  }
+  return { value: v, status, bandLeft: pct(lo), bandWidth: pct(hi) - pct(lo), dot: Number.isFinite(v) ? pct(v) : null, lo, hi };
+}
+
+function MeterRow({ label, m, decimals }) {
+  const ink = m.status === 'none' ? 'text.secondary' : m.status === 'good' ? 'text.primary' : STATUS[m.status].color;
+  const dot = m.status === 'none' ? '#9aa39c' : m.status === 'good' ? '#1f7a4d' : STATUS[m.status].color;
+  return (
+    <Tooltip title={`${label} ${Number.isFinite(m.value) ? m.value.toFixed(decimals) : '–'} · target ${m.lo}–${m.hi}`} arrow>
+      <Box sx={{ display: 'grid', gridTemplateColumns: 'max-content minmax(0,1fr) 40px', alignItems: 'center', gap: 1 }}>
+        <Typography noWrap sx={{ fontSize: 11, color: 'text.secondary', minWidth: 44 }}>{label}</Typography>
+        <Box dir="ltr" sx={{ position: 'relative', height: 8, borderRadius: 1, bgcolor: 'action.hover' }}>
+          <Box style={{ left: `${m.bandLeft}%`, width: `${m.bandWidth}%` }} sx={{ position: 'absolute', top: 0, bottom: 0, bgcolor: BAND_BG, borderRadius: 1 }} />
+          {m.dot != null && (
+            <Box style={{ left: `${m.dot}%` }} sx={{
+              position: 'absolute', top: '50%', width: 12, height: 12, ml: '-6px', mt: '-6px', borderRadius: '50%',
+              bgcolor: dot, boxShadow: (t) => `0 0 0 2px ${t.palette.background.paper}`,
+              transition: 'left 400ms ease',
+            }} />
+          )}
+        </Box>
+        <Typography sx={{ fontSize: 13, fontWeight: 600, fontFamily: MONO, textAlign: 'right', color: ink, fontVariantNumeric: 'tabular-nums' }}>
+          {Number.isFinite(m.value) ? m.value.toFixed(decimals) : '–'}
+        </Typography>
+      </Box>
+    </Tooltip>
+  );
+}
+
+/** "Today", "Yesterday", "4 d ago" for the latest EC/pH reading. */
+function readingAge(dateStr, refDate) {
+  if (!dateStr) return 'No EC/pH reading';
+  const ref = refNow(refDate);
+  const days = Math.floor((ref - new Date(dateStr)) / 86400000);
+  if (days <= 0) return 'Read today';
+  if (days === 1) return 'Read yesterday';
+  return `Read ${days} d ago`;
 }
 
 export default function FarmMonitor({
@@ -144,271 +219,116 @@ export default function FarmMonitor({
         </Box>
       )}
     >
-      <Box sx={{ px: 2, pt: 1.5, pb: 2 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1.5, flexWrap: 'wrap' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: '#f44336' }} />
-            <Typography variant="caption" color="text.secondary">PHI (red &gt;1d / orange last day)</Typography>
+      <Box sx={{ px: { xs: 2, sm: 2.5 }, pt: 2, pb: 2.5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2.5, mb: 2, flexWrap: 'wrap', fontSize: 12, color: 'text.secondary' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+            <Box component="span" sx={{ width: 22, height: 8, borderRadius: 1, bgcolor: BAND_BG }} />
+            Target band · dot is the latest reading
           </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <BugIcon sx={{ fontSize: 14, color: '#d32f2f' }} />
-            <Typography variant="caption" color="text.secondary">Pest found</Typography>
-          </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <SprayIcon sx={{ fontSize: 14, color: '#1976d2' }} />
-            <Typography variant="caption" color="text.secondary">Sprayed today</Typography>
-          </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#4caf50', border: '1px solid #388e3c' }} />
-            <Typography variant="caption" color="text.secondary">EC/pH normal</Typography>
-          </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#ff9800', border: '1px solid #e65100' }} />
-            <Typography variant="caption" color="text.secondary">EC/pH warning</Typography>
-          </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#f44336', border: '1px solid #c62828' }} />
-            <Typography variant="caption" color="text.secondary">EC/pH critical</Typography>
-          </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#9e9e9e', border: '1px solid #757575' }} />
-            <Typography variant="caption" color="text.secondary">No data / not configured</Typography>
-          </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <CloudIcon sx={{ fontSize: 14, color: '#0288d1' }} />
-            <Typography variant="caption" color="text.secondary">Live weather (OpenWeather)</Typography>
-          </Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}><PhiIcon sx={{ fontSize: 15 }} />PHI days left</Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}><BugIcon sx={{ fontSize: 15 }} />Pest found</Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}><SprayIcon sx={{ fontSize: 15 }} />Sprayed today</Box>
         </Box>
 
-      <Grid container spacing={1.5}>
-        {visibleFields.map((field) => {
+        <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { xs: 'repeat(auto-fill, minmax(156px, 1fr))', sm: 'repeat(auto-fill, minmax(220px, 1fr))' } }}>
+        {visibleFields.map((field, idx) => {
           const hasPHI = field.active_phi_count > 0;
-          const refDateObj = dateTo ? new Date(dateTo) : new Date();
+          const refDateObj = refNow(dateTo);
           const phiDays = hasPHI
             ? Math.max(0, Math.ceil((new Date(field.nearest_phi_end) - refDateObj) / (1000 * 60 * 60 * 24)))
             : 0;
-          const phiEndingSoon = hasPHI && phiDays > 0 && phiDays <= 1;
-
           const hasUnresolvedPest = field.latest_scouting?.id && field.latest_scouting?.status !== 'resolved';
           const sprayedToday = !!field.spray_today;
 
           const cropThresholds = thresholdMap[field.current_crop_id] || {};
-          const ecInThreshold = cropThresholds.ec_in || cropThresholds.ec;
-          const ecOutThreshold = cropThresholds.ec_out || cropThresholds.ec;
-          const phInThreshold = cropThresholds.ph_in || cropThresholds.ph;
-          const phOutThreshold = cropThresholds.ph_out || cropThresholds.ph;
-
-          const ecIn = field.latest_ecph?.ec_in;
-          const ecOut = field.latest_ecph?.ec_out;
-          const phIn = field.latest_ecph?.ph_in;
-          const phOut = field.latest_ecph?.ph_out;
           const ecphDate = field.latest_ecph?.date;
           const stale = isStale(ecphDate, dateTo);
-
-          const ecInColor = getEcPhColor(ecIn, ecInThreshold);
-          const ecOutColor = getEcPhColor(ecOut, ecOutThreshold);
-          const phInColor = getEcPhColor(phIn, phInThreshold);
-          const phOutColor = getEcPhColor(phOut, phOutThreshold);
-
-          const worstEc = (ecInColor === '#f44336' || ecOutColor === '#f44336') ? '#f44336'
-            : (ecInColor === '#ff9800' || ecOutColor === '#ff9800') ? '#ff9800'
-            : ecInColor;
-          const worstPh = (phInColor === '#f44336' || phOutColor === '#f44336') ? '#f44336'
-            : (phInColor === '#ff9800' || phOutColor === '#ff9800') ? '#ff9800'
-            : phInColor;
-          const ecColor = stale ? '#9e9e9e' : worstEc;
-          const phColor = stale ? '#9e9e9e' : worstPh;
-
-          const isAlert = (c) => c === '#f44336' || c === '#ff9800';
-          const ecLabel = (isAlert(ecInColor) && isAlert(ecOutColor)) ? 'EC In/Out'
-            : isAlert(ecInColor) ? 'EC In'
-            : isAlert(ecOutColor) ? 'EC Out'
-            : 'EC';
-          const phLabel = (isAlert(phInColor) && isAlert(phOutColor)) ? 'pH In/Out'
-            : isAlert(phInColor) ? 'pH In'
-            : isAlert(phOutColor) ? 'pH Out'
-            : 'pH';
-
+          const ec = meter(field.latest_ecph?.ec_out, cropThresholds.ec_out || cropThresholds.ec, DEFAULT_BANDS.ec, stale);
+          const ph = meter(field.latest_ecph?.ph_out, cropThresholds.ph_out || cropThresholds.ph, DEFAULT_BANDS.ph, stale);
+          const rank = { out: 3, warn: 2, good: 1, none: 0 };
+          const worst = rank[ec.status] >= rank[ph.status] ? ec.status : ph.status;
+          const overall = stale ? 'none' : worst;
           const selected = (selectedFieldId || fieldSummary?.id) === field.id;
+          const openEcph = (e) => {
+            e.stopPropagation();
+            if (onFieldSelect) onFieldSelect(field);
+            if (onTabSwitch) onTabSwitch(0);
+          };
 
           return (
-            <Grid size={{ xs: 6, sm: 4, md: 3, lg: 2 }} key={field.id}>
-              <Card
-                variant="outlined"
-                sx={{
-                  cursor: 'pointer',
-                  position: 'relative',
-                  overflow: 'visible',
-                  boxShadow: 'none',
-                  borderWidth: 2,
-                  borderColor: selected ? 'table.selection' : 'table.gridline',
-                  bgcolor: selected ? 'table.selectionRange' : 'background.paper',
-                  '&:hover': { borderColor: 'table.selection' },
-                }}
-                onClick={() => {
-                  const deselect = (selectedFieldId || fieldSummary?.id) === field.id;
-                  setFieldSummary(deselect ? null : field);
-                  if (onFieldSelect) onFieldSelect(deselect ? null : field);
-                }}
-              >
-                {/* PHI Ribbon(s) — per-segment when available */}
-                {hasPHI && phiDays > 0 && (() => {
-                  const details = field.active_phi_details || [];
-                  const validDetails = details.filter(d => d && d.days > 0);
-                  if (validDetails.length === 0) {
-                    return (
-                      <Box sx={{
-                        position: 'absolute', top: -6, left: -6, zIndex: 1,
-                        bgcolor: phiEndingSoon ? '#ff9800' : '#f44336',
-                        color: '#fff', borderRadius: 0,
-                        px: 0.7, py: 0.2, fontSize: '0.6875rem', fontWeight: 700,
-                        lineHeight: 1.2, boxShadow: 1,
-                      }}>
-                        PHI {phiDays}d
-                      </Box>
-                    );
-                  }
-                  const allWholeField = validDetails.every(d => !d.segment);
-                  if (allWholeField) {
-                    return (
-                      <Box sx={{
-                        position: 'absolute', top: -6, left: -6, zIndex: 1,
-                        bgcolor: phiEndingSoon ? '#ff9800' : '#f44336',
-                        color: '#fff', borderRadius: 0,
-                        px: 0.7, py: 0.2, fontSize: '0.6875rem', fontWeight: 700,
-                        lineHeight: 1.2, boxShadow: 1,
-                      }}>
-                        PHI {phiDays}d
-                      </Box>
-                    );
-                  }
-                  return (
-                    <Box sx={{
-                      position: 'absolute', top: -6, left: -6, zIndex: 1,
-                      display: 'flex', flexDirection: 'column', gap: '2px',
-                    }}>
-                      {validDetails.map((d, idx) => (
-                        <Box key={idx} sx={{
-                          bgcolor: d.days <= 1 ? '#ff9800' : '#f44336',
-                          color: '#fff', borderRadius: 0,
-                          px: 0.7, py: 0.15, fontSize: '0.6875rem', fontWeight: 700,
-                          lineHeight: 1.2, boxShadow: 1, whiteSpace: 'nowrap',
-                        }}>
-                          {d.segment ? `${d.segment}: ${d.days}d` : `PHI ${d.days}d`}
-                        </Box>
-                      ))}
-                    </Box>
-                  );
-                })()}
-
-                {/* Top-right icons: Pest + Spray */}
-                <Box sx={{ position: 'absolute', top: 6, right: 6, display: 'flex', gap: 0.3, zIndex: 2 }}>
-                  {hasUnresolvedPest && (
-                    <Tooltip title={`Pest: ${field.latest_scouting.pest || 'Unresolved'} (${field.latest_scouting.pct || 0}%)`} arrow>
-                      <IconButton
-                        size="small"
-                        sx={{ p: 0.3 }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          navigate(`/ipm/scouting-reports?highlight=${field.latest_scouting.id}`);
-                        }}
-                      >
-                        <BugIcon sx={{ fontSize: 16, color: '#ffcdd2' }} />
-                      </IconButton>
-                    </Tooltip>
-                  )}
-                  {sprayedToday && (
-                    <Tooltip title={`Sprayed: ${field.spray_today.product || 'Application'}`} arrow>
-                      <IconButton
-                        size="small"
-                        sx={{ p: 0.3 }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          navigate(`/ipm/pesticide-applications?highlight=${field.spray_today.id}`);
-                        }}
-                      >
-                        <SprayIcon sx={{ fontSize: 16, color: '#1976d2' }} />
-                      </IconButton>
-                    </Tooltip>
-                  )}
-                </Box>
-
-                <Box
-                  sx={{
-                    bgcolor: 'table.headerBg',
-                    color: 'table.headerText',
-                    px: 1.5,
-                    py: 0.75,
-                    pr: 4.5,
-                    borderTopLeftRadius: 4,
-                    borderTopRightRadius: 4,
-                  }}
-                >
-                  <Typography variant="subtitle2" noWrap fontWeight={700} sx={{ color: 'inherit' }}>
-                    {field.name}
+            <Box
+              key={`${field.id}-${idx}`}
+              role="button"
+              tabIndex={0}
+              aria-pressed={selected}
+              onClick={() => {
+                const deselect = (selectedFieldId || fieldSummary?.id) === field.id;
+                setFieldSummary(deselect ? null : field);
+                if (onFieldSelect) onFieldSelect(deselect ? null : field);
+              }}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.currentTarget.click(); } }}
+              sx={{
+                cursor: 'pointer', p: 1.75, borderRadius: 2, bgcolor: 'background.paper',
+                border: '1px solid', borderColor: selected ? 'primary.main' : 'divider',
+                boxShadow: selected ? (t) => `0 0 0 1px ${t.palette.primary.main}` : 'none',
+                display: 'flex', flexDirection: 'column', gap: 1.25, minWidth: 0,
+                transition: 'border-color 150ms ease, box-shadow 150ms ease',
+                '&:hover': { borderColor: 'text.secondary' },
+                '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
+                animation: `${rise} 420ms cubic-bezier(.2,.8,.2,1) both`, animationDelay: `${Math.min(idx, 11) * 40}ms`,
+                '@media (prefers-reduced-motion: reduce)': { animation: 'none' },
+              }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography noWrap sx={{ fontSize: 14, fontWeight: 600, fontFamily: MONO, lineHeight: 1.3 }}>{field.name}</Typography>
+                  <Typography noWrap sx={{ fontSize: 12, color: 'text.secondary' }}>
+                    {[field.crop_name, field.field_type_name].filter(Boolean).join(' · ') || 'No crop set'}
                   </Typography>
                 </Box>
+                <StatusChip status={overall}>{stale ? (ecphDate ? 'Stale' : 'No data') : STATUS_WORD[overall]}</StatusChip>
+              </Box>
 
-                <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
-                  <Chip
-                    label={field.field_type_name || 'Field'}
-                    size="small"
-                    variant="outlined"
-                    sx={{ fontSize: 11 }}
-                  />
-                  {field.crop_name && (
-                    <Typography variant="caption" display="block" color="text.secondary" mt={0.5}>
-                      {field.crop_name}
-                    </Typography>
-                  )}
-                  {field.last_bumble_bee_inspection && (
-                    <Typography variant="caption" display="block" color="text.secondary" mt={0.5}>
-                      Bee insp: {field.last_bumble_bee_inspection.total_boxes ?? 0} boxes
-                      {' · '}
-                      {new Date(String(field.last_bumble_bee_inspection.inspection_date).split('T')[0]).toLocaleDateString()}
-                    </Typography>
-                  )}
+              <Box sx={{ display: 'grid', gap: 1 }} onClick={openEcph}>
+                <MeterRow label="EC out" m={ec} decimals={2} />
+                <MeterRow label="pH out" m={ph} decimals={1} />
+              </Box>
 
-                  {/* EC/pH indicator bars */}
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.8 }}>
-                    <Tooltip title={ecIn != null || ecOut != null ? `EC In: ${ecIn != null ? Number(ecIn).toFixed(2) : '-'} | Out: ${ecOut != null ? Number(ecOut).toFixed(2) : '-'}` : 'No EC data'} arrow>
-                      <Box
-                        sx={{ display: 'flex', alignItems: 'center', gap: 0.3, cursor: 'pointer' }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (onFieldSelect) onFieldSelect(field);
-                          if (onTabSwitch) onTabSwitch(0);
-                        }}
-                      >
-                        <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: ecColor, border: `1px solid ${ecColor === '#9e9e9e' ? '#757575' : ecColor === '#4caf50' ? '#388e3c' : ecColor === '#ff9800' ? '#e65100' : '#c62828'}` }} />
-                        <Typography variant="caption" sx={{ fontSize: '0.6875rem', fontWeight: 600, color: ecColor === '#f44336' ? '#c62828' : ecColor === '#ff9800' ? '#e65100' : 'text.secondary' }}>{ecLabel}</Typography>
-                      </Box>
-                    </Tooltip>
-                    <Tooltip title={phIn != null || phOut != null ? `pH In: ${phIn != null ? Number(phIn).toFixed(2) : '-'} | Out: ${phOut != null ? Number(phOut).toFixed(2) : '-'}` : 'No pH data'} arrow>
-                      <Box
-                        sx={{ display: 'flex', alignItems: 'center', gap: 0.3, cursor: 'pointer' }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (onFieldSelect) onFieldSelect(field);
-                          if (onTabSwitch) onTabSwitch(0);
-                        }}
-                      >
-                        <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: phColor, border: `1px solid ${phColor === '#9e9e9e' ? '#757575' : phColor === '#4caf50' ? '#388e3c' : phColor === '#ff9800' ? '#e65100' : '#c62828'}` }} />
-                        <Typography variant="caption" sx={{ fontSize: '0.6875rem', fontWeight: 600, color: phColor === '#f44336' ? '#c62828' : phColor === '#ff9800' ? '#e65100' : 'text.secondary' }}>{phLabel}</Typography>
-                      </Box>
-                    </Tooltip>
-                  </Box>
-
-                  <FieldWeatherStrip
-                    weather={weatherByFieldId[field.id]}
-                    loading={weatherLoading && !weatherByFieldId[field.id]}
-                  />
-                </CardContent>
-              </Card>
-            </Grid>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minHeight: 20, flexWrap: 'wrap' }}>
+                <Typography sx={{ fontSize: 11, color: 'text.secondary', flex: 1, minWidth: 0 }} noWrap>
+                  {readingAge(ecphDate, dateTo)}
+                </Typography>
+                {hasPHI && phiDays > 0 && (
+                  <Tooltip title={`Pre-harvest interval: clear to harvest in ${phiDays} day${phiDays === 1 ? '' : 's'}`} arrow>
+                    <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.25, fontSize: 11, fontWeight: 600, color: phiDays <= 1 ? STATUS.warn.color : STATUS.out.color }}>
+                      <PhiIcon sx={{ fontSize: 15 }} />{phiDays}d
+                    </Box>
+                  </Tooltip>
+                )}
+                {hasUnresolvedPest && (
+                  <Tooltip title={`Pest: ${field.latest_scouting.pest || 'Unresolved'} (${field.latest_scouting.pct || 0}%)`} arrow>
+                    <IconButton size="small" aria-label="Open scouting report" sx={{ p: 0.25, color: STATUS.out.color }}
+                      onClick={(e) => { e.stopPropagation(); navigate(`/ipm/scouting-reports?highlight=${field.latest_scouting.id}`); }}>
+                      <BugIcon sx={{ fontSize: 16 }} />
+                    </IconButton>
+                  </Tooltip>
+                )}
+                {sprayedToday && (
+                  <Tooltip title={`Sprayed: ${field.spray_today.product || 'Application'}`} arrow>
+                    <IconButton size="small" aria-label="Open spray record" sx={{ p: 0.25, color: 'text.secondary' }}
+                      onClick={(e) => { e.stopPropagation(); navigate(`/ipm/pesticide-applications?highlight=${field.spray_today.id}`); }}>
+                      <SprayIcon sx={{ fontSize: 16 }} />
+                    </IconButton>
+                  </Tooltip>
+                )}
+              </Box>
+              {(weatherByFieldId[field.id] || weatherLoading) && (
+                <FieldWeatherStrip weather={weatherByFieldId[field.id]} loading={weatherLoading && !weatherByFieldId[field.id]} />
+              )}
+            </Box>
           );
         })}
-      </Grid>
+        </Box>
 
       {/* Field Summary Popup */}
       {fieldSummary && (
@@ -427,7 +347,7 @@ export default function FarmMonitor({
             }}
           >
             <Typography variant="subtitle1" fontWeight={700} sx={{ color: 'inherit' }}>
-              {fieldSummary.name} Summary
+              {fieldSummary.name} · summary
             </Typography>
             <Chip
               label={fieldSummary.active_phi_count > 0 ? 'PHI Active' : 'Clear'}
@@ -476,7 +396,7 @@ export default function FarmMonitor({
             </Grid>
             <Grid size={{ xs: 6, sm: 3 }}>
               <Typography variant="caption" color="text.secondary">Water (7d)</Typography>
-              <Typography variant="body1" fontWeight={600}>{Number(fieldSummary.water_this_week || 0).toFixed(1)} m3</Typography>
+              <Typography variant="body1" fontWeight={600}>{Number(fieldSummary.water_this_week || 0).toFixed(1)} m³</Typography>
             </Grid>
             <Grid size={{ xs: 6, sm: 3 }}>
               <Typography variant="caption" color="text.secondary">Latest Scouting</Typography>

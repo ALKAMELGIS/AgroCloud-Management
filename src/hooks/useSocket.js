@@ -21,7 +21,8 @@ export default function useSocket() {
 
   useEffect(() => {
     const token = localStorage.getItem('almaha_access_token');
-    if (!token) return;
+    // The in-browser demo has no server to stream from.
+    if (!token || token === 'demo-token' || window.__AGRO_DEMO__) return;
 
     const socket = io(WS_URL, {
       path: '/ws',

@@ -232,6 +232,24 @@
       AIMSG[cidA].push({id:'u'+Date.now(),role:'user',content:t,artifacts:[],sources:[]}); AIMSG[cidA].push(m);
       return ok({conversationId:cidA,message:m});
     }
+    // Demo-only field overview for the Farm Monitor, from the same sample readings as the EC/pH dashboard.
+    if(method==='GET'&&path==='/ipm/field-overview'){
+      var oSite=q.site_id, oAreas=areas.filter(function(a){return !oSite||a.siteId===oSite;}).map(function(a){return a.id;});
+      var oFields=fields.filter(function(f){return oAreas.indexOf(f.farmAreaId)>=0;});
+      var oRnd=function(s){var h=2166136261;for(var i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return ((h>>>0)%10000)/10000;};
+      var oDay=new Date(); oDay.setUTCHours(0,0,0,0); oDay=new Date(oDay.getTime()-86400000).toISOString().slice(0,10);
+      return ok(oFields.map(function(f,fi){
+        var r=function(k){return oRnd(f.id+oDay+k);}, ecB=2.1+fi*0.11, phB=6.05+fi*0.09+(fi===0?0.9:0);
+        var nm=String(f.name||'').toUpperCase();
+        return {id:f.id,name:f.name,field_type_name:/^GH/.test(nm)?'Greenhouse':/^NH/.test(nm)?'Nethouse':/PIVOT/.test(nm)?'Pivot':'Open field',
+          crop_name:CROPS[fi%CROPS.length],current_crop_id:null,
+          latest_ecph:{date:oDay,ec_in:+(1.95+r('ei1')*0.2).toFixed(2),ec_out:+(ecB+r('eo1')*0.3).toFixed(2),ph_in:+(5.9+r('pi1')*0.3).toFixed(2),ph_out:+(phB+r('po1')*0.3).toFixed(2)},
+          active_phi_count:fi===1?1:0,nearest_phi_end:fi===1?new Date(Date.now()+2*86400000).toISOString():null,active_phi_details:[],
+          latest_scouting:fi===3?{id:'sc1',pest:'Whitefly',pct:12,status:'open'}:null,
+          spray_today:fi===1?{id:'sp1',product:'Movento 150 OD'}:null,
+          harvest_this_week:Math.round(1800+fi*260+r('h')*600),water_this_week:+(420+fi*35+r('w')*80).toFixed(1)};
+      }));
+    }
     // Demo-only sample readings so the form dashboards have something to show. The real server never sees these.
     if(method==='GET'&&(path==='/ecph'||path==='/harvests'||path==='/fertigation'||path==='/irrigation-drip')){
       if(Number(q.page||1)>1) return ok([],{meta:{total:0,page:Number(q.page),totalPages:1}});
