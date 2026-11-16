@@ -1,24 +1,15 @@
 import { useState, useEffect, useMemo } from 'react';
-import {
-  Box, Typography, Grid,
-  Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  TableSortLabel, CircularProgress, IconButton,
-} from '@mui/material';
-import { ChevronLeftOutlined as ChevronLeft, ChevronRightOutlined as ChevronRight } from '@mui/icons-material';
-import {
-  LineChart, Line, BarChart, Bar, ReferenceArea,
-  XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, ResponsiveContainer,
-} from 'recharts';
+import { Box, Typography, Grid, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TableSortLabel, CircularProgress } from '@mui/material';
+
 import { listEcphAll } from '../../utils/backendApi';
+import { StandardChartGrid } from '../../components/dashboard/StandardChart';
+import { ecphCharts } from './standardChartSets';
 import { formatDate, toNumber } from './dashboardUtils';
-import DashboardSection, { DashboardChartBody } from '../../components/dashboard/DashboardSection';
+import DashboardSection from '../../components/dashboard/DashboardSection';
 import DashboardStatCard from '../../components/dashboard/DashboardStatCard';
 import { excelTableSx, GutterCell } from '../../components/table/ExcelTable';
-import { CHART_TOOLTIP } from '../../components/dashboard/dashboardChartTheme';
-import {
-  BandRows, ChartLegend, compareLineProps, gridProps, lineProps, useFormColors, xAxisProps, yAxisProps,
-} from '../../components/dashboard/clearCharts';
-import { COMPARE_GREY } from '../../theme/formIdentity';
+
+import { BandRows } from '../../components/dashboard/clearCharts';
 
 /** Default targets for drain water out of the root zone; shaded on the charts. */
 export const ECPH_TARGETS = { ecOut: [1.8, 2.6], phOut: [5.5, 6.5] };
@@ -50,9 +41,6 @@ export default function EcphDashboard({ fieldId, siteId, dateFrom, dateTo, allFi
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sortConfig, setSortConfig] = useState({ key: 'date', dir: 'desc' });
-  const [chartOffset, setChartOffset] = useState(-1);
-  const form = useFormColors();
-
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -117,33 +105,7 @@ export default function EcphDashboard({ fieldId, siteId, dateFrom, dateTo, allFi
     };
   }, [flatReadings, data.length]);
 
-  const allTrendData = useMemo(() => {
-    const byDate = {};
-    flatReadings.forEach(r => {
-      const d = r.rawDate?.split('T')[0] || r.date;
-      if (!byDate[d]) byDate[d] = { ecIn: [], ecOut: [], phIn: [], phOut: [], drain: [] };
-      if (r.ecIn > 0) byDate[d].ecIn.push(r.ecIn);
-      if (r.ecOut > 0) byDate[d].ecOut.push(r.ecOut);
-      if (r.phIn > 0) byDate[d].phIn.push(r.phIn);
-      if (r.phOut > 0) byDate[d].phOut.push(r.phOut);
-      if (r.percentDrain > 0) byDate[d].drain.push(r.percentDrain);
-    });
-    const avg = (arr) => arr.length ? parseFloat((arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(2)) : null;
-    return Object.keys(byDate).sort().map(d => ({
-      date: formatDate(d),
-      ecIn: avg(byDate[d].ecIn),
-      ecOut: avg(byDate[d].ecOut),
-      phIn: avg(byDate[d].phIn),
-      phOut: avg(byDate[d].phOut),
-      drain: avg(byDate[d].drain) != null ? parseFloat((avg(byDate[d].drain) * 100).toFixed(1)) : null,
-    }));
-  }, [flatReadings]);
-
-  const ECPH_VISIBLE = 30;
-  const ecphEffectiveOffset = chartOffset < 0 ? Math.max(0, allTrendData.length - ECPH_VISIBLE) : chartOffset;
-  const trendData = allTrendData.slice(ecphEffectiveOffset, ecphEffectiveOffset + ECPH_VISIBLE);
-  const ecphCanGoLeft = ecphEffectiveOffset > 0;
-  const ecphCanGoRight = ecphEffectiveOffset + ECPH_VISIBLE < allTrendData.length;
+  const standardCharts = useMemo(() => ecphCharts(flatReadings, ECPH_TARGETS), [flatReadings]);
 
   const phByField = useMemo(() => (fieldId ? [] : lastTwoWeeksByField(flatReadings, 'phOut')), [flatReadings, fieldId]);
   const ecByField = useMemo(() => (fieldId ? [] : lastTwoWeeksByField(flatReadings, 'ecOut')), [flatReadings, fieldId]);
@@ -217,76 +179,7 @@ export default function EcphDashboard({ fieldId, siteId, dateFrom, dateTo, allFi
         </Grid>
       )}
 
-      <DashboardSection title="EC by day · mS/cm">
-        <DashboardChartBody height={340}>
-          <ChartLegend items={[
-            { label: 'EC out', color: form.base },
-            { label: 'EC in', color: COMPARE_GREY, dashed: true },
-            { label: `Target ${ECPH_TARGETS.ecOut.join('–')}`, color: form.pale, band: true },
-          ]} />
-          <ResponsiveContainer width="100%" height="88%">
-            <LineChart data={trendData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-              <ReferenceArea y1={ECPH_TARGETS.ecOut[0]} y2={ECPH_TARGETS.ecOut[1]} fill={form.pale} fillOpacity={1} ifOverflow="hidden" />
-              <CartesianGrid {...gridProps} />
-              <XAxis dataKey="date" {...xAxisProps} />
-              <YAxis {...yAxisProps} domain={['auto', 'auto']} />
-              <RTooltip contentStyle={CHART_TOOLTIP} />
-              <Line {...compareLineProps} dataKey="ecIn" name="EC in" />
-              <Line {...lineProps} dataKey="ecOut" name="EC out" stroke={form.base} />
-            </LineChart>
-          </ResponsiveContainer>
-        </DashboardChartBody>
-      </DashboardSection>
-
-      <DashboardSection title="pH by day">
-        <DashboardChartBody height={340}>
-          <ChartLegend items={[
-            { label: 'pH out', color: form.base },
-            { label: 'pH in', color: COMPARE_GREY, dashed: true },
-            { label: `Target ${ECPH_TARGETS.phOut.join('–')}`, color: form.pale, band: true },
-          ]} />
-          <ResponsiveContainer width="100%" height="88%">
-            <LineChart data={trendData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-              <ReferenceArea y1={ECPH_TARGETS.phOut[0]} y2={ECPH_TARGETS.phOut[1]} fill={form.pale} fillOpacity={1} ifOverflow="hidden" />
-              <CartesianGrid {...gridProps} />
-              <XAxis dataKey="date" {...xAxisProps} />
-              <YAxis {...yAxisProps} domain={['auto', 'auto']} />
-              <RTooltip contentStyle={CHART_TOOLTIP} />
-              <Line {...compareLineProps} dataKey="phIn" name="pH in" />
-              <Line {...lineProps} dataKey="phOut" name="pH out" stroke={form.base} />
-            </LineChart>
-          </ResponsiveContainer>
-        </DashboardChartBody>
-      </DashboardSection>
-
-      <DashboardSection title="Drain by day · %">
-        <DashboardChartBody
-          height={300}
-          footer={allTrendData.length > ECPH_VISIBLE ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 2, mt: 1 }}>
-              <IconButton disabled={!ecphCanGoLeft} onClick={() => setChartOffset(Math.max(0, ecphEffectiveOffset - 7))} size="small" aria-label="Previous">
-                <ChevronLeft />
-              </IconButton>
-              <Typography variant="caption" color="text.secondary">
-                {trendData[0]?.date} — {trendData[trendData.length - 1]?.date}
-              </Typography>
-              <IconButton disabled={!ecphCanGoRight} onClick={() => setChartOffset(Math.min(allTrendData.length - ECPH_VISIBLE, ecphEffectiveOffset + 7))} size="small" aria-label="Next">
-                <ChevronRight />
-              </IconButton>
-            </Box>
-          ) : null}
-        >
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={trendData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-              <CartesianGrid {...gridProps} />
-              <XAxis dataKey="date" {...xAxisProps} />
-              <YAxis {...yAxisProps} unit="%" />
-              <RTooltip contentStyle={CHART_TOOLTIP} cursor={{ fill: form.pale }} />
-              <Bar dataKey="drain" name="Drain %" fill={form.base} radius={[4, 4, 0, 0]} maxBarSize={28} animationDuration={800} />
-            </BarChart>
-          </ResponsiveContainer>
-        </DashboardChartBody>
-      </DashboardSection>
+      <StandardChartGrid charts={standardCharts} />
 
       <DashboardSection title="Recent readings">
         {/* No readings: a message instead of an empty header with a scrollbar under it. */}

@@ -3,20 +3,18 @@ import {
   Box, CircularProgress, FormControlLabel, Grid, Switch, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Typography,
 } from '@mui/material';
-import {
-  Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip as RTooltip, XAxis, YAxis,
-} from 'recharts';
+
 import { apiRequest } from '../../utils/api';
 import { listFertigationAll, listIrrigationRecordsAll, listWeatherLogsAll } from '../../utils/backendApi';
-import DashboardSection, { DashboardChartBody } from '../../components/dashboard/DashboardSection';
+import { StandardChartGrid } from '../../components/dashboard/StandardChart';
+import { irrigationCharts } from './standardChartSets';
+import DashboardSection from '../../components/dashboard/DashboardSection';
 import DashboardStatCard from '../../components/dashboard/DashboardStatCard';
 import { excelTableSx, GutterCell } from '../../components/table/ExcelTable';
-import { CHART_TOOLTIP } from '../../components/dashboard/dashboardChartTheme';
-import { RankBars, gridProps, lineProps, useFormColors, xAxisProps, yAxisProps } from '../../components/dashboard/clearCharts';
-import { FORM_IDENTITY } from '../../theme/formIdentity';
+
 import { formatDate, toIsoDate } from './dashboardUtils';
 import { indexFertigationByHouseDate, waterOnlyRemainder } from './irrigationWaterOnly';
-import { attachTemps, buildDailyTempIndex, formatTempRange } from './irrigationWeather';
+import { attachTemps, buildDailyTempIndex } from './irrigationWeather';
 
 function toNum(v) {
   const n = Number(v);
@@ -31,19 +29,6 @@ function matchesField(entryFieldId, locationLabel, fieldId, fieldName) {
 }
 
 /** Hover for the daily water chart: water in m³, plus that day's site temperature when logged. */
-function WaterTempTooltip({ active, payload }) {
-  if (!active || !payload?.length) return null;
-  const point = payload[0].payload || {};
-  const temp = formatTempRange(point);
-  return (
-    <Box sx={{ ...CHART_TOOLTIP, bgcolor: 'background.paper', px: 1.25, py: 0.75 }}>
-      <Typography sx={{ fontSize: 12, fontWeight: 600, mb: 0.25 }}>{point.date}</Typography>
-      <Typography sx={{ fontSize: 12, color: FORM_IDENTITY.irrigation.dark }}>Water: {Number(point.water).toFixed(2)} m³</Typography>
-      {temp && <Typography sx={{ fontSize: 12, color: '#a84b07' }}>Temp: {temp}</Typography>}
-    </Box>
-  );
-}
-
 export default function IrrigationDashboard({
   fieldId = '',
   siteId = '',
@@ -58,8 +43,6 @@ export default function IrrigationDashboard({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [waterOnly, setWaterOnly] = useState(false);
-  const form = useFormColors();
-
   const fieldName = useMemo(
     () => (allFields || []).find((f) => f.id === fieldId)?.name || '',
     [allFields, fieldId],
@@ -213,14 +196,7 @@ export default function IrrigationDashboard({
     return [...drip, ...pivot].sort((a, b) => String(a.date).localeCompare(String(b.date)));
   }, [dripVisible, pivotFiltered, fieldName]);
 
-  const waterByLocation = useMemo(() => {
-    const acc = {};
-    tableRows.forEach((r) => {
-      const v = Number(r.dailyTotal);
-      if (r.location && Number.isFinite(v) && v > 0) acc[r.location] = (acc[r.location] || 0) + v;
-    });
-    return Object.entries(acc).map(([label, value]) => ({ label, value: Math.round(value * 10) / 10 }));
-  }, [tableRows]);
+  const standardCharts = useMemo(() => irrigationCharts(tableRows), [tableRows]);
 
   const totalWater = waterByDate.reduce((s, r) => s + r.water, 0);
   const totalCycles = freqByDate.reduce((s, r) => s + r.cycles, 0);
@@ -300,49 +276,7 @@ export default function IrrigationDashboard({
         </Grid>
       </Grid>
 
-      <DashboardSection title="Water by day · m³">
-        <DashboardChartBody height={340}>
-          {waterByDate.length === 0 ? (
-            <Typography color="text.secondary" sx={{ p: 2 }}>No irrigation water in this range.</Typography>
-          ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={waterByDate} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-                <CartesianGrid {...gridProps} />
-                <XAxis dataKey="date" {...xAxisProps} />
-                <YAxis {...yAxisProps} width={56} />
-                <RTooltip content={<WaterTempTooltip />} />
-                <Area {...lineProps} dataKey="water" name="Water (m³)" stroke={form.base} fill={form.base} fillOpacity={0.1} />
-              </AreaChart>
-            </ResponsiveContainer>
-          )}
-        </DashboardChartBody>
-      </DashboardSection>
-
-      <DashboardSection title="Irrigation cycles by day">
-        <DashboardChartBody height={300}>
-          {freqByDate.length === 0 ? (
-            <Typography color="text.secondary" sx={{ p: 2 }}>No irrigation cycles in this range.</Typography>
-          ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={freqByDate} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-                <CartesianGrid {...gridProps} />
-                <XAxis dataKey="date" {...xAxisProps} />
-                <YAxis {...yAxisProps} allowDecimals={false} />
-                <RTooltip contentStyle={CHART_TOOLTIP} cursor={{ fill: form.pale }} />
-                <Bar dataKey="cycles" name="Cycles" fill={form.light} radius={[4, 4, 0, 0]} maxBarSize={28} animationDuration={800} />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </DashboardChartBody>
-      </DashboardSection>
-
-      {waterByLocation.length > 1 && (
-        <DashboardSection title="Water per location · m³">
-          <Box sx={{ p: { xs: 3, sm: 4 } }}>
-            <RankBars items={waterByLocation} showShare format={(v) => v.toLocaleString(undefined, { maximumFractionDigits: 1 })} />
-          </Box>
-        </DashboardSection>
-      )}
+      <StandardChartGrid charts={standardCharts} />
 
       <DashboardSection title="Irrigation records">
         <TableContainer sx={{ maxHeight: 520 }}>

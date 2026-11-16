@@ -1,30 +1,18 @@
 import { useState, useEffect, useMemo } from 'react';
-import {
-  Box, Typography, Grid,
-  Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  TableSortLabel, CircularProgress, IconButton,
-} from '@mui/material';
-import { ChevronLeftOutlined as ChevronLeft, ChevronRightOutlined as ChevronRight } from '@mui/icons-material';
-import {
-  BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, ResponsiveContainer,
-} from 'recharts';
+import { Box, Typography, Grid, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TableSortLabel, CircularProgress } from '@mui/material';
+
 import { listHarvestsAll } from '../../utils/backendApi';
+import { StandardChartGrid } from '../../components/dashboard/StandardChart';
+import { harvestCharts } from './standardChartSets';
 import { formatDate, toNumber } from './dashboardUtils';
-import DashboardSection, { DashboardChartBody } from '../../components/dashboard/DashboardSection';
+import DashboardSection from '../../components/dashboard/DashboardSection';
 import DashboardStatCard from '../../components/dashboard/DashboardStatCard';
 import { excelTableSx, GutterCell } from '../../components/table/ExcelTable';
-import { CHART_TOOLTIP } from '../../components/dashboard/dashboardChartTheme';
-import {
-  RankBars, ShareBar, byWeek, gridProps, useFormColors, xAxisProps, yAxisProps,
-} from '../../components/dashboard/clearCharts';
 
 export default function HarvestDashboard({ fieldId, siteId, dateFrom, dateTo, allFields = [] }) {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sortConfig, setSortConfig] = useState({ key: 'date', dir: 'desc' });
-  const [chartOffset, setChartOffset] = useState(-1);
-  const form = useFormColors();
-
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -67,52 +55,7 @@ export default function HarvestDashboard({ fieldId, siteId, dateFrom, dateTo, al
     };
   }, [data]);
 
-  const allTrendData = useMemo(() => {
-    const byDate = {};
-    data.forEach(entry => {
-      const d = (entry.date || '').toString().split('T')[0];
-      if (!d) return;
-      byDate[d] = (byDate[d] || 0) + toNumber(entry.totalQuantity);
-    });
-    return Object.keys(byDate).sort().map(d => ({
-      date: formatDate(d),
-      quantity: parseFloat(byDate[d].toFixed(1)),
-    }));
-  }, [data]);
-
-  const VISIBLE_POINTS = 30;
-  const effectiveOffset = chartOffset < 0 ? Math.max(0, allTrendData.length - VISIBLE_POINTS) : chartOffset;
-  const trendData = allTrendData.slice(effectiveOffset, effectiveOffset + VISIBLE_POINTS);
-  const canGoLeft = effectiveOffset > 0;
-  const canGoRight = effectiveOffset + VISIBLE_POINTS < allTrendData.length;
-
-  const fieldComparisonData = useMemo(() => {
-    if (fieldId) return [];
-    const byField = {};
-    data.forEach(entry => {
-      const name = fieldMap[entry.fieldId] || entry.fieldName || entry.fieldId;
-      byField[name] = (byField[name] || 0) + toNumber(entry.totalQuantity);
-    });
-    return Object.entries(byField)
-      .map(([name, total]) => ({ name, total: parseFloat(total.toFixed(1)) }))
-      .sort((a, b) => b.total - a.total)
-      .slice(0, 20);
-  }, [data, fieldId, fieldMap]);
-
-  const cropBreakdownData = useMemo(() => {
-    const totals = {};
-    data.forEach(entry => {
-      (entry.varieties || []).forEach(v => {
-        const name = v.variety || 'Unknown';
-        totals[name] = (totals[name] || 0) + toNumber(v.quantity);
-      });
-    });
-    return Object.entries(totals)
-      .map(([name, total]) => ({ name, total: parseFloat(total.toFixed(1)) }))
-      .sort((a, b) => b.total - a.total);
-  }, [data]);
-
-  const weeklyData = useMemo(() => byWeek(data.map((e) => ({ date: e.date, value: toNumber(e.totalQuantity) }))), [data]);
+  const standardCharts = useMemo(() => harvestCharts(data, (e) => fieldMap[e.fieldId] || e.fieldName || e.fieldId), [data, fieldMap]);
 
   const tableData = useMemo(() => {
     const rows = data.slice(0, 200).map(entry => {
@@ -164,73 +107,7 @@ export default function HarvestDashboard({ fieldId, siteId, dateFrom, dateTo, al
         </Grid>
       </Grid>
 
-      <DashboardSection title="Harvest by day · kg">
-        <DashboardChartBody
-          height={320}
-          footer={allTrendData.length > VISIBLE_POINTS ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 2, mt: 1 }}>
-              <IconButton disabled={!canGoLeft} onClick={() => setChartOffset(Math.max(0, effectiveOffset - 7))} size="small" aria-label="Previous">
-                <ChevronLeft />
-              </IconButton>
-              <Typography variant="caption" color="text.secondary">
-                {trendData[0]?.date} — {trendData[trendData.length - 1]?.date}
-              </Typography>
-              <IconButton disabled={!canGoRight} onClick={() => setChartOffset(Math.min(allTrendData.length - VISIBLE_POINTS, effectiveOffset + 7))} size="small" aria-label="Next">
-                <ChevronRight />
-              </IconButton>
-            </Box>
-          ) : null}
-        >
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={trendData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-              <CartesianGrid {...gridProps} />
-              <XAxis dataKey="date" {...xAxisProps} />
-              <YAxis {...yAxisProps} />
-              <RTooltip contentStyle={CHART_TOOLTIP} cursor={{ fill: form.pale }} />
-              <Bar dataKey="quantity" name="Harvest (kg)" fill={form.base} radius={[4, 4, 0, 0]} maxBarSize={28} animationDuration={800} />
-            </BarChart>
-          </ResponsiveContainer>
-        </DashboardChartBody>
-      </DashboardSection>
-
-      <Grid container spacing={2} sx={{ mb: { xs: 4, md: 5 } }}>
-        {!fieldId && fieldComparisonData.length > 0 && (
-          <Grid size={{ xs: 12, lg: 6 }}>
-            <DashboardSection title="Which fields gave the most · kg" sx={{ mb: 0, height: '100%' }}>
-              <Box sx={{ p: { xs: 3, sm: 4 } }}>
-                <RankBars items={fieldComparisonData.map((r) => ({ label: String(r.name), value: r.total }))} showShare />
-              </Box>
-            </DashboardSection>
-          </Grid>
-        )}
-        {cropBreakdownData.length > 0 && (
-          <Grid size={{ xs: 12, lg: 6 }}>
-            <DashboardSection title="Share by crop / variety" sx={{ mb: 0, height: '100%' }}>
-              <Box sx={{ p: { xs: 3, sm: 4 } }}>
-                <ShareBar items={cropBreakdownData.map((r) => ({ label: r.name, value: r.total }))} format={(v) => `${v.toLocaleString()} kg`} />
-              </Box>
-            </DashboardSection>
-          </Grid>
-        )}
-      </Grid>
-
-      {weeklyData.length > 1 && (
-        <DashboardSection title="Harvest by week · kg">
-          <DashboardChartBody height={300}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={weeklyData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-                <CartesianGrid {...gridProps} />
-                <XAxis dataKey="week" {...xAxisProps} />
-                <YAxis {...yAxisProps} />
-                <RTooltip contentStyle={CHART_TOOLTIP} cursor={{ fill: form.pale }} />
-                <Bar dataKey="value" name="Harvest (kg)" radius={[4, 4, 0, 0]} maxBarSize={44} animationDuration={800}>
-                  {weeklyData.map((_, i) => <Cell key={i} fill={i === weeklyData.length - 1 ? form.dark : form.light} />)}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </DashboardChartBody>
-        </DashboardSection>
-      )}
+      <StandardChartGrid charts={standardCharts} />
 
       <DashboardSection title="Recent entries">
         <TableContainer sx={{ maxHeight: 400 }}>
