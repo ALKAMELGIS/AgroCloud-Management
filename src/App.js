@@ -48,6 +48,7 @@ const Home = lazy(() => import('./pages/Home'));
 const AreaHub = lazy(() => import('./pages/AreaHub'));
 const Login = lazy(() => import('./pages/Login'));
 const Register = lazy(() => import('./pages/Register'));
+const Landing = lazy(() => import('./pages/Landing'));
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
 const ResetPassword = lazy(() => import('./pages/ResetPassword'));
 const MicrosoftCallback = lazy(() => import('./pages/MicrosoftCallback'));
@@ -634,6 +635,7 @@ function App() {
               <Suspense fallback={<PageLoader />}>
                 <Routes>
                   {/* Public routes */}
+                  <Route path="/welcome" element={<Landing />} />
                   <Route path="/login" element={<Login />} />
                   <Route path="/register" element={<Register />} />
                   <Route path="/forgot-password" element={<ForgotPassword />} />

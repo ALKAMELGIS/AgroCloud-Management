@@ -7,12 +7,15 @@
     var U={id:'u1',name:'Demo Manager',email:'demo@agrocloud.test',role:'ceo',organizationId:'org1'};
     // Owner account of the demo (all permissions). Demo only: the real system's owner is made with backend/scripts/create-owner.js.
     var OWNER={id:'u0',name:'Owner',email:'admin@agrocloud.com',role:'ceo',isOwner:true,organizationId:'org1'};
-    try{ if(localStorage.getItem('agro_demo_user')==='owner') U=OWNER; }catch(e){}
-    if(!localStorage.getItem('almaha_user') || localStorage.getItem('almaha_access_token')==='demo-token'){
+    window.__AGRO_DEMO__ = true;
+    var who=null; try{ who=localStorage.getItem('agro_demo_user'); }catch(e){}
+    if(who==='owner') U=OWNER;
+    if(!localStorage.getItem('i18nextLng')) localStorage.setItem('i18nextLng','ar');
+    // First visit opens the landing page; after "Open the demo" or a sign-in the session is kept.
+    if(who && (!localStorage.getItem('almaha_user') || localStorage.getItem('almaha_access_token')==='demo-token')){
       localStorage.setItem('almaha_user',JSON.stringify(U));
       localStorage.setItem('almaha_access_token','demo-token');
       localStorage.setItem('almaha_refresh_token','demo-refresh');
-      if(!localStorage.getItem('i18nextLng')) localStorage.setItem('i18nextLng','ar');
     }
   } catch(e){}
   var ZONES=[['AD',['Default Site','Site 1','Site 2']],['AF',['Default Site','Site 2']],['AL AIN',['AL Ain']],['AM',['Default Site','Site 3']],['BH',['Site 3']],['DB',['Default Site','Site 3']],['KE',['Site 3']],['MH',['Default Site','Site 1']]];
@@ -166,6 +169,7 @@
       try{ localStorage.setItem('agro_demo_user', isOwner?'owner':'demo'); }catch(e){}
       return {success:true,data:{user:U,accessToken:'demo-token',refreshToken:'demo-refresh'}};
     }
+    if(path==='/auth/logout'){ try{ localStorage.removeItem('agro_demo_user'); }catch(e){} return {success:true}; }
     if(/^\/auth\/(me|profile|refresh|verify)/.test(path)) return {success:true,data:U,user:U,accessToken:'demo-token',token:'demo-token'};
 
 

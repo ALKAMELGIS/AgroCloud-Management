@@ -22,6 +22,8 @@ function ProtectedRoute({ children, requiredRoles }) {
   }
 
   if (!isAuthenticated) {
+    // The bare address opens the public landing page; deep links go to sign-in.
+    if (location.pathname === '/') return <Navigate to="/welcome" replace />;
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
