@@ -31,6 +31,9 @@ jobs:
       - name: Build demo web app
         env:
           CI: false
+          # Optional: Settings → Secrets and variables → Actions. Built into the public site.
+          DEMO_OPENWEATHER_API_KEY: ${{ secrets.DEMO_OPENWEATHER_API_KEY }}
+          DEMO_SENTINELHUB_INSTANCE_ID: ${{ secrets.DEMO_SENTINELHUB_INSTANCE_ID }}
         run: bash scripts/build-demo.sh
       - name: Publish to gh-pages
         run: |

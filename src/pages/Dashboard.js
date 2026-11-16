@@ -1,4 +1,4 @@
-import { useState, useEffect, lazy, Suspense } from 'react';
+import { useState, useEffect, lazy, Suspense, useRef } from 'react';
 import useSocket from '../hooks/useSocket';
 import {
   Box,
@@ -71,6 +71,7 @@ function Dashboard() {
     setSelectedFieldObj(null);
   }, [activeSiteId]);
 
+  const statsRef = useRef(null);
   const handleFieldSelect = (field) => {
     if (!field) {
       setSelectedFieldObj(null);
@@ -79,6 +80,8 @@ function Dashboard() {
     }
     setSelectedFieldObj(field);
     setFilters((prev) => ({ ...prev, field: field.id, farmArea: field.farm_area_id || prev.farmArea }));
+    // Bring the chosen field's statistics into view.
+    setTimeout(() => statsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 400);
   };
 
   const {
@@ -223,7 +226,7 @@ function Dashboard() {
         })}
       </Tabs>
 
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2.5 }}>
+      <Box ref={statsRef} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2.5, scrollMarginTop: 96 }}>
         <FormTile form={activeForm} />
         <Box>
           <Typography component="h2" sx={{ fontSize: 18, fontWeight: 600, lineHeight: 1.2 }}>{activeForm.name}</Typography>

@@ -385,6 +385,10 @@
     var ramp=RAMPS[d.r].map(function(x){return '['+x[0]+','+x[1]+']';}).join(',');
     return '//VERSION=3\nconst viz = new ColorRampVisualizer(['+ramp+']);\nfunction setup(){return{input:'+JSON.stringify(d.b.concat('dataMask'))+',output:{bands:4}}}\nfunction evaluatePixel(s){const v='+d.e+'; if(!isFinite(v)) return [0,0,0,0]; const c=viz.process(v); return [c[0],c[1],c[2],s.dataMask];}'; }
   function b64(t){ return btoa(unescape(encodeURIComponent(t))); }
+  /* Organisation keys built into this site at publish time (GitHub secrets); never in the code. */
+  var ORG_KEYS=window.__AGRO_DEMO_KEYS__||{};
+  var OWM_KEY='agro_device_openweather';
+  function owmKey(){ try{ return localStorage.getItem(OWM_KEY)||ORG_KEYS.owm||''; }catch(e){ return ORG_KEYS.owm||''; } }
   function satCfg(){ try{ var c=JSON.parse(localStorage.getItem(SAT_KEY)||'null'); return c&&UUID.test(c.id)?c:null; }catch(e){ return null; } }
   function satTileUrl(u){ var c=satCfg(); if(!c) return null;
     var p={}; (u.split('?')[1]||'').split('&').forEach(function(kv){ var a=kv.split('='); if(a[0]) p[decodeURIComponent(a[0]).toUpperCase()]=decodeURIComponent(a[1]||''); });
@@ -435,6 +439,8 @@
     });
   }
   window.__devSat={cfg:satCfg,tileUrl:satTileUrl};
+  /* First visit on a device: set up satellite imagery from the organisation's configuration ID. */
+  try{ if(!satCfg()&&ORG_KEYS.sat&&UUID.test(ORG_KEYS.sat)){ satTest(ORG_KEYS.sat,ORG_KEYS.satService||'sentinel-hub').then(function(t){ if(t&&t.success&&!satCfg()) localStorage.setItem(SAT_KEY,JSON.stringify({id:t.id,service:t.service,label:'Organisation',layer:pickLayer(t.layers)})); }).catch(function(){}); } }catch(e){}
   /* Full import of Agro_Structures on this device (same rules as the server):
      ZONE_ID → zone, ZONE_ID + Site_Code / SITE → site ("Not Applicable" → Unassigned),
      Structure_Type → farm area and subtype, ZONE_ID + Farm_Code → field (KeyID ZONE_ID-Farm_Code). */
@@ -513,6 +519,24 @@
   }
   window.fetch=function(input,init){
     var url=typeof input==='string'?input:(input&&input.url)||'';
+    // Weather (OpenWeatherMap) straight from the browser. Key: the one saved on this device, else the
+    // organisation key built into this site from the GitHub secret DEMO_OPENWEATHER_API_KEY.
+    var owmM=isApi(url)&&url.match(/\/(settings\/openweather(\/test|\/key)?|weather\/(status|current))(\?|$)/);
+    if(owmM){
+      var meth=(init&&init.method)||'GET', ob={}; try{ ob=init&&init.body?JSON.parse(init.body):{}; }catch(e){}
+      var mask=function(k){ return k?k.slice(0,4)+'••••'+k.slice(-4):null; };
+      var owmTry=function(k){ return of('https://api.openweathermap.org/data/2.5/weather?lat=24.45&lon=54.38&units=metric&appid='+encodeURIComponent(k)).then(function(r){ return r.ok?{success:true,message:'Connected to OpenWeatherMap'}:{success:false,message:r.status===401?'This key is not valid (yet). New keys can take up to 2 hours to work.':'OpenWeatherMap answered '+r.status}; }).catch(function(){ return {success:false,message:'OpenWeatherMap is not reachable'}; }); };
+      if(owmM[1]==='settings/openweather/key'){ try{ localStorage.removeItem(OWM_KEY); }catch(e){} return Promise.resolve(jsonRes(ok({hasKey:!!owmKey(),keyMasked:mask(owmKey())}))); }
+      if(owmM[1]==='settings/openweather/test'){ var tk=ob.apiKey==='USE_SAVED'?owmKey():String(ob.apiKey||'').trim(); return (tk?owmTry(tk):Promise.resolve({success:false,message:'Enter an API key first'})).then(function(t){ return jsonRes(ok(t)); }); }
+      if(owmM[1]==='settings/openweather'&&meth==='PUT'){ var nk=String(ob.apiKey||'').trim(); if(nk){ try{ localStorage.setItem(OWM_KEY,nk); }catch(e){} } return Promise.resolve(jsonRes(ok({hasKey:!!owmKey(),keyMasked:mask(owmKey())}))); }
+      if(owmM[1]==='settings/openweather') return Promise.resolve(jsonRes(ok({hasKey:!!owmKey(),keyMasked:mask(owmKey()),source:localStorage.getItem(OWM_KEY)?'device':(owmKey()?'organisation':null)})));
+      if(owmM[1]==='weather/status') return Promise.resolve(jsonRes(ok({configured:!!owmKey()})));
+      var k2=owmKey(); if(!k2) return Promise.resolve(new Response(JSON.stringify({success:false,error:{message:'No OpenWeatherMap key'}}),{status:400,headers:{'Content-Type':'application/json'}}));
+      var qw={}; (url.split('?')[1]||'').split('&').forEach(function(kv){ var a=kv.split('='); if(a[0]) qw[a[0]]=decodeURIComponent(a[1]||''); });
+      return of('https://api.openweathermap.org/data/2.5/weather?units=metric&lat='+encodeURIComponent(qw.lat)+'&lon='+encodeURIComponent(qw.lon)+'&appid='+encodeURIComponent(k2)).then(function(r){ if(!r.ok) throw new Error('OpenWeatherMap '+r.status); return r.json(); }).then(function(w){
+        var m=w.main||{}; return jsonRes(ok({date:new Date().toISOString().slice(0,10),temperature:{max:m.temp_max,min:m.temp_min,avg:m.temp,feelsLike:m.feels_like},humidity:m.humidity,rainfall:(w.rain&&w.rain['1h'])||0,pressure:m.pressure,windSpeed:(w.wind||{}).speed,windDirection:(w.wind||{}).deg,clouds:(w.clouds||{}).all,description:((w.weather||[])[0]||{}).description||'',icon:((w.weather||[])[0]||{}).icon||''}));
+      }).catch(function(e){ return new Response(JSON.stringify({success:false,error:{message:e.message}}),{status:502,headers:{'Content-Type':'application/json'}}); });
+    }
     if(isApi(url)&&/\/settings\/sentinelhub(\/test)?(\?|$)/.test(url)&&init&&init.method&&init.method!=='GET'){
       var sb={}; try{ sb=init.body?JSON.parse(init.body):{}; }catch(e){}
       if(init.method==='DELETE'){ try{ localStorage.removeItem(SAT_KEY); }catch(e){} return Promise.resolve(jsonRes({success:true})); }

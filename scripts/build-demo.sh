@@ -19,7 +19,17 @@ find . -name "*.LICENSE.txt" -delete
 python3 - <<'PY'
 import re
 s = open('index.html').read()
-s = s.replace('<head>', '<head><script>' + open('../demo/demo-shim.js').read() + '</script>', 1)
+import os, json
+# Organisation keys for the published demo come only from the environment (GitHub secrets
+# DEMO_OPENWEATHER_API_KEY / DEMO_SENTINELHUB_INSTANCE_ID); nothing is read from the repository.
+keys = {k: v for k, v in {
+    'owm': os.environ.get('DEMO_OPENWEATHER_API_KEY', '').strip(),
+    'sat': os.environ.get('DEMO_SENTINELHUB_INSTANCE_ID', '').strip(),
+    'satService': os.environ.get('DEMO_SENTINELHUB_SERVICE', '').strip(),
+}.items() if v}
+pre = '<script>window.__AGRO_DEMO_KEYS__=' + json.dumps(keys) + ';</script>' if keys else ''
+s = s.replace('<head>', '<head>' + pre + '<script>' + open('../demo/demo-shim.js').read() + '</script>', 1)
+print('demo keys:', ', '.join(sorted(keys)) or 'none')
 s = re.sub(r'<title>.*?</title>', '<title>AgroCloud Management</title>', s)
 s = s.replace('content="Al Maha Farm"', 'content="AgroCloud"')
 open('index.html', 'w').write(s)

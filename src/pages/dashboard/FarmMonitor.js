@@ -53,6 +53,9 @@ function isStale(dateStr, refDate) {
 
 const MONO = '"IBM Plex Mono", monospace';
 const BAND_BG = '#d9ece3';
+/** Card header: dark field green with white text; a deeper shade marks the selected field. */
+const HEADER_GREEN = '#1d5c3c';
+const HEADER_GREEN_SELECTED = '#123f28';
 const STATUS_WORD = { good: 'In range', warn: 'Watch', out: 'Out', none: 'No data' };
 /** Used when no target is set for the crop: the same bands as the EC/pH dashboard. */
 const DEFAULT_BANDS = { ec: [1.8, 2.6], ph: [5.5, 6.5] };
@@ -268,26 +271,27 @@ export default function FarmMonitor({
               }}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.currentTarget.click(); } }}
               sx={{
-                cursor: 'pointer', p: 1.75, borderRadius: 2, bgcolor: 'background.paper',
-                border: '1px solid', borderColor: selected ? 'primary.main' : 'divider',
-                boxShadow: selected ? (t) => `0 0 0 1px ${t.palette.primary.main}` : 'none',
-                display: 'flex', flexDirection: 'column', gap: 1.25, minWidth: 0,
+                cursor: 'pointer', borderRadius: 2, bgcolor: 'background.paper', overflow: 'hidden',
+                border: '1px solid', borderColor: selected ? HEADER_GREEN : 'divider',
+                boxShadow: selected ? `0 0 0 2px ${HEADER_GREEN}` : 'none',
+                display: 'flex', flexDirection: 'column', minWidth: 0,
                 transition: 'border-color 150ms ease, box-shadow 150ms ease',
-                '&:hover': { borderColor: 'text.secondary' },
+                '&:hover': { borderColor: HEADER_GREEN },
                 '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
                 animation: `${rise} 420ms cubic-bezier(.2,.8,.2,1) both`, animationDelay: `${Math.min(idx, 11) * 40}ms`,
                 '@media (prefers-reduced-motion: reduce)': { animation: 'none' },
               }}
             >
-              <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.75, py: 1.25, bgcolor: selected ? HEADER_GREEN_SELECTED : HEADER_GREEN, color: '#fff' }}>
                 <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography noWrap sx={{ fontSize: 14, fontWeight: 600, fontFamily: MONO, lineHeight: 1.3 }}>{field.name}</Typography>
-                  <Typography noWrap sx={{ fontSize: 12, color: 'text.secondary' }}>
+                  <Typography noWrap sx={{ fontSize: 14, fontWeight: 600, fontFamily: MONO, lineHeight: 1.3, color: '#fff' }}>{field.name}</Typography>
+                  <Typography noWrap sx={{ fontSize: 12, color: 'rgba(255,255,255,0.78)' }}>
                     {[field.crop_name, field.field_type_name].filter(Boolean).join(' · ') || 'No crop set'}
                   </Typography>
                 </Box>
                 <StatusChip status={overall}>{stale ? (ecphDate ? 'Stale' : 'No data') : STATUS_WORD[overall]}</StatusChip>
               </Box>
+              <Box sx={{ p: 1.75, pt: 1.5, display: 'flex', flexDirection: 'column', gap: 1.25 }}>
 
               <Box sx={{ display: 'grid', gap: 1 }} onClick={openEcph}>
                 <MeterRow label="EC out" m={ec} decimals={2} />
@@ -325,6 +329,7 @@ export default function FarmMonitor({
               {(weatherByFieldId[field.id] || weatherLoading) && (
                 <FieldWeatherStrip weather={weatherByFieldId[field.id]} loading={weatherLoading && !weatherByFieldId[field.id]} />
               )}
+              </Box>
             </Box>
           );
         })}
@@ -335,8 +340,8 @@ export default function FarmMonitor({
         <Card variant="outlined" sx={{ mt: 2, overflow: 'hidden', borderColor: 'table.gridline' }}>
           <Box
             sx={{
-              bgcolor: 'table.headerBg',
-              color: 'table.headerText',
+              bgcolor: HEADER_GREEN,
+              color: '#fff',
               px: 2,
               py: 1,
               display: 'flex',
@@ -346,7 +351,7 @@ export default function FarmMonitor({
               flexWrap: 'wrap',
             }}
           >
-            <Typography variant="subtitle1" fontWeight={700} sx={{ color: 'inherit' }}>
+            <Typography variant="subtitle1" fontWeight={600} sx={{ color: '#fff' }}>
               {fieldSummary.name} · summary
             </Typography>
             <Chip
