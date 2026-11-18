@@ -10,7 +10,6 @@
     window.__AGRO_DEMO__ = true;
     var who=null; try{ who=localStorage.getItem('agro_demo_user'); }catch(e){}
     if(who==='owner') U=OWNER;
-    if(!localStorage.getItem('i18nextLng')) localStorage.setItem('i18nextLng','ar');
     // First visit opens the landing page; after "Open the demo" or a sign-in the session is kept.
     if(who && (!localStorage.getItem('almaha_user') || localStorage.getItem('almaha_access_token')==='demo-token')){
       localStorage.setItem('almaha_user',JSON.stringify(U));
