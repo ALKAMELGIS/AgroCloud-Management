@@ -4,6 +4,35 @@ import { ErrorOutlineOutlined as ErrorIcon, RefreshOutlined as RefreshIcon } fro
 import { captureException } from '../utils/sentry';
 
 /**
+ * Saved view settings per page. A setting saved by an older version can break a
+ * page after an update, so on a crash these are cleared once and the page retried.
+ */
+const PAGE_SETTINGS = [
+  { route: /gis-map/, keys: (k) => k.startsWith('gis.') || k === 'agrocloud_gis_satellite' },
+  { route: /dashboard/, keys: (k) => k.startsWith('agro_chart_') || k === 'agro_dash_map' || k.startsWith('fieldpick.') },
+];
+
+function currentRoute() {
+  return `${window.location.pathname || ''}${window.location.hash || ''}`;
+}
+
+/** Clear the saved settings of the current page, once per session per page. True when cleared. */
+function healPageSettings() {
+  try {
+    const route = currentRoute();
+    const page = PAGE_SETTINGS.find((x) => x.route.test(route));
+    if (!page) return false;
+    const flag = `agro_heal_${page.route.source}`;
+    if (sessionStorage.getItem(flag)) return false;
+    sessionStorage.setItem(flag, '1');
+    const keys = [];
+    for (let i = 0; i < localStorage.length; i += 1) { const k = localStorage.key(i); if (k && page.keys(k)) keys.push(k); }
+    keys.forEach((k) => localStorage.removeItem(k));
+    return keys.length > 0;
+  } catch { return false; }
+}
+
+/**
  * Global error boundary – catches unhandled React errors and shows a
  * friendly fallback instead of a white screen.
  */
@@ -31,11 +60,25 @@ class ErrorBoundary extends Component {
         }
       } catch { /* storage blocked: show the normal message */ }
     }
-    this.setState({ errorInfo });
-    captureException(error, { componentStack: errorInfo?.componentStack });
     // eslint-disable-next-line no-console
     console.error('[ErrorBoundary]', error, errorInfo);
+    if (healPageSettings()) {
+      this.setState({ hasError: false, error: null, errorInfo: null });
+      return;
+    }
+    this.setState({ errorInfo });
+    captureException(error, { componentStack: errorInfo?.componentStack });
   }
+
+  handleReset = () => {
+    try {
+      const page = PAGE_SETTINGS.find((x) => x.route.test(currentRoute()));
+      const keys = [];
+      for (let i = 0; i < localStorage.length; i += 1) { const k = localStorage.key(i); if (k && (!page || page.keys(k))) keys.push(k); }
+      if (page) keys.forEach((k) => localStorage.removeItem(k));
+    } catch { /* ignore */ }
+    window.location.reload();
+  };
 
   handleRetry = () => {
     this.setState({ hasError: false, error: null, errorInfo: null });
@@ -70,6 +113,11 @@ class ErrorBoundary extends Component {
               An unexpected error occurred. You can try refreshing the page or
               click the button below to retry.
             </Typography>
+            {this.state.error && process.env.NODE_ENV !== 'development' && (
+              <Typography component="p" sx={{ mb: 3, fontSize: 12, color: 'text.disabled', fontFamily: 'var(--font-mono, ui-monospace, monospace)', wordBreak: 'break-word' }}>
+                {String(this.state.error?.message || this.state.error).slice(0, 200)}
+              </Typography>
+            )}
             {process.env.NODE_ENV === 'development' && this.state.error && (
               <Paper
                 variant="outlined"
@@ -92,7 +140,7 @@ class ErrorBoundary extends Component {
                 </Typography>
               </Paper>
             )}
-            <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center' }}>
+            <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
               <Button
                 variant="contained"
                 startIcon={<RefreshIcon />}
@@ -106,6 +154,11 @@ class ErrorBoundary extends Component {
               >
                 Reload Page
               </Button>
+              {PAGE_SETTINGS.some((x) => x.route.test(currentRoute())) && (
+                <Button variant="text" onClick={this.handleReset}>
+                  Reset page settings
+                </Button>
+              )}
             </Box>
           </Paper>
         </Box>
