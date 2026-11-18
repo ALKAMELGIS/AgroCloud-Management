@@ -75,13 +75,13 @@ function clipShapes(features) {
   }).filter(Boolean);
 }
 
-function wmsLayer(sat, time, pane, shapes) {
+function wmsLayer(sat, time, pane, shapes, index = sat.index) {
   const opts = {
     layers: 'S2', format: 'image/png', transparent: true, version: '1.3.0', tileSize: 512, maxZoom: 20,
     // Satellite tiles take a second or more: keep the loaded ones on screen while zooming,
     // and ask for the new level only once the zoom settles (no blank frames, no wasted requests).
     updateWhenZooming: false, keepBuffer: 4,
-    k: sat.tileKey, index: sat.index, time, maxcc: sat.maxcc, opacity: sat.opacity, pane,
+    k: sat.tileKey, index, time, maxcc: sat.maxcc, opacity: sat.opacity, pane,
   };
   // Drawn areas clip on the server (GEOMETRY); Agro_Structures fields clip inside each tile.
   // A drawn area always clips: the index shows only inside it.
@@ -129,7 +129,7 @@ export default function SatelliteMapLayers({ sat, clipFeatures = null }) {
     if (!sat.ready || !sat.show || !sat.compare.on || !sat.compare.date) return undefined;
     if (nothingToShow) return undefined;
     const pane = ensurePane(map, 'satellite-compare', 351);
-    const layer = wmsLayer(sat, `${sat.compare.date}/${sat.compare.date}`, 'satellite-compare', shapes).addTo(map);
+    const layer = wmsLayer(sat, `${sat.compare.date}/${sat.compare.date}`, 'satellite-compare', shapes, sat.compare.indexB || sat.index).addTo(map);
     const rtl = document.documentElement.dir === 'rtl';
     const clipPane = () => {
       const size = map.getSize();
@@ -152,7 +152,7 @@ export default function SatelliteMapLayers({ sat, clipFeatures = null }) {
       pane.style.clip = '';
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map, sat.ready, sat.show, sat.compare.on, sat.compare.date, sat.tileKey, sat.index, sat.maxcc, sat.clip, sat.wkt, sat.aoiMode, shapes, nothingToShow]);
+  }, [map, sat.ready, sat.show, sat.compare.on, sat.compare.date, sat.compare.indexB, sat.tileKey, sat.index, sat.maxcc, sat.clip, sat.wkt, sat.aoiMode, shapes, nothingToShow]);
 
   useEffect(() => { window.dispatchEvent(new Event('agrocloud:satellite-swipe')); }, [sat.compare.swipe]);
 

@@ -469,25 +469,61 @@ export function AoiPanel({ sat, mapRef, fields = [], structures = [] }) {
   );
 }
 
-/** Change detection: a second date on the other side of a swipe handle. */
+/** One side of the compare: its own index layer and its own date. */
+function CompareSide({ side, sat, index, onIndex, date, onDate, scenes, busy, onFind, error, hint }) {
+  const tone = side === 'A' ? '#1d5c3c' : '#2f6fd0';
+  return (
+    <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 2, overflow: 'hidden' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 2, py: 1.25, bgcolor: tone, color: '#fff' }}>
+        <Box component="span" sx={{ width: 22, height: 22, borderRadius: '50%', bgcolor: 'rgba(255,255,255,0.18)', display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 700 }}>{side}</Box>
+        <Typography sx={{ fontSize: '0.8125rem', fontWeight: 600, color: '#fff', flex: 1 }}>{side === 'A' ? 'Side A' : 'Side B'}</Typography>
+        <Typography sx={{ fontSize: '0.6875rem', color: 'rgba(255,255,255,0.8)' }}>{hint}</Typography>
+      </Box>
+      <Box sx={{ p: 2, display: 'grid', gap: 1.5 }}>
+        <TextField select size="small" label="Index layer" value={index} onChange={(e) => onIndex(e.target.value)} fullWidth
+          SelectProps={{ native: true }} InputLabelProps={{ shrink: true }}>
+          {sat.indices.map((i) => <option key={i.key} value={i.key}>{i.label}</option>)}
+        </TextField>
+        <TextField size="small" type="date" label="Date" fullWidth InputLabelProps={{ shrink: true }}
+          value={date || ''} onChange={(e) => onDate(e.target.value || null)}
+          helperText={!date && side === 'A' ? `Empty: best image of ${sat.from} → ${sat.to}` : undefined} />
+        <Button size="small" variant="outlined" onClick={onFind} disabled={!sat.status.configured || busy}>
+          {busy ? 'Searching…' : `Find scenes for side ${side}`}
+        </Button>
+        {error && <Alert severity="error">{error}</Alert>}
+      </Box>
+      {scenes && <Box sx={{ borderTop: 1, borderColor: 'divider', maxHeight: 220, overflowY: 'auto' }}><SceneList scenes={scenes} value={date} allowLatest={false} onPick={onDate} /></Box>}
+    </Box>
+  );
+}
+
+/** Change detection: Side A and Side B, each with its own index layer and date, split by a swipe handle. */
 export function ComparePanel({ sat, mapRef }) {
-  const s = useSceneSearch(sat, mapRef);
+  const sA = useSceneSearch(sat, mapRef);
+  const sB = useSceneSearch(sat, mapRef);
+  const indexB = sat.compare.indexB || sat.index;
+  const setB = (patch) => { sat.setCompare((c) => ({ ...c, ...patch, on: true })); sat.setShow(true); };
   return (
     <Box>
       <Box sx={section}>
         <FormControlLabel
           control={<Switch checked={sat.compare.on} onChange={(e) => { sat.setCompare((c) => ({ ...c, on: e.target.checked })); if (e.target.checked) sat.setShow(true); }} />}
-          label={<Typography sx={{ fontSize: '0.875rem', fontWeight: 600 }}>Compare two dates</Typography>}
+          label={<Typography sx={{ fontSize: '0.875rem', fontWeight: 600 }}>Compare two sides</Typography>}
         />
-        <Typography sx={{ fontSize: '0.8125rem', color: 'text.secondary', mt: 0.5 }}>
-          {'Side A: '}<bdi>{sat.scene || `${sat.from} → ${sat.to}`}</bdi>{' · Side B: '}<bdi>{sat.compare.date || '—'}</bdi>
+        <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', mt: 0.5 }}>
+          Drag the handle on the map to move between side A and side B.
         </Typography>
-        <TextField size="small" type="date" label="Date B" sx={{ mt: 1.5 }} fullWidth InputLabelProps={{ shrink: true }}
-          value={sat.compare.date || ''} onChange={(e) => sat.setCompare((c) => ({ ...c, date: e.target.value || null, on: true }))} />
-        <Button fullWidth variant="outlined" sx={{ mt: 1.5 }} onClick={s.search} disabled={!sat.status.configured || s.busy}>Find scenes for date B</Button>
-        {s.error && <Alert severity="error" sx={{ mt: 1.5 }}>{s.error}</Alert>}
       </Box>
-      <SceneList scenes={s.scenes} value={sat.compare.date} allowLatest={false} onPick={(d) => sat.setCompare((c) => ({ ...c, date: d, on: true }))} />
+      <Box sx={{ px: 2.5, pb: 2.5, display: 'grid', gap: 2 }}>
+        <CompareSide side="A" sat={sat} hint={document.documentElement.dir === 'rtl' ? 'right of the handle' : 'left of the handle'}
+          index={sat.index} onIndex={(k) => { sat.setIndex(k); sat.setShow(true); }}
+          date={sat.scene} onDate={(d) => { sat.setScene(d); sat.setShow(true); }}
+          scenes={sA.scenes} busy={sA.busy} onFind={sA.search} error={sA.error} />
+        <CompareSide side="B" sat={sat} hint={document.documentElement.dir === 'rtl' ? 'left of the handle' : 'right of the handle'}
+          index={indexB} onIndex={(k) => setB({ indexB: k })}
+          date={sat.compare.date} onDate={(d) => setB({ date: d })}
+          scenes={sB.scenes} busy={sB.busy} onFind={sB.search} error={sB.error} />
+      </Box>
     </Box>
   );
 }
@@ -604,7 +640,7 @@ export async function downloadImage(sat, map) {
  * Position is a plain style (always the physical left), below the zoom buttons
  * or the warning banner when those are in that corner.
  */
-export function MapIndexLegend({ sat, top = 12 }) {
+export function MapIndexLegend({ sat, top = 12, side = 'left' }) {
   if (!sat.ready || !sat.show || !sat.current?.legend) return null;
   const legend = sat.current.legend;
   const min = legend[0].value;
@@ -615,7 +651,7 @@ export function MapIndexLegend({ sat, top = 12 }) {
     <Box
       role="img"
       aria-label={`${sat.current.label} legend, ${min} to ${max}`}
-      style={{ position: 'absolute', left: 12, top, zIndex: 1000 }}
+      style={{ position: 'absolute', [side]: side === 'left' ? 12 : 56, top, zIndex: 1000 }}
       sx={(t) => ({ p: 1, pb: 1.25, borderRadius: 1.5, bgcolor: alpha(t.palette.background.paper, 0.94), boxShadow: 2, border: 1, borderColor: 'divider' })}
     >
       <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, textAlign: 'center' }} translate="no">{sat.current.label}</Typography>
@@ -660,8 +696,8 @@ export function CompareSwipe({ sat }) {
       >
         ⇆
       </Box>
-      <Typography sx={{ position: 'absolute', top: 10, [rtl ? 'right' : 'left']: 8, px: 0.75, borderRadius: 1, bgcolor: 'rgba(0,0,0,.6)', color: '#fff', fontSize: '0.6875rem', whiteSpace: 'nowrap' }}><bdi>{`B · ${sat.compare.date}`}</bdi></Typography>
-      <Typography sx={{ position: 'absolute', top: 10, [rtl ? 'left' : 'right']: 8, px: 0.75, borderRadius: 1, bgcolor: 'rgba(0,0,0,.6)', color: '#fff', fontSize: '0.6875rem', whiteSpace: 'nowrap' }}><bdi>{`A · ${sat.scene || sat.to}`}</bdi></Typography>
+      <Typography sx={{ position: 'absolute', top: 10, [rtl ? 'right' : 'left']: 8, px: 0.75, borderRadius: 1, bgcolor: 'rgba(0,0,0,.6)', color: '#fff', fontSize: '0.6875rem', whiteSpace: 'nowrap' }}><bdi>{`B · ${(sat.indices.find((i) => i.key === (sat.compare.indexB || sat.index)) || {}).label || sat.compare.indexB || sat.index} · ${sat.compare.date}`}</bdi></Typography>
+      <Typography sx={{ position: 'absolute', top: 10, [rtl ? 'left' : 'right']: 8, px: 0.75, borderRadius: 1, bgcolor: 'rgba(0,0,0,.6)', color: '#fff', fontSize: '0.6875rem', whiteSpace: 'nowrap' }}><bdi>{`A · ${sat.current?.label || sat.index} · ${sat.scene || sat.to}`}</bdi></Typography>
     </Box>
   );
 }

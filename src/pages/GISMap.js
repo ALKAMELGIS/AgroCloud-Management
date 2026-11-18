@@ -947,6 +947,11 @@ export default function GISMap() {
         <CompareSwipe sat={sat} />
         {/* Index legend: vertical, top-left corner (below the zoom buttons in Arabic / the warning banner). */}
         {!(sat.aoiMode === 'drawn' && !sat.aoi && !sat.withStructures) && <MapIndexLegend sat={sat} top={theme.direction === 'rtl' || orphans.length > 0 ? 96 : 12} />}
+        {/* Side B has its own index: its legend sits on the other side. */}
+        {sat.compare.on && sat.compare.date && sat.compare.indexB && sat.compare.indexB !== sat.index && !(sat.aoiMode === 'drawn' && !sat.aoi && !sat.withStructures) && (
+          <MapIndexLegend sat={{ ...sat, current: sat.indices.find((i) => i.key === sat.compare.indexB), scene: sat.compare.date }}
+            top={12} side={theme.direction === 'rtl' ? 'left' : 'right'} />
+        )}
         {/* Bottom dock: legend · soil bar, and the time series across the map. */}
         <Box sx={{
           position: 'absolute', insetInline: 12, bottom: 22, zIndex: 1000, display: 'flex', flexDirection: 'column', gap: 1,
