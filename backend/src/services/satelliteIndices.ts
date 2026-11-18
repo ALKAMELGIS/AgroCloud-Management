@@ -21,7 +21,8 @@ export interface IndexDef {
 }
 
 const VEG: Ramp = [[-0.2, '0xa50026'], [0, '0xd73027'], [0.1, '0xf46d43'], [0.2, '0xfdae61'], [0.3, '0xfee08b'], [0.4, '0xd9ef8b'], [0.5, '0xa6d96a'], [0.6, '0x66bd63'], [0.7, '0x1a9850'], [0.9, '0x006837']];
-const WATER: Ramp = [[-0.8, '0x8c510a'], [-0.4, '0xd8b365'], [-0.1, '0xf6e8c3'], [0, '0xc7eae5'], [0.2, '0x5ab4ac'], [0.5, '0x01665e'], [0.8, '0x003c30']];
+// NDWI: green (land / vegetation) → white (0) → blue (open water), the Sentinel Hub NDWI ramp.
+const WATER: Ramp = [[-0.8, '0x008000'], [0, '0xFFFFFF'], [0.8, '0x0000CC']];
 const MOIST: Ramp = [[-0.6, '0x8c2d04'], [-0.3, '0xcc4c02'], [-0.1, '0xfe9929'], [0, '0xfee391'], [0.1, '0xc7e9b4'], [0.2, '0x7fcdbb'], [0.4, '0x2c7fb8'], [0.6, '0x253494']];
 const STRESS: Ramp = [[0.2, '0x253494'], [0.6, '0x41b6c4'], [1, '0xffffcc'], [1.4, '0xfd8d3c'], [2, '0xbd0026']];
 const SOIL: Ramp = [[-0.6, '0x1a9850'], [-0.2, '0x91cf60'], [0, '0xfee08b'], [0.15, '0xfc8d59'], [0.3, '0xd73027'], [0.6, '0x7f0000']];
