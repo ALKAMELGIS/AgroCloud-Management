@@ -610,6 +610,7 @@ export default function GISMap() {
         ecph: data.ecph || {},
         scouting: Array.isArray(data.scouting) ? data.scouting : [],
         pesticides: Array.isArray(data.pesticides) ? data.pesticides : [],
+        bioReleases: Array.isArray(data.bioReleases) ? data.bioReleases : [],
       });
     } catch (err) {
       notify('Failed to load field data: ' + err.message, 'error');

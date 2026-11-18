@@ -18,6 +18,8 @@
     }
   } catch(e){}
   var ZONES=[['AD',['Default Site','Site 1','Site 2']],['AF',['Default Site','Site 2']],['AL AIN',['AL Ain']],['AM',['Default Site','Site 3']],['BH',['Site 3']],['DB',['Default Site','Site 3']],['KE',['Site 3']],['MH',['Default Site','Site 1']]];
+  /* The sample fields of MH · Site 1 carry their real Agro_Structures Farm_Code, so they link to their drawn shapes. */
+  var REAL_CODES={'GH-01':'MH116','GH-02':'MH117','NH-01':'UOMAHNH001','NH-02':'UOMAHNH002','NH-03':'UOMAHNH003'};
   var countries=[],sites=[],areas=[],fields=[];
   ZONES.forEach(function(z,zi){
     var cid='c'+zi; countries.push({id:cid,name:z[0],code:z[0]});
@@ -25,7 +27,9 @@
       var sid=cid+'s'+si; sites.push({id:sid,name:sn,countryId:cid,country_id:cid,location:z[0]});
       ['Greenhouse','Nethouse'].forEach(function(an,ai){
         var aid=sid+'a'+ai; areas.push({id:aid,name:an,siteId:sid,site_id:sid});
-        for(var k=1;k<=3;k++){ var fid=aid+'f'+k; fields.push({id:fid,name:(ai?'NH-0':'GH-0')+k,farmAreaId:aid,farm_area_id:aid,area:1.2,gis_zone_id:z[0],gis_farm_code:z[0]+'-'+(si===z[1].length-1?'':'S'+si+'-')+(ai?'NH':'GH')+'-0'+k}); }
+        for(var k=1;k<=3;k++){ var fid=aid+'f'+k, nm=(ai?'NH-0':'GH-0')+k, code=z[0]+'-'+(si===z[1].length-1?'':'S'+si+'-')+(ai?'NH':'GH')+'-0'+k;
+          if(z[0]==='MH'&&sn==='Site 1'&&REAL_CODES[nm]) code=REAL_CODES[nm];
+          fields.push({id:fid,name:nm,farmAreaId:aid,farm_area_id:aid,area:1.2,gis_zone_id:z[0],gis_farm_code:code}); }
       });
     });
   });
@@ -114,6 +118,8 @@
   function body(url,method,reqBody){
     var path=url.replace(/^https?:\/\/[^/]+/,'').replace(/^.*\/api\/v1/,'').split('?')[0];
     var q={}; (url.split('?')[1]||'').split('&').forEach(function(p){var kv=p.split('='); if(kv[0]) q[decodeURIComponent(kv[0])]=decodeURIComponent(kv[1]||'');});
+    /* Fields whose linked ArcGIS feature (GlobalID) is gone from the layer: none in the demo, links follow Farm_Code. */
+    if(path==='/fields/gis-orphans') return ok([]);
     // Data paths of the forms (no server in the demo: paths show [your-server], ArcGIS writes need the real server).
     var FEEDS=[['ecph','EC/PH Entry','/ecph-entry','field'],['fertigation','Fertigation Entry','/fertigation/entry','field'],['irrigation','Irrigation Entry','/irrigation/entry','field'],['harvest','Harvest Entry','/harvest/entry','field'],['crop-rotation','Crop Rotation','/admin/crop-history','field'],['pump-room','Pump Room','/pump-room','site']];
     var fdSt=function(){ try{ return JSON.parse(localStorage.getItem('agro_demo_feeds_v1')||'{}'); }catch(e){ return {}; } };
@@ -466,6 +472,28 @@
   var COUNTRY_BOX=[['1',[51,22.4,56.5,26.4]],['2',[18.8,42.2,23.1,46.2]],['4',[-17.2,14.6,-4.8,21.3]],['3',[-17.2,21.3,-0.9,36]],['6',[34.5,16.3,55.7,32.2]],['5',[33,3.4,48,15]],['7',[29.3,-11.8,40.5,-0.9]],['10',[-13.4,6.9,-10.2,10]]];
   function countryAt(g){ var r=g.type==='Polygon'?g.coordinates[0]:(g.coordinates[0]||[])[0]; if(!r||!r.length) return null; var x=0,y=0; r.forEach(function(c){x+=c[0];y+=c[1];}); x/=r.length; y/=r.length;
     var h=COUNTRY_BOX.filter(function(b){ var q=b[1]; return x>=q[0]&&x<=q[2]&&y>=q[1]&&y<=q[3]; })[0]; return h?h[0]:null; }
+  /* Every field that has ZONE_ID + Farm_Code gets its shape from Agro_Structures (no new fields):
+     the link is the Farm_Code, the drawing is saved in the system and kept if edited here. */
+  var LINKED=null;
+  function autoLink(){
+    if(LINKED) return LINKED;
+    LINKED=liveLayer().then(function(fc){
+      var fs=(fc&&fc.features)||[]; if(!fs.length) return;
+      var by={}; fs.forEach(function(f){ var p=f.properties||{}, z=String(p.ZONE_ID||'').trim().toUpperCase(), c=String(p.Farm_Code||'').trim().toUpperCase(); if(z&&c&&f.geometry) by[z+'|'+c]=f; });
+      var st=geoStore(), now=new Date().toISOString(), n=0;
+      fields.forEach(function(x){ if(!x.gis_zone_id||!x.gis_farm_code) return; var e=st[x.id];
+        if(e&&e.geometry) return;
+        var f=by[String(x.gis_zone_id).toUpperCase()+'|'+String(x.gis_farm_code).toUpperCase()]; if(!f) return;
+        var g=f.geometry; st[x.id]=e||{history:[]}; st[x.id].geometry=g.type==='Polygon'?{type:'MultiPolygon',coordinates:[g.coordinates]}:g; st[x.id].src='arcgis'; st[x.id].at=now;
+        var sc=stCode((f.properties||{}).Structure_Type,null); if(sc) st[x.id].subtype=sc;
+        if(!x.gis_external_id&&f.properties&&f.properties.GlobalID) x.gis_external_id=f.properties.GlobalID;
+        (st[x.id].history=st[x.id].history||[]).push({id:Date.now()+n,operation:'import',edited_at:now,edited_by_name:'ArcGIS link (Farm_Code)',area_ha:geoArea(st[x.id].geometry)}); n++; });
+      if(n) geoSave(st);
+    }).catch(function(){});
+    /* Never hold pages up for long: without the layer, fields simply show no shape yet. */
+    LINKED=Promise.race([LINKED,new Promise(function(r){ setTimeout(r,8000); })]);
+    return LINKED;
+  }
   function demoImport(fc,meta,opt){
     var C=JSON.parse(JSON.stringify(countries)),S=JSON.parse(JSON.stringify(sites)),A=JSON.parse(JSON.stringify(areas)),Fl=JSON.parse(JSON.stringify(fields));
     var st=JSON.parse(JSON.stringify(geoStore())), now=new Date().toISOString(), n=Date.now().toString(36);
@@ -577,6 +605,12 @@
     if(isApi(url)&&/\/geo\/import\/arcgis(\?|$)/.test(url)&&init&&init.method==='POST'){
       var ib={}; try{ ib=init.body?JSON.parse(init.body):{}; }catch(e){}
       return Promise.all([liveLayer(),liveMeta()]).then(function(r){ var fc=r[0]||EMPTYFC, rp=demoImport(fc,r[1]||DEMO_META,ib); rp.layer.source=fc._live?'live':fc._snapshot?'copy':'none'; return jsonRes(ok(rp)); });
+    }
+    if(isApi(url)&&/\/geo\/layers(\?|$)/.test(url)&&(!init||!init.method||init.method==='GET')){
+      return autoLink().then(function(){ return jsonRes(body(url,'GET',null)); });
+    }
+    if(isApi(url)&&/\/fields(\?|$)/.test(url)&&(!init||!init.method||init.method==='GET')){
+      return autoLink().then(function(){ return jsonRes(body(url,'GET',null)); });
     }
     if(isApi(url)&&/\/gis\/layers\/demo-struct\/features(\?|$)/.test(url)){
       return liveLayer().then(function(fc){ return jsonRes(ok(fc)); });
