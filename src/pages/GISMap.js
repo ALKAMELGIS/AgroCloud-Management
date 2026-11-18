@@ -32,9 +32,9 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
 import { canEditGis } from '../utils/roleAccess';
 import InfoNote from '../components/InfoNote';
-import { MapWorkspace, MapLegend, BasemapList, useMapWorkspace, useBasemap, mapZoomPosition } from '../components/map/MapPanel';
+import { MapWorkspace, MapLegend, BasemapSwitcher, useMapWorkspace, useBasemap, mapZoomPosition } from '../components/map/MapPanel';
 import { BASEMAPS } from '../utils/mapBasemaps';
-import { LegendToggleOutlined as LegendIcon, MapOutlined as BasemapIcon } from '@mui/icons-material';
+import { LegendToggleOutlined as LegendIcon } from '@mui/icons-material';
 import { useTheme } from '@mui/material/styles';
 import {
   SatelliteAltOutlined as SatelliteIcon, EventOutlined as DateIcon, PentagonOutlined as AoiIcon, CompareOutlined as CompareIcon,
@@ -144,7 +144,7 @@ export default function GISMap() {
   const mapHeight = `calc(100dvh - ${topBarHeight + padPx + bottomChrome + CONTEXT_BAR_HEIGHT}px)`;
   const workspace = useMapWorkspace('gis.workspace', 'layers');
   const closeWorkspace = workspace.close;
-  const [basemap, setBasemap] = useBasemap('gis.basemap', 'osm');
+  const [basemap, setBasemap] = useBasemap('gis.basemap', 'satellite');
   const theme = useTheme();
   const [layers, setLayers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -850,7 +850,6 @@ export default function GISMap() {
         tools={[
           { key: 'layers', label: 'Layers', title: 'GIS Layers', icon: <LayersIcon />, badge: layers.length || undefined, content: layersPanel },
           { key: 'legend', label: 'Legend', icon: <LegendIcon />, badge: visibleLayers.length || undefined, content: <MapLegend sections={legendSections} /> },
-          { key: 'basemaps', label: 'Basemaps', icon: <BasemapIcon />, content: <BasemapList value={basemap} onChange={setBasemap} /> },
           canEdit && { key: 'add', label: 'Add data', icon: <AddIcon />, onClick: () => { setAddDialog(true); setAddTab(0); } },
         ]}
         endTools={satTools}
@@ -902,6 +901,8 @@ export default function GISMap() {
           </Alert>
         )}
 
+        <Box sx={{ position: 'relative', width: '100%', height: '100%' }}>
+        <BasemapSwitcher value={basemap} onChange={setBasemap} side={theme.direction === 'rtl' ? 'right' : 'left'} />
         <MapContainer attributionControl={false} fadeAnimation={false}
           center={DEFAULT_CENTER}
           zoom={DEFAULT_ZOOM}
@@ -938,6 +939,7 @@ export default function GISMap() {
           <SatelliteMapLayers sat={sat} clipFeatures={clipFeatures} />
           <SoilMapPicker active={soilOn} point={soilPoint} onPick={setSoilPoint} />
         </MapContainer>
+        </Box>
         <CompareSwipe sat={sat} />
         {/* Index legend: vertical, top-left corner (below the zoom buttons in Arabic / the warning banner). */}
         {!(sat.aoiMode === 'drawn' && !sat.aoi && !sat.withStructures) && <MapIndexLegend sat={sat} top={theme.direction === 'rtl' || orphans.length > 0 ? 96 : 12} />}

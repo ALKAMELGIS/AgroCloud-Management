@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Box, ButtonBase, IconButton, List, ListItemButton, ListItemIcon, ListItemText, Radio, Typography,
   useMediaQuery,
@@ -203,6 +203,73 @@ export function useBasemap(storageKey, initial = 'osm') {
   });
   useEffect(() => { try { window.localStorage.setItem(storageKey, basemap); } catch { /* ignore */ } }, [basemap, storageKey]);
   return [basemap, setBasemap];
+}
+
+/** A small tile near the Gulf (z3) to preview each basemap; Esri tiles are z/y/x, the others z/x/y. */
+const PREVIEW = {
+  light: 'https://a.basemaps.cartocdn.com/light_all/4/10/6.png',
+  osm: 'https://a.tile.openstreetmap.org/4/10/6.png',
+  satellite: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/4/6/10',
+  topo: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/4/6/10',
+};
+const plainCredit = (b) => String((b || {}).attribution || '').replace(/<[^>]+>/g, '')
+  .replace(/&copy;/g, '©').replace(/&amp;/g, '&').replace(/&[a-z]+;/g, ' ').replace(/\s+/g, ' ').trim();
+
+/**
+ * In-map basemap switcher (bottom corner): a thumbnail of the current basemap;
+ * clicking it opens a row of thumbnails to pick from. Clicks never reach the map.
+ */
+export function BasemapSwitcher({ value, onChange, side = 'left' }) {
+  const [open, setOpen] = useState(false);
+  const boxRef = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const close = (e) => { if (boxRef.current && !boxRef.current.contains(e.target)) setOpen(false); };
+    const esc = (e) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('pointerdown', close);
+    document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('pointerdown', close); document.removeEventListener('keydown', esc); };
+  }, [open]);
+  const stop = (e) => e.stopPropagation();
+  const thumb = (key, size) => ({
+    width: size, height: size, flexShrink: 0, borderRadius: 1.5, backgroundColor: '#dfe3dd',
+    backgroundImage: `url(${PREVIEW[key]})`, backgroundSize: 'cover', backgroundPosition: 'center',
+  });
+  const current = BASEMAPS[value] || BASEMAPS.satellite;
+  return (
+    <Box ref={boxRef} onMouseDown={stop} onDoubleClick={stop} onWheel={stop} onPointerDown={stop}
+      sx={{ position: 'absolute', bottom: 16, [side]: 16, zIndex: 1000, display: 'flex', alignItems: 'flex-end', gap: 1.5,
+        flexDirection: side === 'left' ? 'row' : 'row-reverse' }}>
+      <ButtonBase onClick={() => setOpen((o) => !o)} aria-haspopup="true" aria-expanded={open}
+        aria-label={`Basemap: ${current.name || current.label}`}
+        sx={{ p: 1, borderRadius: 2.5, bgcolor: 'background.paper', boxShadow: '0 2px 10px rgba(0,0,0,0.25)', flexDirection: 'column', gap: 1,
+          border: '2px solid', borderColor: open ? 'primary.main' : 'transparent',
+          '&.Mui-focusVisible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 } }}>
+        <Box sx={thumb(value in PREVIEW ? value : 'satellite', 56)} />
+        <Typography component="span" sx={{ fontSize: 11, fontWeight: 600, lineHeight: 1 }}>{current.name || current.label}</Typography>
+      </ButtonBase>
+      {open && (
+        <Box role="radiogroup" aria-label="Basemap"
+          sx={{ p: 2, borderRadius: 3, bgcolor: 'background.paper', boxShadow: '0 4px 18px rgba(0,0,0,0.25)', display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          <Box sx={{ display: 'flex', gap: 2 }}>
+            {Object.entries(BASEMAPS).map(([key, b]) => {
+              const on = key === value;
+              return (
+                <ButtonBase key={key} role="radio" aria-checked={on} onClick={() => { onChange(key); setOpen(false); }}
+                  sx={{ flexDirection: 'column', gap: 1, p: 0.5, borderRadius: 2, border: '2px solid', borderColor: on ? 'primary.main' : 'transparent',
+                    '&:hover': { borderColor: on ? 'primary.main' : 'divider' },
+                    '&.Mui-focusVisible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 1 } }}>
+                  <Box sx={thumb(key, 64)} />
+                  <Typography component="span" sx={{ fontSize: 11.5, fontWeight: on ? 600 : 500, color: on ? 'primary.main' : 'text.primary', whiteSpace: 'nowrap' }}>{b.name || b.label}</Typography>
+                </ButtonBase>
+              );
+            })}
+          </Box>
+          <Typography sx={{ fontSize: 10.5, color: 'text.secondary' }}><bdi dir="ltr">{plainCredit(current)}</bdi></Typography>
+        </Box>
+      )}
+    </Box>
+  );
 }
 
 /** Panel content: choose the basemap (radio list). */
