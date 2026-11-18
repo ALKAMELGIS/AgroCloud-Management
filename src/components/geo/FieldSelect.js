@@ -14,6 +14,7 @@ import { BASEMAPS } from '../../utils/mapBasemaps';
 import { MapLifecycle } from '../../utils/leafletSafe';
 import { useIsArabic } from '../../i18n/shellLabels';
 import { boundsOf } from './geoUtils';
+import { flyAndFlash } from '../map/mapFlash';
 
 /*
  * Field picker for every form: the field is the system's own map feature
@@ -58,6 +59,18 @@ function FitMap({ bounds, fitKey }) {
   useEffect(() => {
     if (bounds) { try { map.fitBounds(bounds, { padding: [24, 24], maxZoom: 18 }); } catch { /* ignore */ } }
   }, [fitKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
+}
+
+/** When the chosen field changes, fly to it and flash it so it is easy to find. */
+function FocusFlash({ value, geometry }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!value || !geometry) return;
+    const ring = geometry.type === 'Polygon' ? geometry.coordinates?.[0] : geometry.coordinates?.[0]?.[0];
+    const t = setTimeout(() => { try { flyAndFlash(map, ring); } catch { /* ignore */ } }, 150);
+    return () => clearTimeout(t);
+  }, [value]); // eslint-disable-line react-hooks/exhaustive-deps
   return null;
 }
 
@@ -167,6 +180,7 @@ export function FieldMapView({ fields, value, onPick, height = 380, inline = fal
           <MapLifecycle />
           <TileLayer key={basemap} url={bm.url} maxZoom={20} />
           <FitMap bounds={fit.bounds} fitKey={fit.key} />
+          <FocusFlash value={value} geometry={value ? geo.byId[value]?.geometry : null} />
           {me && <CircleMarker center={me} radius={7} pathOptions={{ color: '#ffffff', weight: 2, fillColor: '#1a73e8', fillOpacity: 1 }} />}
           <GeoJSON
             key={`${value}-${hover}-${fc.features.length}`}
