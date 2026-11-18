@@ -9,8 +9,12 @@ import {
   Paper,
   TextField,
   MenuItem,
+  Button,
+  Collapse,
+  Divider,
 } from '@mui/material';
-import { CloseOutlined as CloseIcon } from '@mui/icons-material';
+import { CloseOutlined as CloseIcon, MapOutlined as MapIcon } from '@mui/icons-material';
+import { FieldMapView } from '../components/geo/FieldSelect';
 import { DashboardSkeleton } from '../components/LoadingSkeleton';
 import FarmMonitor from './dashboard/FarmMonitor';
 import useDashboardData from './dashboard/useDashboardData';
@@ -59,6 +63,8 @@ function Dashboard() {
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [activeTab, setActiveTab] = useState(0);
   const [selectedFieldObj, setSelectedFieldObj] = useState(null);
+  const [showMap, setShowMap] = useState(() => { try { return localStorage.getItem('agro_dash_map') === '1'; } catch { return false; } });
+  const toggleMap = () => setShowMap((v) => { try { localStorage.setItem('agro_dash_map', v ? '0' : '1'); } catch { /* ignore */ } return !v; });
   const { activeSiteId, setActiveSiteId, countries, allowAllSites, hasSiteAssignment } = useActiveSite();
   const { activeSeasonId, setActiveSeasonId, seasons, isLoaded: seasonLoaded } = useActiveSeason();
 
@@ -161,70 +167,94 @@ function Dashboard() {
         onRefreshWeather={refreshWeather}
       />
 
-      <Paper variant="outlined" sx={{ p: 1.5, mb: 2, display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
-        <TextField size="small" type="date" label="From" InputLabelProps={{ shrink: true }}
-          value={seasonFrom || ''} onChange={(e) => setSeasonFrom(e.target.value)}
-          inputProps={{ min: seasonStart || undefined, max: seasonEnd || undefined }}
-          sx={{ width: 150 }}
-        />
-        <TextField size="small" type="date" label="To" InputLabelProps={{ shrink: true }}
-          value={seasonTo || ''} onChange={(e) => setSeasonTo(e.target.value)}
-          inputProps={{ min: seasonStart || undefined, max: seasonEnd || undefined }}
-          sx={{ width: 150 }}
-        />
-        {selectedFieldObj ? (
-          <Chip
-            label={selectedFieldObj.name}
-            onDelete={() => handleFieldSelect(null)}
-            deleteIcon={<CloseIcon />}
+      {/* One bar: dates, then the form tabs, then the chosen field and the map switch. */}
+      <Paper variant="outlined" sx={{ mb: 4, borderRadius: 3, overflow: 'hidden' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: { xs: 'wrap', md: 'nowrap' }, columnGap: 3, rowGap: 2, px: 3, py: 2 }}>
+          <Box sx={{ display: 'flex', gap: 2, flexShrink: 0 }}>
+            <TextField size="small" type="date" label="From" InputLabelProps={{ shrink: true }}
+              value={seasonFrom || ''} onChange={(e) => setSeasonFrom(e.target.value)}
+              inputProps={{ min: seasonStart || undefined, max: seasonEnd || undefined }}
+              sx={{ width: 150 }}
+            />
+            <TextField size="small" type="date" label="To" InputLabelProps={{ shrink: true }}
+              value={seasonTo || ''} onChange={(e) => setSeasonTo(e.target.value)}
+              inputProps={{ min: seasonStart || undefined, max: seasonEnd || undefined }}
+              sx={{ width: 150 }}
+            />
+          </Box>
+          <Divider orientation="vertical" flexItem sx={{ display: { xs: 'none', md: 'block' } }} />
+          <Tabs
+            value={activeTab}
+            onChange={(_, v) => setActiveTab(v)}
+            variant="scrollable"
+            scrollButtons={false}
+            aria-label="Dashboard form"
             sx={{
-              fontWeight: 600,
-              bgcolor: 'table.headerBg',
-              color: 'table.headerText',
-              '& .MuiChip-deleteIcon': { color: 'table.headerText' },
+              order: { xs: 3, md: 0 },
+              width: { xs: '100%', md: 'auto' },
+              minHeight: 40,
+              '& .MuiTabs-indicator': { bgcolor: activeForm.base, height: 3, borderRadius: '3px 3px 0 0' },
             }}
-          />
-        ) : (
-          <Typography variant="body2" color="text.secondary" sx={{ ml: 1 }}>
-            Click a field above to filter
-          </Typography>
-        )}
-      </Paper>
-
-      <Tabs
-        value={activeTab}
-        onChange={(_, v) => setActiveTab(v)}
-        variant="scrollable"
-        allowScrollButtonsMobile
-        sx={{
-          mb: 2,
-          borderBottom: 1,
-          borderColor: 'divider',
-          minHeight: 46,
-          '& .MuiTabs-indicator': { bgcolor: activeForm.base, height: 3 },
-        }}
-      >
-        {DASHBOARD_TABS.map((t) => {
-          const f = FORM_IDENTITY[t.key];
-          return (
-            <Tab
-              key={t.key}
-              label={(
-                <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
-                  <Box component="span" sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: f.base }} />
-                  {t.label}
-                </Box>
-              )}
-              sx={{
-                textTransform: 'none',
-                fontWeight: 600,
-                minHeight: 46,
-                '&.Mui-selected': { color: f.dark },
+          >
+            {DASHBOARD_TABS.map((t) => {
+              const f = FORM_IDENTITY[t.key];
+              return (
+                <Tab
+                  key={t.key}
+                  label={(
+                    <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+                      <Box component="span" sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: f.base }} />
+                      {t.label}
+                    </Box>
+                  )}
+                  sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.8125rem', minHeight: 40, minWidth: 0, px: 3, '&.Mui-selected': { color: f.dark } }}
+                />
+              );
+            })}
+          </Tabs>
+          <Box sx={{ flex: 1, display: { xs: 'none', md: 'block' } }} />
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, ml: { xs: 'auto', md: 0 }, flexShrink: 0 }}>
+            {selectedFieldObj ? (
+              <Chip
+                label={selectedFieldObj.name}
+                onDelete={() => handleFieldSelect(null)}
+                deleteIcon={<CloseIcon />}
+                size="small"
+                sx={{ height: 28, fontWeight: 600, bgcolor: 'table.headerBg', color: 'table.headerText', '& .MuiChip-deleteIcon': { color: 'table.headerText' } }}
+              />
+            ) : (
+              <Typography sx={{ fontSize: 12, color: 'text.secondary', whiteSpace: 'nowrap' }}>All fields</Typography>
+            )}
+            <Button
+              size="small"
+              variant={showMap ? 'contained' : 'outlined'}
+              color="primary"
+              startIcon={<MapIcon sx={{ fontSize: 18 }} />}
+              onClick={toggleMap}
+              aria-pressed={showMap}
+              aria-controls="dashboard-map"
+              disableElevation
+              sx={{ height: 32, borderRadius: 2, textTransform: 'none', fontWeight: 600, px: 3, whiteSpace: 'nowrap' }}
+            >
+              Map
+            </Button>
+          </Box>
+        </Box>
+        <Collapse in={showMap} unmountOnExit>
+          <Box id="dashboard-map" sx={{ borderTop: 1, borderColor: 'divider' }}>
+            <FieldMapView
+              inline
+              height={420}
+              fields={(allFields || []).filter((x) => !filters.site || x.siteId === filters.site)}
+              value={filters.field}
+              onPick={(id) => {
+                const f = (allFields || []).find((x) => x.id === id);
+                if (f) handleFieldSelect(filters.field === id ? null : { ...f, farm_area_id: f.farm_area_id || f.farmAreaId });
               }}
             />
-          );
-        })}
-      </Tabs>
+          </Box>
+        </Collapse>
+      </Paper>
 
       <Box ref={statsRef} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2.5, scrollMarginTop: 96 }}>
         <FormTile form={activeForm} />
