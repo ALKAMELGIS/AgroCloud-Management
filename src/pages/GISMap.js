@@ -902,7 +902,7 @@ export default function GISMap() {
         )}
 
         <Box sx={{ position: 'relative', width: '100%', height: '100%' }}>
-        <BasemapSwitcher value={basemap} onChange={setBasemap} side={theme.direction === 'rtl' ? 'right' : 'left'} />
+        <BasemapSwitcher value={basemap} onChange={setBasemap} side={mapZoomPosition(theme) === 'topleft' ? 'right' : 'left'} />
         <MapContainer attributionControl={false} fadeAnimation={false}
           center={DEFAULT_CENTER}
           zoom={DEFAULT_ZOOM}
@@ -912,7 +912,11 @@ export default function GISMap() {
         >
           <ZoomControl position={mapZoomPosition(theme)} />
           <MapLifecycle />
-          <TileLayer key={basemap} url={BASEMAPS[basemap].url} attribution={BASEMAPS[basemap].attribution} />
+          <TileLayer key={basemap} url={(BASEMAPS[basemap] || BASEMAPS.satellite).url} attribution={(BASEMAPS[basemap] || BASEMAPS.satellite).attribution}
+            maxNativeZoom={(BASEMAPS[basemap] || BASEMAPS.satellite).maxNativeZoom || 19} maxZoom={21} />
+          {(BASEMAPS[basemap] || {}).overlay && (
+            <TileLayer key={`${basemap}-labels`} url={BASEMAPS[basemap].overlay} maxNativeZoom={BASEMAPS[basemap].maxNativeZoom || 19} maxZoom={21} zIndex={2} />
+          )}
 
           {allBounds && <SafeFitLatLngBounds bounds={allBounds} options={{ padding: [50, 50], maxZoom: 16 }} />}
 

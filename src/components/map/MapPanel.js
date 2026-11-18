@@ -205,19 +205,23 @@ export function useBasemap(storageKey, initial = 'osm') {
   return [basemap, setBasemap];
 }
 
-/** A small tile near the Gulf (z3) to preview each basemap; Esri tiles are z/y/x, the others z/x/y. */
-const PREVIEW = {
-  light: 'https://a.basemaps.cartocdn.com/light_all/4/10/6.png',
-  osm: 'https://a.tile.openstreetmap.org/4/10/6.png',
-  satellite: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/4/6/10',
-  topo: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/4/6/10',
-};
 const plainCredit = (b) => String((b || {}).attribution || '').replace(/<[^>]+>/g, '')
   .replace(/&copy;/g, '©').replace(/&amp;/g, '&').replace(/&[a-z]+;/g, ' ').replace(/\s+/g, ' ').trim();
 
+/** Four-squares icon, like the basemap gallery button in Esri map viewers. */
+function GalleryIcon() {
+  return (
+    <Box component="svg" width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} aria-hidden="true">
+      <rect x="4" y="4" width="6.5" height="6.5" rx="1" /><rect x="13.5" y="4" width="6.5" height="6.5" rx="1" />
+      <rect x="4" y="13.5" width="6.5" height="6.5" rx="1" /><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1" />
+    </Box>
+  );
+}
+
 /**
- * In-map basemap switcher (bottom corner): a thumbnail of the current basemap;
- * clicking it opens a row of thumbnails to pick from. Clicks never reach the map.
+ * In-map basemap gallery (top corner, opposite the zoom buttons): a square icon
+ * button that opens a scrolling list of basemaps with thumbnails, like the Esri
+ * Basemap Gallery widget. Clicks inside never pan or zoom the map.
  */
 export function BasemapSwitcher({ value, onChange, side = 'left' }) {
   const [open, setOpen] = useState(false);
@@ -231,41 +235,40 @@ export function BasemapSwitcher({ value, onChange, side = 'left' }) {
     return () => { document.removeEventListener('pointerdown', close); document.removeEventListener('keydown', esc); };
   }, [open]);
   const stop = (e) => e.stopPropagation();
-  const thumb = (key, size) => ({
-    width: size, height: size, flexShrink: 0, borderRadius: 1.5, backgroundColor: '#dfe3dd',
-    backgroundImage: `url(${PREVIEW[key]})`, backgroundSize: 'cover', backgroundPosition: 'center',
-  });
   const current = BASEMAPS[value] || BASEMAPS.satellite;
   return (
     <Box ref={boxRef} onMouseDown={stop} onDoubleClick={stop} onWheel={stop} onPointerDown={stop}
-      sx={{ position: 'absolute', bottom: 16, [side]: 16, zIndex: 1000, display: 'flex', alignItems: 'flex-end', gap: 1.5,
-        flexDirection: side === 'left' ? 'row' : 'row-reverse' }}>
+      sx={{ position: 'absolute', top: 12, [side]: 12, zIndex: 1000, display: 'flex', flexDirection: 'column',
+        alignItems: side === 'left' ? 'flex-start' : 'flex-end', gap: 1.5 }}>
       <ButtonBase onClick={() => setOpen((o) => !o)} aria-haspopup="true" aria-expanded={open}
-        aria-label={`Basemap: ${current.name || current.label}`}
-        sx={{ p: 1, borderRadius: 2.5, bgcolor: 'background.paper', boxShadow: '0 2px 10px rgba(0,0,0,0.25)', flexDirection: 'column', gap: 1,
-          border: '2px solid', borderColor: open ? 'primary.main' : 'transparent',
+        aria-label={`Basemap gallery: ${current.name}`} title="Basemap gallery"
+        sx={{ width: 34, height: 34, borderRadius: 1, bgcolor: open ? 'primary.main' : 'background.paper', color: open ? 'primary.contrastText' : 'text.primary',
+          border: '1px solid', borderColor: open ? 'primary.main' : 'rgba(0,0,0,0.2)', boxShadow: '0 1px 5px rgba(0,0,0,0.3)',
+          '&:hover': { bgcolor: open ? 'primary.dark' : 'grey.100' },
           '&.Mui-focusVisible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 } }}>
-        <Box sx={thumb(value in PREVIEW ? value : 'satellite', 56)} />
-        <Typography component="span" sx={{ fontSize: 11, fontWeight: 600, lineHeight: 1 }}>{current.name || current.label}</Typography>
+        <GalleryIcon />
       </ButtonBase>
       {open && (
-        <Box role="radiogroup" aria-label="Basemap"
-          sx={{ p: 2, borderRadius: 3, bgcolor: 'background.paper', boxShadow: '0 4px 18px rgba(0,0,0,0.25)', display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-          <Box sx={{ display: 'flex', gap: 2 }}>
+        <Box sx={{ width: 272, maxWidth: 'calc(100vw - 48px)', bgcolor: 'background.paper', borderRadius: 2, overflow: 'hidden',
+          boxShadow: '0 6px 24px rgba(0,0,0,0.28)', display: 'flex', flexDirection: 'column' }}>
+          <Typography sx={{ px: 4, py: 3, fontSize: 13, fontWeight: 600, borderBottom: '1px solid', borderColor: 'divider' }}>Basemap gallery</Typography>
+          <Box role="radiogroup" aria-label="Basemap" sx={{ maxHeight: 'min(420px, 55vh)', overflowY: 'auto', py: 1 }}>
             {Object.entries(BASEMAPS).map(([key, b]) => {
               const on = key === value;
               return (
                 <ButtonBase key={key} role="radio" aria-checked={on} onClick={() => { onChange(key); setOpen(false); }}
-                  sx={{ flexDirection: 'column', gap: 1, p: 0.5, borderRadius: 2, border: '2px solid', borderColor: on ? 'primary.main' : 'transparent',
-                    '&:hover': { borderColor: on ? 'primary.main' : 'divider' },
-                    '&.Mui-focusVisible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 1 } }}>
-                  <Box sx={thumb(key, 64)} />
-                  <Typography component="span" sx={{ fontSize: 11.5, fontWeight: on ? 600 : 500, color: on ? 'primary.main' : 'text.primary', whiteSpace: 'nowrap' }}>{b.name || b.label}</Typography>
+                  sx={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 3, px: 3, py: 1.5, textAlign: 'start',
+                    bgcolor: on ? 'action.selected' : 'transparent', borderInlineStart: '3px solid', borderColor: on ? 'primary.main' : 'transparent',
+                    '&:hover': { bgcolor: on ? 'action.selected' : 'action.hover' },
+                    '&.Mui-focusVisible': { bgcolor: 'action.focus' } }}>
+                  <Box sx={{ width: 64, height: 44, flexShrink: 0, borderRadius: 1, bgcolor: '#dfe3dd', border: '1px solid rgba(0,0,0,0.12)',
+                    backgroundImage: `url(${b.preview})`, backgroundSize: 'cover', backgroundPosition: 'center' }} />
+                  <Typography component="span" sx={{ fontSize: 13, fontWeight: on ? 600 : 400, color: on ? 'primary.main' : 'text.primary', lineHeight: 1.3 }}>{b.name}</Typography>
                 </ButtonBase>
               );
             })}
           </Box>
-          <Typography sx={{ fontSize: 10.5, color: 'text.secondary' }}><bdi dir="ltr">{plainCredit(current)}</bdi></Typography>
+          <Typography sx={{ px: 4, py: 2, fontSize: 10.5, color: 'text.secondary', borderTop: '1px solid', borderColor: 'divider' }}><bdi dir="ltr">{plainCredit(current)}</bdi></Typography>
         </Box>
       )}
     </Box>
