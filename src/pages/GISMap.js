@@ -599,8 +599,18 @@ export default function GISMap() {
     setFieldInfoLoading(true);
     setFieldSummary(null);
     try {
-      const data = await api(`/fields/${fieldId}/summary`);
-      setFieldSummary(data);
+      const data = (await api(`/fields/${fieldId}/summary`)) || {};
+      // Every part may be missing (no harvest yet, no readings…): fill safe defaults so the panel never breaks.
+      setFieldSummary({
+        ...data,
+        field: { name: fieldId, ...(data.field || {}) },
+        activePhi: Array.isArray(data.activePhi) ? data.activePhi : [],
+        harvest: { totalKg: Number(data.harvest?.totalKg) || 0, count: Number(data.harvest?.count) || 0 },
+        water: { totalM3: Number(data.water?.totalM3) || 0, ...(data.water || {}) },
+        ecph: data.ecph || {},
+        scouting: Array.isArray(data.scouting) ? data.scouting : [],
+        pesticides: Array.isArray(data.pesticides) ? data.pesticides : [],
+      });
     } catch (err) {
       notify('Failed to load field data: ' + err.message, 'error');
       setFieldInfoOpen(false);

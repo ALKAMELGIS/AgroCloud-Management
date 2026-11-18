@@ -232,6 +232,19 @@
       AIMSG[cidA].push({id:'u'+Date.now(),role:'user',content:t,artifacts:[],sources:[]}); AIMSG[cidA].push(m);
       return ok({conversationId:cidA,message:m});
     }
+    // Demo-only field summary for the GIS map panel, from the same sample readings.
+    var fsm=method==='GET'&&path.match(/^\/fields\/([^/]+)\/summary$/);
+    if(fsm){
+      var sf=fields.filter(function(f){return f.id===fsm[1];})[0], si=Math.max(0,fields.indexOf(sf));
+      var sr=function(k){var h=2166136261,x=fsm[1]+k;for(var i=0;i<x.length;i++){h^=x.charCodeAt(i);h=Math.imul(h,16777619);}return ((h>>>0)%10000)/10000;};
+      var ar=sf?areas.filter(function(a){return a.id===sf.farmAreaId;})[0]:null, st=ar?sites.filter(function(x){return x.id===ar.siteId;})[0]:null;
+      return ok({field:{id:fsm[1],name:sf?sf.name:fsm[1],siteName:st?st.name:'',farmAreaName:ar?ar.name:'',cropName:CROPS[si%CROPS.length],varietyName:'Standard',area:+(0.4+sr('a')*0.8).toFixed(2)},
+        activePhi:si%4===1?[{productName:'Movento 150 OD',phiDays:3,phiEndDate:new Date(Date.now()+2*86400000).toISOString(),daysRemaining:2}]:[],
+        harvest:{totalKg:Math.round(7800+si*900+sr('h')*2400),count:27},water:{totalM3:+(1650+si*120+sr('w')*300).toFixed(1)},
+        ecph:{avgEcIn:+(2.0+sr('ei')*0.15).toFixed(2),avgEcOut:+(2.2+si*0.08+sr('eo')*0.2).toFixed(2),avgPhIn:+(5.95+sr('pi')*0.2).toFixed(2),avgPhOut:+(6.2+sr('po')*0.3).toFixed(2)},
+        scouting:si%4===3?[{reportDate:new Date(Date.now()-86400000).toISOString().slice(0,10),pestName:'Whitefly',infestationPct:12,severity:'medium',status:'open'}]:[],
+        pesticides:[]});
+    }
     // Demo-only field overview for the Farm Monitor, from the same sample readings as the EC/pH dashboard.
     if(method==='GET'&&path==='/ipm/field-overview'){
       var oSite=q.site_id, oAreas=areas.filter(function(a){return !oSite||a.siteId===oSite;}).map(function(a){return a.id;});
