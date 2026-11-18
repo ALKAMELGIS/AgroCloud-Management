@@ -78,7 +78,7 @@ export default function SiteZoneSelect({
   // under it (zone codes such as MH kept as they are), the chosen one ticked.
   const itemSx = (selected) => (t) => ({
     display: 'flex', alignItems: 'center', gap: 1.5, width: '100%', justifyContent: 'flex-start', textAlign: 'start',
-    minHeight: 32, px: 1.5, py: 0.5,
+    minHeight: 36, px: 3, py: 1,
     fontFamily: 'inherit', fontSize: '0.8125rem', fontWeight: selected ? 600 : 400,
     color: selected ? 'primary.main' : 'text.primary',
     bgcolor: selected ? alpha(t.palette.primary.main, 0.08) : 'transparent',
@@ -100,7 +100,7 @@ export default function SiteZoneSelect({
   const panel = (
     <Box sx={{ display: 'flex', flexDirection: 'column', maxHeight: 'min(520px, 75dvh)', width: '100%' }}>
       {siteCount >= SEARCH_FROM && (
-        <Box sx={{ p: 1.5, borderBottom: 1, borderColor: 'divider', flexShrink: 0 }}>
+        <Box sx={{ p: 3, borderBottom: 1, borderColor: 'divider', flexShrink: 0 }}>
           <InputBase
             autoFocus
             value={query}
@@ -108,7 +108,7 @@ export default function SiteZoneSelect({
             placeholder="Search sites"
             inputProps={{ 'aria-label': 'Search sites' }}
             startAdornment={<InputAdornment position="start"><SearchIcon sx={{ fontSize: 18, color: 'text.secondary' }} /></InputAdornment>}
-            sx={{ width: '100%', height: 34, px: 1, borderRadius: 0, fontSize: '0.8125rem', bgcolor: 'background.muted', border: 1, borderColor: 'divider' }}
+            sx={{ width: '100%', height: 36, px: 2, borderRadius: 1.5, fontSize: '0.8125rem', bgcolor: 'background.muted', border: 1, borderColor: 'divider' }}
           />
         </Box>
       )}
@@ -117,7 +117,9 @@ export default function SiteZoneSelect({
         role="listbox"
         aria-labelledby={labelId}
         onKeyDown={onListKeyDown}
-        sx={{ overflowY: 'auto', py: 0.5 }}
+        // No padding on the scroll box: a sticky zone header must sit flush at the top,
+        // or rows scroll into the gap above it and seem to run through it.
+        sx={{ overflowY: 'auto', pb: 1, position: 'relative' }}
       >
         <Typography id={labelId} component="span" sx={{ position: 'absolute', width: '1px', height: '1px', overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>{label}</Typography>
         {allowAllSites && !query && (
@@ -132,9 +134,10 @@ export default function SiteZoneSelect({
             <Typography
               translate="no"
               sx={{
-                position: 'sticky', top: 0, zIndex: 1, bgcolor: 'background.paper',
-                px: 1.5, pt: 1, pb: 0.25, fontSize: '0.6875rem', fontWeight: 600, color: 'text.secondary',
-                borderTop: 1, borderColor: 'divider',
+                position: 'sticky', top: 0, zIndex: 2, bgcolor: 'background.muted',
+                display: 'flex', alignItems: 'center', height: 28, px: 3, m: 0,
+                fontSize: '0.6875rem', fontWeight: 600, letterSpacing: 0, color: 'text.secondary',
+                borderBottom: 1, borderColor: 'divider',
               }}
             >
               {zone.name}
