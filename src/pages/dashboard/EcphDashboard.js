@@ -9,7 +9,7 @@ import DashboardSection from '../../components/dashboard/DashboardSection';
 import DashboardStatCard from '../../components/dashboard/DashboardStatCard';
 import { excelTableSx, GutterCell } from '../../components/table/ExcelTable';
 
-import { BandRows } from '../../components/dashboard/clearCharts';
+
 
 /** Default targets for drain water out of the root zone; shaded on the charts. */
 export const ECPH_TARGETS = { ecOut: [1.8, 2.6], phOut: [5.5, 6.5] };
@@ -109,12 +109,42 @@ export default function EcphDashboard({ fieldId, siteId, dateFrom, dateTo, allFi
 
   const phByField = useMemo(() => (fieldId ? [] : lastTwoWeeksByField(flatReadings, 'phOut')), [flatReadings, fieldId]);
   const ecByField = useMemo(() => (fieldId ? [] : lastTwoWeeksByField(flatReadings, 'ecOut')), [flatReadings, fieldId]);
-  const bandRange = (rows, band, pad) => {
-    const vals = rows.flatMap((r) => [r.now, r.prev]).filter(Number.isFinite);
-    const lo = Math.min(band[0] - pad, ...vals), hi = Math.max(band[1] + pad, ...vals);
-    return [Math.floor(lo * 2) / 2, Math.ceil(hi * 2) / 2];
-  };
 
+  /* Last 7 days vs the 7 before (from the latest reading): drives the arrow, status and gauge on each card. */
+  const kpi = useMemo(() => {
+    const dates = flatReadings.map((r) => (r.rawDate || '').toString().slice(0, 10)).filter(Boolean).sort();
+    if (!dates.length) return {};
+    const end = new Date(`${dates[dates.length - 1]}T00:00:00Z`).getTime();
+    const win = { now: [], prev: [] };
+    flatReadings.forEach((r) => {
+      const t = new Date(`${(r.rawDate || '').toString().slice(0, 10)}T00:00:00Z`).getTime();
+      const age = Math.floor((end - t) / 86400000);
+      if (age >= 0 && age < 7) win.now.push(r); else if (age >= 7 && age < 14) win.prev.push(r);
+    });
+    const mean = (rows, k, scale = 1) => { const v = rows.map((r) => r[k]).filter((x) => x > 0); return v.length ? (v.reduce((a, c) => a + c, 0) / v.length) * scale : NaN; };
+    const trend = (k, d, scale = 1, unit = '') => {
+      const n = mean(win.now, k, scale), p = mean(win.prev, k, scale);
+      if (!Number.isFinite(n) || !Number.isFinite(p)) return null;
+      const diff = n - p, eps = 0.5 * 10 ** -d;
+      return { dir: diff > eps ? 'up' : diff < -eps ? 'down' : 'flat', text: `${diff >= 0 ? '+' : '−'}${Math.abs(diff).toFixed(d)}${unit}`, tip: 'Last 7 days vs the 7 days before', now: n };
+    };
+    const band = (v, [lo, hi]) => {
+      if (!Number.isFinite(v)) return null;
+      const m = (hi - lo) * 0.1;
+      return v < lo || v > hi ? 'out' : v <= lo + m || v >= hi - m ? 'warn' : 'good';
+    };
+    const outOf = (rows, [lo, hi]) => rows.filter((r) => r.now < lo || r.now > hi).length;
+    const ec = trend('ecOut', 2), ph = trend('phOut', 2);
+    return {
+      ecOut: ec, phOut: ph, ecIn: trend('ecIn', 2), phIn: trend('phIn', 2), drain: trend('percentDrain', 1, 100, ' pt'),
+      ecStatus: band(parseFloat(stats.ecOut), ECPH_TARGETS.ecOut),
+      phStatus: band(parseFloat(stats.phOut), ECPH_TARGETS.phOut),
+      ecFieldsOut: outOf(ecByField, ECPH_TARGETS.ecOut), phFieldsOut: outOf(phByField, ECPH_TARGETS.phOut),
+      entries: (() => { const d = new Set(win.now.map((r) => r.id || r.rawDate + r.fieldName)).size - new Set(win.prev.map((r) => r.id || r.rawDate + r.fieldName)).size; return { dir: d > 0 ? 'up' : d < 0 ? 'down' : 'flat', text: `${d >= 0 ? '+' : '−'}${Math.abs(d)}`, tip: 'Entries, last 7 days vs the 7 days before' }; })(),
+    };
+  }, [flatReadings, stats, ecByField, phByField]);
+  const STATUS_WORD = { good: 'In range', warn: 'Near edge', out: 'Out' };
+  const fieldsLine = (n, total) => (total ? (n ? `${n} of ${total} fields out` : `All ${total} fields in band`) : null);
   const tableData = useMemo(() => {
     const rows = flatReadings.slice(0, 200);
     if (!sortConfig.key) return rows;
@@ -141,43 +171,28 @@ export default function EcphDashboard({ fieldId, siteId, dateFrom, dateTo, allFi
     <Box>
       <Grid container spacing={1.5} sx={{ mb: 3 }}>
         <Grid size={{ xs: 6, sm: 4, md: 2 }}>
-          <DashboardStatCard lead title="EC out" value={stats.ecOut} subtitle={`mS/cm · target ${ECPH_TARGETS.ecOut.join('–')}`} />
+          <DashboardStatCard lead title="EC out" value={stats.ecOut} status={kpi.ecStatus} statusText={STATUS_WORD[kpi.ecStatus]} trend={kpi.ecOut}
+            gauge={{ lo: ECPH_TARGETS.ecOut[0], hi: ECPH_TARGETS.ecOut[1], value: parseFloat(stats.ecOut) }}
+            subtitle={fieldsLine(kpi.ecFieldsOut, ecByField.length) || `mS/cm · target ${ECPH_TARGETS.ecOut.join('–')}`} />
         </Grid>
         <Grid size={{ xs: 6, sm: 4, md: 2 }}>
-          <DashboardStatCard title="pH out" value={stats.phOut} subtitle={`target ${ECPH_TARGETS.phOut.join('–')}`} />
+          <DashboardStatCard title="pH out" value={stats.phOut} status={kpi.phStatus} statusText={STATUS_WORD[kpi.phStatus]} trend={kpi.phOut}
+            gauge={{ lo: ECPH_TARGETS.phOut[0], hi: ECPH_TARGETS.phOut[1], value: parseFloat(stats.phOut) }}
+            subtitle={fieldsLine(kpi.phFieldsOut, phByField.length) || `target ${ECPH_TARGETS.phOut.join('–')}`} />
         </Grid>
         <Grid size={{ xs: 6, sm: 4, md: 2 }}>
-          <DashboardStatCard title="EC in" value={stats.ecIn} subtitle="mS/cm" />
+          <DashboardStatCard title="EC in" value={stats.ecIn} trend={kpi.ecIn} subtitle="mS/cm" />
         </Grid>
         <Grid size={{ xs: 6, sm: 4, md: 2 }}>
-          <DashboardStatCard title="pH in" value={stats.phIn} />
+          <DashboardStatCard title="pH in" value={stats.phIn} trend={kpi.phIn} />
         </Grid>
         <Grid size={{ xs: 6, sm: 4, md: 2 }}>
-          <DashboardStatCard title="Drain" value={stats.drain} />
+          <DashboardStatCard title="Drain" value={stats.drain} trend={kpi.drain} />
         </Grid>
         <Grid size={{ xs: 6, sm: 4, md: 2 }}>
-          <DashboardStatCard title="Entries" value={stats.count} />
+          <DashboardStatCard title="Entries" value={stats.count} trend={kpi.entries} />
         </Grid>
       </Grid>
-
-      {phByField.length > 0 && (
-        <Grid container spacing={2} sx={{ mb: { xs: 4, md: 5 } }}>
-          <Grid size={{ xs: 12, lg: 6 }}>
-            <DashboardSection title="Is pH out in the target band?" sx={{ mb: 0, height: '100%' }}>
-              <Box sx={{ p: { xs: 3, sm: 4 } }}>
-                <BandRows rows={phByField} band={ECPH_TARGETS.phOut} min={bandRange(phByField, ECPH_TARGETS.phOut, 0.5)[0]} max={bandRange(phByField, ECPH_TARGETS.phOut, 0.5)[1]} decimals={1} />
-              </Box>
-            </DashboardSection>
-          </Grid>
-          <Grid size={{ xs: 12, lg: 6 }}>
-            <DashboardSection title="Is EC out in the target band?" sx={{ mb: 0, height: '100%' }}>
-              <Box sx={{ p: { xs: 3, sm: 4 } }}>
-                <BandRows rows={ecByField} band={ECPH_TARGETS.ecOut} min={bandRange(ecByField, ECPH_TARGETS.ecOut, 0.4)[0]} max={bandRange(ecByField, ECPH_TARGETS.ecOut, 0.4)[1]} decimals={2} unit="mS/cm" />
-              </Box>
-            </DashboardSection>
-          </Grid>
-        </Grid>
-      )}
 
       <StandardChartGrid charts={standardCharts} />
 

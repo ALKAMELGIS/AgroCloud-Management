@@ -1507,6 +1507,10 @@ export const PAGE_AR = {
   'Irrigation record saved': 'تم حفظ سجل الري',
   'Moved to another sheet': 'تم النقل إلى ورقة أخرى',
   // Form dashboards (clear charts)
+  'vs last week': 'عن الأسبوع الماضي',
+  'Near edge': 'قرب الحد',
+  'Last 7 days vs the 7 days before': 'آخر 7 أيام مقابل الأيام السبعة قبلها',
+  'Entries, last 7 days vs the 7 days before': 'الإدخالات: آخر 7 أيام مقابل السبعة قبلها',
   'Basemap gallery': 'معرض خرائط الأساس',
   'Imagery': 'صور جوية',
   'Imagery Hybrid': 'صور جوية مع الأسماء',
