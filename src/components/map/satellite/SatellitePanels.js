@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import {
-  Alert, Box, Button, ButtonBase, Chip, CircularProgress, FormControlLabel, List, ListItemButton,
+  Alert, Box, Button, ButtonBase, Checkbox, Chip, CircularProgress, FormControlLabel, List, ListItemButton,
   ListItemText, Slider, Stack, Switch, Tab, Tabs, TextField, Tooltip as MuiTooltip, IconButton, Typography,
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
@@ -17,6 +17,42 @@ import ExportButton from '../../ExportButton';
 import * as api from './satelliteApi';
 import { aoiAreaHa, aoiBbox, parseLatLng, readAoiFile, ringToFeature, outerRing } from './aoi';
 import { useIsArabic } from '../../../i18n/shellLabels';
+
+/* A short glowing flash where the map lands, so the picked place is easy to see. */
+let flashCss = false;
+function ensureFlashCss() {
+  if (flashCss || typeof document === 'undefined') return;
+  flashCss = true;
+  const st = document.createElement('style');
+  st.textContent = `
+@keyframes agroFlashShape { 0%,100% { stroke-opacity: 1; fill-opacity: .28 } 50% { stroke-opacity: .35; fill-opacity: .05 } }
+@keyframes agroFlashRing { 0% { transform: scale(.4); opacity: .95 } 100% { transform: scale(2.6); opacity: 0 } }
+.agro-flash-shape { animation: agroFlashShape .7s ease-in-out 4; filter: drop-shadow(0 0 6px #fff59d) drop-shadow(0 0 14px #ffd54f); }
+.agro-flash-pin { position: relative; width: 24px; height: 24px; }
+.agro-flash-pin i { position: absolute; inset: 0; border-radius: 50%; border: 3px solid #ffd54f; box-shadow: 0 0 12px 2px rgba(255,213,79,.9); animation: agroFlashRing 1.2s ease-out infinite; }
+.agro-flash-pin i:nth-child(2) { animation-delay: .4s } .agro-flash-pin i:nth-child(3) { animation-delay: .8s }
+.agro-flash-pin b { position: absolute; left: 7px; top: 7px; width: 10px; height: 10px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 3px #ffb300, 0 0 14px 4px rgba(255,213,79,.95); }
+@media (prefers-reduced-motion: reduce) { .agro-flash-shape, .agro-flash-pin i { animation: none } }`;
+  document.head.appendChild(st);
+}
+
+/** Fly to a ring ([lng, lat] pairs) and flash it for a few seconds. */
+export function flyAndFlash(map, ring) {
+  if (!map || !ring || !ring.length) return;
+  ensureFlashCss();
+  const latlngs = ring.map(([lng, lat]) => [lat, lng]);
+  const bounds = L.latLngBounds(latlngs);
+  const reduce = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const flash = () => {
+    const shape = L.polygon(latlngs, { color: '#ffd54f', weight: 4, fillColor: '#fff59d', fillOpacity: 0.28, className: 'agro-flash-shape', interactive: false }).addTo(map);
+    const pin = L.marker(bounds.getCenter(), { interactive: false, keyboard: false, icon: L.divIcon({ className: '', html: '<div class="agro-flash-pin"><i></i><i></i><i></i><b></b></div>', iconSize: [24, 24], iconAnchor: [12, 12] }) }).addTo(map);
+    setTimeout(() => { map.removeLayer(shape); map.removeLayer(pin); }, 3600);
+  };
+  const opts = { padding: [48, 48], maxZoom: 17 };
+  if (reduce) { map.fitBounds(bounds, opts); flash(); return; }
+  map.once('moveend', flash);
+  map.flyToBounds(bounds, { ...opts, duration: 1.1 });
+}
 
 const GROUPS = [
   { key: 'all', label: 'All layers' },
@@ -257,7 +293,7 @@ export function AoiPanel({ sat, mapRef, fields = [], structures = [] }) {
   const [coord, setCoord] = useState('');
   const zoomTo = (feature) => {
     const ring = outerRing(feature);
-    if (ring && mapRef.current) mapRef.current.fitBounds(L.latLngBounds(ring.map(([lng, lat]) => [lat, lng])), { padding: [40, 40], maxZoom: 17 });
+    if (ring && mapRef.current) flyAndFlash(mapRef.current, ring);
   };
   const drawn = sat.aoiMode === 'drawn';
   const accent = drawn ? DRAWN : '#1f7a4d';
@@ -745,68 +781,121 @@ function downloadFigure(container, name) {
  * Time series across the bottom of the map (like LandViewer): index, period,
  * Apply; min–max band with the mean; figure (PNG) and table (CSV) export.
  */
+/** One colour per index, so several can be compared on one chart. */
+const SERIES_COLORS = {
+  NDVI: '#2e7d32', SAVI: '#9a7b00', NDWI: '#1f5fbf', NDMI: '#00838f', NDII: '#6a46b8', MSI: '#c8501f', BSI: '#8d5a32',
+};
+const EXTRA_COLORS = ['#ad1457', '#37474f', '#5d8a00', '#0277bd'];
+const TS_KEY = 'gis.ts.indices';
+
 export function TimeSeriesDock({ sat, onClose, onSetAoi }) {
   const [period, setPeriod] = useState('1y');
-  const [idx, setIdx] = useState(sat.current && !sat.current.visual ? sat.index : 'NDVI');
-  const [data, setData] = useState(null);
+  const indices = sat.indices.filter((i) => !i.visual);
+  const [picked, setPicked] = useState(() => {
+    try { const v = JSON.parse(window.localStorage.getItem(TS_KEY) || 'null'); if (Array.isArray(v) && v.length) return v; } catch { /* ignore */ }
+    return [sat.current && !sat.current.visual ? sat.index : 'NDVI'];
+  });
+  useEffect(() => { try { window.localStorage.setItem(TS_KEY, JSON.stringify(picked)); } catch { /* ignore */ } }, [picked]);
+  const [series, setSeries] = useState(null); // { [key]: [{date, mean, min, max}] }
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const chartRef = useRef(null);
-  const indices = sat.indices.filter((i) => !i.visual);
   const range = periodRange(period, sat);
+  const colorOf = (key) => SERIES_COLORS[key] || EXTRA_COLORS[Math.max(0, indices.findIndex((i) => i.key === key)) % EXTRA_COLORS.length];
+  const labelOf = (key) => indices.find((i) => i.key === key)?.label || key;
+  const toggle = (key) => setPicked((p) => (p.includes(key) ? (p.length > 1 ? p.filter((k) => k !== key) : p) : [...p, key]));
   const run = async () => {
-    if (!sat.wkt) return;
+    if (!sat.wkt || !picked.length) return;
     setBusy(true); setError(null);
-    try { setData(await api.getStats({ index: idx, geometry: sat.wkt, from: range.from, to: range.to, maxcc: sat.maxcc })); } catch (e) { setError(e.message); setData(null); }
+    const keys = indices.map((i) => i.key).filter((k) => picked.includes(k));
+    const res = await Promise.allSettled(keys.map((k) => api.getStats({ index: k, geometry: sat.wkt, from: range.from, to: range.to, maxcc: sat.maxcc })));
+    const out = {};
+    const failed = [];
+    res.forEach((r, i) => { if (r.status === 'fulfilled' && Array.isArray(r.value)) out[keys[i]] = r.value; else failed.push(`${labelOf(keys[i])}: ${r.reason?.message || 'failed'}`); });
+    setSeries(Object.keys(out).length ? out : null);
+    if (failed.length) setError(failed.join(' · '));
     setBusy(false);
   };
-  const name = `${idx}_${range.from}_${range.to}`;
+  const shown = series ? Object.keys(series) : [];
+  const single = shown.length === 1 ? shown[0] : null;
+  const rows = useMemo(() => {
+    if (!series) return [];
+    const byDate = new Map();
+    Object.entries(series).forEach(([k, list]) => list.forEach((d) => {
+      const r = byDate.get(d.date) || { date: d.date };
+      r[`m_${k}`] = d.mean; r[`r_${k}`] = [d.min, d.max]; r[`n_${k}`] = d.min; r[`x_${k}`] = d.max;
+      byDate.set(d.date, r);
+    }));
+    return [...byDate.values()].sort((x, y) => (x.date < y.date ? -1 : 1));
+  }, [series]);
+  const sceneCount = shown.length ? Math.max(...shown.map((k) => series[k].length)) : 0;
+  const name = `${shown.join('-') || 'index'}_${range.from}_${range.to}`;
   const csv = () => {
-    const text = ['date,mean,min,max', ...data.map((d) => `${d.date},${d.mean},${d.min},${d.max}`)].join('\n');
-    const url = URL.createObjectURL(new Blob([text], { type: 'text/csv' }));
+    const head = ['date', ...shown.flatMap((k) => [`${k}_mean`, `${k}_min`, `${k}_max`])].join(',');
+    const lines = rows.map((r) => [r.date, ...shown.flatMap((k) => [r[`m_${k}`] ?? '', r[`n_${k}`] ?? '', r[`x_${k}`] ?? ''])].join(','));
+    const url = URL.createObjectURL(new Blob([[head, ...lines].join('\n')], { type: 'text/csv' }));
     const a = document.createElement('a'); a.href = url; a.download = `${name}.csv`; a.click();
     setTimeout(() => URL.revokeObjectURL(url), 2000);
   };
+  const fmt = (v) => (typeof v === 'number' ? v.toFixed(3) : v);
   return (
     <Box role="region" aria-label="Time series" sx={(t) => ({ borderRadius: 1.5, border: 1, borderColor: 'divider', boxShadow: 3, bgcolor: alpha(t.palette.background.paper, 0.97), overflow: 'hidden' })}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.25, pt: 1.5, pb: 1, borderBottom: 1, borderColor: 'divider', flexWrap: 'wrap' }}>
-        <TextField select size="small" label="Index" value={idx} onChange={(e) => setIdx(e.target.value)} sx={{ minWidth: 140 }} SelectProps={{ native: true }}>
-          {indices.map((i) => <option key={i.key} value={i.key}>{i.label}</option>)}
-        </TextField>
-        <TextField select size="small" label="Period" value={period} onChange={(e) => setPeriod(e.target.value)} sx={{ minWidth: 140 }} SelectProps={{ native: true }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.25, pt: 1.5, pb: 1, flexWrap: 'wrap' }}>
+        <TextField select size="small" label="Period" value={period} onChange={(e) => setPeriod(e.target.value)} sx={{ minWidth: 130 }} SelectProps={{ native: true }}>
           {PERIODS.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
         </TextField>
         <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}><bdi>{`Sentinel-2 · ${range.from} → ${range.to}`}</bdi></Typography>
         <Box sx={{ flex: 1 }} />
-        <Button size="small" variant="contained" onClick={run} disabled={!sat.status.configured || !sat.wkt || busy} startIcon={busy ? <CircularProgress size={14} color="inherit" /> : null}>Apply</Button>
+        <Button size="small" variant="contained" onClick={run} disabled={!sat.status.configured || !sat.wkt || busy || !picked.length} startIcon={busy ? <CircularProgress size={14} color="inherit" /> : null}>
+          {picked.length > 1 ? `Apply · ${picked.length}` : 'Apply'}
+        </Button>
         <MuiTooltip title="Close"><IconButton size="small" aria-label="Close time series" onClick={onClose}><CloseIconSmall /></IconButton></MuiTooltip>
+      </Box>
+      <Box role="group" aria-label="Indices to compare" sx={{ display: 'flex', alignItems: 'center', gap: 0.5, px: 1, pb: 0.75, borderBottom: 1, borderColor: 'divider', overflowX: 'auto' }}>
+        {indices.map((i) => {
+          const on = picked.includes(i.key);
+          const c = colorOf(i.key);
+          return (
+            <MuiTooltip key={i.key} title={i.description || ''} disableHoverListener={!i.description}>
+              <FormControlLabel
+                sx={{ m: 0, pr: 1.25, pl: 0.25, height: 30, flexShrink: 0, borderRadius: '999px', border: 1, borderColor: on ? alpha(c, 0.5) : 'divider', bgcolor: on ? alpha(c, 0.08) : 'transparent', '& .MuiFormControlLabel-label': { fontSize: '0.75rem', fontWeight: 600, color: on ? c : 'text.secondary' } }}
+                control={<Checkbox size="small" checked={on} onChange={() => toggle(i.key)} sx={{ p: 0.5, color: c, '&.Mui-checked': { color: c } }} inputProps={{ 'aria-label': i.label }} />}
+                label={i.label}
+              />
+            </MuiTooltip>
+          );
+        })}
       </Box>
       <Box sx={{ px: 1.25, py: 1 }}>
         {!sat.aoi && (
           <Alert severity="info" sx={{ py: 0 }} action={<Button size="small" onClick={onSetAoi}>Set AOI</Button>}>Set an AOI first (draw it, upload it or pick a field).</Alert>
         )}
-        {error && <Alert severity="error" sx={{ py: 0 }}>{error}</Alert>}
-        {sat.aoi && !data && !error && <Typography sx={{ fontSize: '0.8125rem', color: 'text.secondary' }}>Choose the index and period, then Apply.</Typography>}
-        {data && data.length === 0 && <Typography sx={{ fontSize: '0.8125rem', color: 'text.secondary' }}>No clear scenes in this period.</Typography>}
-        {data && data.length > 0 && (
+        {error && <Alert severity="error" sx={{ py: 0, mb: 0.5 }}>{error}</Alert>}
+        {sat.aoi && !series && !error && <Typography sx={{ fontSize: '0.8125rem', color: 'text.secondary' }}>Tick one or more indices and the period, then Apply.</Typography>}
+        {series && rows.length === 0 && <Typography sx={{ fontSize: '0.8125rem', color: 'text.secondary' }}>No clear scenes in this period.</Typography>}
+        {series && rows.length > 0 && (
           <>
-            <Box ref={chartRef} dir="ltr" sx={{ height: { xs: 120, md: 150 } }}>
+            <Box ref={chartRef} dir="ltr" sx={{ height: { xs: 130, md: 160 } }}>
               <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={data.map((d) => ({ ...d, range: [d.min, d.max] }))} margin={{ top: 6, right: 8, bottom: 0, left: 0 }}>
+                <ComposedChart data={rows} margin={{ top: 6, right: 8, bottom: 0, left: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
                   <XAxis dataKey="date" tick={{ fontSize: 11 }} minTickGap={24} />
-                  <YAxis tick={{ fontSize: 11 }} width={36} domain={['auto', 'auto']} />
-                  <Tooltip />
-                  <Area dataKey="range" name="Min – Max" stroke="#3b82c4" strokeOpacity={0.5} fill="#3b82c4" fillOpacity={0.18} />
-                  <Line dataKey="mean" name="Mean" stroke="#1b5e20" strokeWidth={2} dot={{ r: 2.5 }} />
+                  <YAxis tick={{ fontSize: 11 }} width={40} domain={['auto', 'auto']} tickFormatter={(v) => (Math.abs(v) < 10 ? v.toFixed(2) : v)} />
+                  <Tooltip formatter={(v, n) => [Array.isArray(v) ? `${fmt(v[0])} – ${fmt(v[1])}` : fmt(v), n]} />
+                  {single && <Area dataKey={`r_${single}`} name={`${labelOf(single)} min – max`} stroke={colorOf(single)} strokeOpacity={0.4} fill={colorOf(single)} fillOpacity={0.14} connectNulls />}
+                  {shown.map((k) => (
+                    <Line key={k} dataKey={`m_${k}`} name={labelOf(k)} stroke={colorOf(k)} strokeWidth={2} dot={{ r: 2.5, strokeWidth: 0, fill: colorOf(k) }} activeDot={{ r: 4 }} connectNulls />
+                  ))}
                 </ComposedChart>
               </ResponsiveContainer>
             </Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mt: 0.5, flexWrap: 'wrap' }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontSize: '0.75rem' }}><Box sx={{ width: 14, height: 8, bgcolor: 'rgba(59,130,196,.35)', borderRadius: 0.5 }} />Min – Max</Box>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontSize: '0.75rem' }}><Box sx={{ width: 14, height: 3, bgcolor: '#1b5e20' }} />Mean</Box>
+              {single && <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontSize: '0.75rem' }}><Box sx={{ width: 14, height: 8, bgcolor: alpha(colorOf(single), 0.3), borderRadius: 0.5 }} />Min – Max</Box>}
+              {shown.map((k) => (
+                <Box key={k} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontSize: '0.75rem', fontWeight: 600 }}><Box sx={{ width: 14, height: 3, borderRadius: 2, bgcolor: colorOf(k) }} />{`${labelOf(k)} mean`}</Box>
+              ))}
               <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', flex: 1 }}>
-                <bdi>{`${data.length} scenes · ${sat.aoi?.properties?.name || 'AOI'} · ${aoiAreaHa(sat.aoi).toLocaleString('en-US', { maximumFractionDigits: 1 })} ha`}</bdi>
+                <bdi>{`${sceneCount} scenes · ${sat.aoi?.properties?.name || 'AOI'} · ${aoiAreaHa(sat.aoi).toLocaleString('en-US', { maximumFractionDigits: 1 })} ha`}</bdi>
               </Typography>
               <Button size="small" startIcon={<FigureIcon />} onClick={() => downloadFigure(chartRef.current, name)}>Figure</Button>
               <Button size="small" startIcon={<TableIcon />} onClick={csv}>Table</Button>
