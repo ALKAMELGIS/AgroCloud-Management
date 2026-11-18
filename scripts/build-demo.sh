@@ -22,10 +22,23 @@ s = open('index.html').read()
 import os, json
 # Organisation keys for the published demo come only from the environment (GitHub secrets
 # DEMO_OPENWEATHER_API_KEY / DEMO_SENTINELHUB_INSTANCE_ID); nothing is read from the repository.
+# Keys for the published demo: the environment first (GitHub secrets), else the DEMO_ lines
+# of .env.example in the repository (filled in by the owner).
+filed = {}
+try:
+    for line in open('../.env.example', encoding='utf-8'):
+        line = line.strip()
+        if line.startswith('DEMO_') and '=' in line:
+            k, v = line.split('=', 1)
+            filed[k.strip()] = v.strip().strip('"').strip("'")
+except FileNotFoundError:
+    pass
+def pick(name):
+    return (os.environ.get(name, '') or filed.get(name, '')).strip()
 keys = {k: v for k, v in {
-    'owm': os.environ.get('DEMO_OPENWEATHER_API_KEY', '').strip(),
-    'sat': os.environ.get('DEMO_SENTINELHUB_INSTANCE_ID', '').strip(),
-    'satService': os.environ.get('DEMO_SENTINELHUB_SERVICE', '').strip(),
+    'owm': pick('DEMO_OPENWEATHER_API_KEY'),
+    'sat': pick('DEMO_SENTINELHUB_INSTANCE_ID'),
+    'satService': pick('DEMO_SENTINELHUB_SERVICE'),
 }.items() if v}
 pre = '<script>window.__AGRO_DEMO_KEYS__=' + json.dumps(keys) + ';</script>' if keys else ''
 s = s.replace('<head>', '<head>' + pre + '<script>' + open('../demo/demo-shim.js').read() + '</script>', 1)
