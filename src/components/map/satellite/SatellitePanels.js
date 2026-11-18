@@ -25,11 +25,6 @@ const GROUPS = [
   { key: 'soil', label: 'Soil' },
   { key: 'visual', label: 'Band combinations' },
 ];
-const VISUAL_SWATCH = {
-  TRUE_COLOR: 'linear-gradient(135deg,#3d5a2a,#7a8b55 40%,#b9a77a 70%,#6f8fa8)',
-  FALSE_COLOR: 'linear-gradient(135deg,#7a0d0d,#d1403a 45%,#e6a07c 70%,#3e6f8c)',
-  SWIR: 'linear-gradient(135deg,#1b4d2b,#5b8c4a 40%,#c7b36d 70%,#e9d7b0)',
-};
 
 const section = { px: 2.5, py: 1.75 };
 const label = { fontSize: '0.75rem', fontWeight: 700, letterSpacing: 0, textTransform: 'none', color: 'text.secondary', mb: 1 };
@@ -69,30 +64,40 @@ export function LayersPanel({ sat }) {
       <Tabs value={group} onChange={(_, v) => setGroup(v)} variant="scrollable" scrollButtons="auto" sx={{ px: 1, minHeight: 40, borderBottom: 1, borderColor: 'divider', '& .MuiTab-root': { minHeight: 40, fontSize: '0.75rem', textTransform: 'none', px: 1.25 } }}>
         {GROUPS.map((g) => <Tab key={g.key} value={g.key} label={g.label} />)}
       </Tabs>
-      <Box sx={{ p: 1.5, display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 1 }}>
+      <Box sx={{ p: 3, display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 2.5 }}>
         {list.map((i) => {
           const selected = i.key === sat.index;
+          const ramp = rampCss(i.legend);
           return (
-            <ButtonBase
-              key={i.key}
-              onClick={() => { sat.setIndex(i.key); sat.setShow(true); }}
-              aria-pressed={selected}
-              sx={(t) => ({
-                display: 'block', textAlign: 'start', borderRadius: 1.5, overflow: 'hidden', border: 2,
-                borderColor: selected ? 'primary.main' : 'divider', bgcolor: selected ? alpha(t.palette.primary.main, 0.06) : 'background.paper',
-                '&.Mui-focusVisible': { outline: `2px solid ${t.palette.primary.main}`, outlineOffset: 2 },
-              })}
-            >
-              {/* Inline style: the RTL style plugin must not rewrite gradient stops. */}
-              <Box sx={{ height: 44 }} style={{ background: VISUAL_SWATCH[i.key] || rampCss(i.legend) || '#ccc' }} />
-              <Box sx={{ px: 1, py: 0.75 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                  <Typography component="span" sx={{ fontSize: '0.8125rem', fontWeight: 600, flex: 1, minWidth: 0 }} noWrap>{i.label}</Typography>
-                  {selected && <CheckIcon sx={{ fontSize: 16, color: 'primary.main' }} />}
-                </Box>
-                <Typography component="span" sx={{ display: 'block', fontSize: '0.6875rem', color: 'text.secondary' }} noWrap>{i.description}</Typography>
-              </Box>
-            </ButtonBase>
+            <MuiTooltip key={i.key} title={i.description || ''} placement="top" arrow enterDelay={400}>
+              <ButtonBase
+                onClick={() => { sat.setIndex(i.key); sat.setShow(true); }}
+                aria-pressed={selected}
+                aria-label={`${i.label}. ${i.description || ''}`}
+                sx={(t) => ({
+                  position: 'relative', display: 'block', width: '100%', aspectRatio: '16 / 10', borderRadius: 2.5, overflow: 'hidden',
+                  backgroundColor: '#2b3a31', backgroundSize: 'cover', backgroundPosition: 'center',
+                  boxShadow: selected ? `0 0 0 2px ${t.palette.background.paper}, 0 0 0 4px ${t.palette.primary.main}` : '0 1px 3px rgba(0,0,0,0.18)',
+                  transition: 'box-shadow 150ms ease, transform 150ms ease',
+                  '& .thumb-img': { transition: 'transform 300ms ease' },
+                  '&:hover .thumb-img': { transform: 'scale(1.04)' },
+                  '&.Mui-focusVisible': { outline: `2px solid ${t.palette.primary.main}`, outlineOffset: 3 },
+                })}
+              >
+                <Box className="thumb-img" aria-hidden="true" sx={{ position: 'absolute', inset: 0, backgroundSize: 'cover', backgroundPosition: 'center' }}
+                  style={{ backgroundImage: `url(${process.env.PUBLIC_URL || ''}/sat-thumbs/${i.key}.webp)${ramp ? `, ${ramp}` : ''}` }} />
+                <Box aria-hidden="true" sx={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(0,0,0,0) 45%, rgba(8,18,12,0.78) 100%)' }} />
+                <Typography component="span" sx={{ position: 'absolute', insetInline: 10, bottom: ramp ? 12 : 8, color: '#fff', fontSize: '0.8125rem', fontWeight: 600, textAlign: 'start', lineHeight: 1.25, textShadow: '0 1px 2px rgba(0,0,0,0.5)' }} noWrap>
+                  {i.label}
+                </Typography>
+                {ramp && <Box aria-hidden="true" sx={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 4 }} style={{ background: ramp }} />}
+                {selected && (
+                  <Box aria-hidden="true" sx={{ position: 'absolute', top: 6, insetInlineEnd: 6, width: 22, height: 22, borderRadius: '50%', bgcolor: 'primary.main', color: '#fff', display: 'grid', placeItems: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.35)' }}>
+                    <CheckIcon sx={{ fontSize: 15 }} />
+                  </Box>
+                )}
+              </ButtonBase>
+            </MuiTooltip>
           );
         })}
       </Box>
