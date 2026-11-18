@@ -33,15 +33,35 @@ function Icon({ d, size = 12, width = 2.4 }) {
   );
 }
 
-/** Status pill: icon + word, never colour alone. */
+/** Filled status badge: shape + glyph differ per status, so it never relies on colour. */
+const BADGE = {
+  good: { shape: 'circle', glyph: 'M7.5 12.2l3 3 6-6.4' },
+  warn: { shape: 'tri', glyph: 'M12 9.6v3.6M12 16.4h.01' },
+  out: { shape: 'oct', glyph: 'M12 7.6v5M12 16.2h.01' },
+  none: { shape: 'circle', glyph: 'M8 12h8' },
+};
+function StatusBadge({ status, color, size = 14 }) {
+  const b = BADGE[status] || BADGE.none;
+  return (
+    <Box component="svg" width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" sx={{ flexShrink: 0, display: 'block' }}>
+      {b.shape === 'tri' && <path d="M10.3 3.4a2 2 0 0 1 3.4 0l8.4 14.6A2 2 0 0 1 20.4 21H3.6a2 2 0 0 1-1.7-3z" fill={color} />}
+      {b.shape === 'oct' && <path d="M8.1 2h7.8a2 2 0 0 1 1.4.6l4.1 4.1a2 2 0 0 1 .6 1.4v7.8a2 2 0 0 1-.6 1.4l-4.1 4.1a2 2 0 0 1-1.4.6H8.1a2 2 0 0 1-1.4-.6l-4.1-4.1A2 2 0 0 1 2 15.9V8.1a2 2 0 0 1 .6-1.4l4.1-4.1A2 2 0 0 1 8.1 2z" fill={color} />}
+      {b.shape === 'circle' && <circle cx="12" cy="12" r="10" fill={color} />}
+      <path d={b.glyph} fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+    </Box>
+  );
+}
+
+/** Status pill: shaped badge + word on a pale pill with a hairline edge. */
 export function StatusChip({ status = 'none', children }) {
   const s = STATUS[status] || STATUS.none;
   return (
     <Box component="span" sx={{
-      display: 'inline-flex', alignItems: 'center', gap: 0.625, px: 1, py: 0.375, borderRadius: 1.5,
-      fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', color: s.color, bgcolor: s.bg,
+      display: 'inline-flex', alignItems: 'center', gap: 1.5, height: 22, pl: 1, pr: 2.5, borderRadius: '999px',
+      fontSize: 11.5, fontWeight: 600, letterSpacing: '0.01em', lineHeight: 1, whiteSpace: 'nowrap',
+      color: s.color, bgcolor: s.bg, boxShadow: `inset 0 0 0 1px ${s.color}26`,
     }}>
-      <Icon d={s.icon} />{children || s.label}
+      <StatusBadge status={status} color={s.color} />{children || s.label}
     </Box>
   );
 }
