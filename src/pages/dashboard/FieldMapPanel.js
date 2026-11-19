@@ -77,7 +77,7 @@ const pin = (html, bg) => L.divIcon({
   iconSize: [0, 0],
 });
 
-export default function FieldMapPanel({ fieldOverview = [], allFields = [], selectedFieldId, onSelect, agronomicThresholds, dateTo }) {
+export default function FieldMapPanel({ fieldOverview = [], allFields = [], selectedFieldId, onSelect, onFilterChange, agronomicThresholds, dateTo }) {
   const geo = useGeo();
   const [measure, setMeasure] = useState(() => { try { return localStorage.getItem('agro_dash_measure') || 'status'; } catch { return 'status'; } });
   useEffect(() => { try { localStorage.setItem('agro_dash_measure', measure); } catch { /* ignore */ } }, [measure]);
@@ -147,6 +147,11 @@ export default function FieldMapPanel({ fieldOverview = [], allFields = [], sele
     return Number.isFinite(v) ? v.toFixed(m.decimals) : '–';
   };
 
+  // Report the sliced fields so the analyses below follow the same filters (cross-filter).
+  const sliceKey = anyFilter ? rows.map((r) => r.field.id).join(',') : '';
+  useEffect(() => { if (onFilterChange) onFilterChange(sliceKey ? sliceKey.split(',') : (anyFilter ? [] : null)); }, [sliceKey, anyFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => { if (onFilterChange) onFilterChange(null); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const ranked = useMemo(() => [...rows].sort((a, b) => {
     if (measure === 'status') return RANK[b.status] - RANK[a.status] || a.field.name.localeCompare(b.field.name);
     const va = measure === 'ec' ? a.ec.value : a.ph.value;
@@ -201,7 +206,7 @@ export default function FieldMapPanel({ fieldOverview = [], allFields = [], sele
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, px: 4, py: 2.5, borderBottom: 1, borderColor: 'divider', flexWrap: 'wrap' }}>
         <Box sx={{ width: 4, height: 18, borderRadius: 1, bgcolor: '#1d5c3c' }} />
         <Typography component="h2" sx={{ fontSize: 15, fontWeight: 600 }}>Field map</Typography>
-        <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>Click a field on the map or in the list to filter the dashboard</Typography>
+        <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>Filters and clicks here filter every analysis below</Typography>
         <Box sx={{ flex: 1 }} />
         <ToggleButtonGroup size="small" exclusive value={measure} onChange={(_, v) => v && setMeasure(v)} aria-label="Colour fields by"
           sx={{ '& .MuiToggleButton-root': { textTransform: 'none', fontSize: 12, fontWeight: 600, px: 3, py: 0.75 } }}>

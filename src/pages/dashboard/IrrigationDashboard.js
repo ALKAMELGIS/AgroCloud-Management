@@ -31,6 +31,7 @@ function matchesField(entryFieldId, locationLabel, fieldId, fieldName) {
 /** Hover for the daily water chart: water in m³, plus that day's site temperature when logged. */
 export default function IrrigationDashboard({
   fieldId = '',
+  fieldIds = null,
   siteId = '',
   dateFrom = '',
   dateTo = '',
@@ -106,8 +107,9 @@ export default function IrrigationDashboard({
     (entries || []).filter((e) => (
       (toNum(e.dailyWater) > 0 || toNum(e.frequency) > 0)
       && matchesField(e.fieldId, e.locationLabel, fieldId, fieldName)
+      && (fieldId || !fieldIds || fieldIds.includes(e.fieldId))
     ))
-  ), [entries, fieldId, fieldName]);
+  ), [entries, fieldId, fieldName, fieldIds]);
 
   const fertigationIndex = useMemo(
     () => indexFertigationByHouseDate(fertigationEntries, allFields),

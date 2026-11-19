@@ -128,6 +128,7 @@ export default function FarmMonitor({
   weatherLoading = false,
   weatherFetching = false,
   onRefreshWeather,
+  fieldIds = null,
 }) {
   const navigate = useNavigate();
   const [fieldSummary, setFieldSummary] = useState(null);
@@ -141,9 +142,10 @@ export default function FarmMonitor({
 
   const visibleFields = useMemo(() => {
     if (!fieldOverview) return [];
-    if (typeFilter === 'All') return fieldOverview;
-    return fieldOverview.filter(f => f.field_type_name === typeFilter);
-  }, [fieldOverview, typeFilter]);
+    const sliced = fieldIds ? fieldOverview.filter((f) => fieldIds.includes(f.id)) : fieldOverview;
+    if (typeFilter === 'All') return sliced;
+    return sliced.filter(f => f.field_type_name === typeFilter);
+  }, [fieldOverview, typeFilter, fieldIds]);
 
   const thresholdMap = useMemo(() => {
     const map = {};

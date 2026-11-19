@@ -256,42 +256,40 @@
       var oFields=fields.filter(function(f){return oAreas.indexOf(f.farmAreaId)>=0;});
       var oRnd=function(s){var h=2166136261;for(var i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return ((h>>>0)%10000)/10000;};
       var oDay=new Date(); oDay.setUTCHours(0,0,0,0); oDay=new Date(oDay.getTime()-86400000).toISOString().slice(0,10);
-      var oSample=oFields.filter(function(f){return !/^imp/.test(f.id);}), oImported=oFields.filter(function(f){return /^imp/.test(f.id);});
-      /* Fields imported from Agro_Structures have no readings in the demo: they show as "No data". */
-      var noData=oImported.map(function(f){ var a=areas.filter(function(x){return x.id===f.farmAreaId;})[0];
-        return {id:f.id,name:f.name,field_type_name:a?a.name:'Field',crop_name:null,current_crop_id:null,latest_ecph:null,active_phi_count:0,nearest_phi_end:null,active_phi_details:[],latest_scouting:null,spray_today:null,harvest_this_week:0,water_this_week:0}; });
-      return ok(oSample.map(function(f,fi){
-        var r=function(k){return oRnd(f.id+oDay+k);}, ecB=2.1+fi*0.11, phB=6.05+fi*0.09+(fi===0?0.9:0);
+      return ok(oFields.map(function(f,fi){
+        var imp=/^imp/.test(f.id), ar=areas.filter(function(x){return x.id===f.farmAreaId;})[0];
+        var r=function(k){return oRnd(f.id+oDay+k);}, ecB=imp?1.9+oRnd(f.id+'ecb')*0.8:2.1+fi*0.11, phB=imp?5.7+oRnd(f.id+'phb')*0.8:6.05+fi*0.09+(fi===0?0.9:0);
         var nm=String(f.name||'').toUpperCase();
-        return {id:f.id,name:f.name,field_type_name:/^GH/.test(nm)?'Greenhouse':/^NH/.test(nm)?'Nethouse':/PIVOT/.test(nm)?'Pivot':'Open field',
+        return {id:f.id,name:f.name,field_type_name:imp&&ar?ar.name:/^GH/.test(nm)?'Greenhouse':/^NH/.test(nm)?'Nethouse':/PIVOT/.test(nm)?'Pivot':'Open field',
           crop_name:CROPS[fi%CROPS.length],current_crop_id:null,
           latest_ecph:{date:oDay,ec_in:+(1.95+r('ei1')*0.2).toFixed(2),ec_out:+(ecB+r('eo1')*0.3).toFixed(2),ph_in:+(5.9+r('pi1')*0.3).toFixed(2),ph_out:+(phB+r('po1')*0.3).toFixed(2)},
           active_phi_count:fi===1?1:0,nearest_phi_end:fi===1?new Date(Date.now()+2*86400000).toISOString():null,active_phi_details:[],
           latest_scouting:fi===3?{id:'sc1',pest:'Whitefly',pct:12,status:'open'}:null,
           spray_today:fi===1?{id:'sp1',product:'Movento 150 OD'}:null,
-          harvest_this_week:Math.round(1800+fi*260+r('h')*600),water_this_week:+(420+fi*35+r('w')*80).toFixed(1)};
-      }).concat(noData));
+          harvest_this_week:Math.round(1800+(fi%6)*260+r('h')*600),water_this_week:+(420+(fi%6)*35+r('w')*80).toFixed(1)};
+      }));
     }
     // Demo-only sample readings so the form dashboards have something to show. The real server never sees these.
     if(method==='GET'&&(path==='/ecph'||path==='/harvests'||path==='/fertigation'||path==='/irrigation-drip')){
       if(Number(q.page||1)>1) return ok([],{meta:{total:0,page:Number(q.page),totalPages:1}});
       var dSite=q.site_id, dAreas=areas.filter(function(a){return !dSite||a.siteId===dSite;}).map(function(a){return a.id;});
-      var dFields=fields.filter(function(f){return !/^imp/.test(f.id)&&dAreas.indexOf(f.farmAreaId)>=0&&(!q.field_id||f.id===q.field_id);});
+      var dFields=fields.filter(function(f){return dAreas.indexOf(f.farmAreaId)>=0&&(!q.field_id||f.id===q.field_id);});
+      if(!dSite&&!q.field_id) dFields=dFields.slice(0,120);
       var dRnd=function(s){var h=2166136261;for(var i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return ((h>>>0)%10000)/10000;};
       var dEnd=new Date(); dEnd.setUTCHours(0,0,0,0); var dOut=[];
       for(var dd=55;dd>=1;dd--){
         var dt=new Date(dEnd.getTime()-dd*86400000).toISOString().slice(0,10);
         if((q.start_date&&dt<q.start_date)||(q.end_date&&dt>q.end_date)) continue;
         dFields.forEach(function(f,fi){
-          var r=function(k){return dRnd(f.id+dt+k);}, t=(55-dd)/55, crop=CROPS[fi%CROPS.length];
+          var r=function(k){return dRnd(f.id+dt+k);}, t=(55-dd)/55, crop=CROPS[fi%CROPS.length], imp=/^imp/.test(f.id);
           if(path==='/ecph'){
-            var ecB=2.1+fi*0.11, phB=6.05+fi*0.09+(fi===0?t*0.9:0);
+            var ecB=imp?1.9+dRnd(f.id+'ecb')*0.8:2.1+fi*0.11, phB=(imp?5.7+dRnd(f.id+'phb')*0.8:6.05+fi*0.09)+(fi===0?t*0.9:0);
             dOut.push({id:'de'+f.id+dt,date:dt,fieldId:f.id,fieldName:f.name,valveReadings:[1,2].map(function(v){return {valveNumber:v,ecIn:+(1.95+r('ei'+v)*0.2).toFixed(2),ec:+(ecB+r('eo'+v)*0.3).toFixed(2),phIn:+(5.9+r('pi'+v)*0.3).toFixed(2),ph:+(phB+r('po'+v)*0.3).toFixed(2),dripVolume:1200,drain:Math.round(220+r('dr'+v)*80),percentDrain:+(0.17+r('pd'+v)*0.08).toFixed(3)};})});
           } else if(path==='/harvests'){
-            if(dd%2===fi%2) dOut.push({id:'dh'+f.id+dt,date:dt,fieldId:f.id,fieldName:f.name,totalQuantity:Math.round(260+fi*40+r('q')*320+t*120),varieties:[{variety:crop,quantity:Math.round(260+fi*40+r('q')*320+t*120),grade:r('g')>0.25?'A':'B'}]});
+            if(dd%2===fi%2) dOut.push({id:'dh'+f.id+dt,date:dt,fieldId:f.id,fieldName:f.name,totalQuantity:Math.round(260+(fi%6)*40+r('q')*320+t*120),varieties:[{variety:crop,quantity:Math.round(260+(fi%6)*40+r('q')*320+t*120),grade:r('g')>0.25?'A':'B'}]});
           } else if(path==='/fertigation'){
             var n=+(18+r('n')*8).toFixed(1),k=+(22+r('k')*9).toFixed(1),pz=+(6+r('p')*4).toFixed(1);
-            dOut.push({id:'df'+f.id+dt,date:dt,fieldId:f.id,fieldName:f.name,dailyWater:+(9+fi*0.8+r('w')*4).toFixed(1),flowRate:+(2.4+r('f')*0.6).toFixed(2),frequency:4+Math.round(r('fr')*3),valvesCount:2,recipeId:['Tomato vegetative','Cucumber fruiting','Leafy greens'][fi%3],fertilizers:{'Calcium nitrate':n,'Potassium sulphate':k,'MAP':pz,'Magnesium sulphate':+(3+r('m')*2).toFixed(1)},totalFertilizer:+(n+k+pz).toFixed(1)});
+            dOut.push({id:'df'+f.id+dt,date:dt,fieldId:f.id,fieldName:f.name,dailyWater:+(9+(fi%6)*0.8+r('w')*4).toFixed(1),flowRate:+(2.4+r('f')*0.6).toFixed(2),frequency:4+Math.round(r('fr')*3),valvesCount:2,recipeId:['Tomato vegetative','Cucumber fruiting','Leafy greens'][fi%3],fertilizers:{'Calcium nitrate':n,'Potassium sulphate':k,'MAP':pz,'Magnesium sulphate':+(3+r('m')*2).toFixed(1)},totalFertilizer:+(n+k+pz).toFixed(1)});
           } else {
             var fq=5+Math.round(r('c')*4), wq=+(2.2+r('wq')*0.6).toFixed(2);
             dOut.push({id:'di'+f.id+dt,date:dt,fieldId:f.id,locationLabel:f.name,waterQtyM3:wq,frequency:fq,dailyWater:+(wq*fq).toFixed(2)});

@@ -63,6 +63,7 @@ function Dashboard() {
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [activeTab, setActiveTab] = useState(0);
   const [selectedFieldObj, setSelectedFieldObj] = useState(null);
+  const [sliceIds, setSliceIds] = useState(null); // fields left by the map slicers (null = all)
   const [showMap, setShowMap] = useState(() => { try { return localStorage.getItem('agro_dash_map') !== '0'; } catch { return true; } });
   const toggleMap = () => setShowMap((v) => { try { localStorage.setItem('agro_dash_map', v ? '0' : '1'); } catch { /* ignore */ } return !v; });
   const { activeSiteId, setActiveSiteId, countries, allowAllSites, hasSiteAssignment } = useActiveSite();
@@ -156,6 +157,7 @@ function Dashboard() {
 
       <FarmMonitor
         fieldOverview={fieldOverview}
+        fieldIds={sliceIds}
         onFieldSelect={handleFieldSelect}
         selectedFieldId={filters.field}
         agronomicThresholds={agronomicThresholds}
@@ -223,7 +225,7 @@ function Dashboard() {
                 sx={{ height: 28, fontWeight: 600, bgcolor: 'table.headerBg', color: 'table.headerText', '& .MuiChip-deleteIcon': { color: 'table.headerText' } }}
               />
             ) : (
-              <Typography sx={{ fontSize: 12, color: 'text.secondary', whiteSpace: 'nowrap' }}>All fields</Typography>
+              <Typography sx={{ fontSize: 12, color: 'text.secondary', whiteSpace: 'nowrap' }}>{sliceIds ? `${sliceIds.length} filtered fields` : 'All fields'}</Typography>
             )}
             <Button
               size="small"
@@ -249,6 +251,7 @@ function Dashboard() {
             allFields={allFields}
             selectedFieldId={filters.field}
             onSelect={(f) => handleFieldSelect(f, { scroll: false })}
+            onFilterChange={setSliceIds}
             agronomicThresholds={agronomicThresholds}
             dateTo={seasonTo}
           />
@@ -260,7 +263,7 @@ function Dashboard() {
         <Box>
           <Typography component="h2" sx={{ fontSize: 18, fontWeight: 600, lineHeight: 1.2 }}>{activeForm.name}</Typography>
           <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>
-            {selectedFieldObj ? selectedFieldObj.name : 'All fields'}{seasonFrom || seasonTo ? ` · ${seasonFrom || '…'} → ${seasonTo || '…'}` : ''}
+            {selectedFieldObj ? selectedFieldObj.name : sliceIds ? `${sliceIds.length} filtered fields` : 'All fields'}{seasonFrom || seasonTo ? ` · ${seasonFrom || '…'} → ${seasonTo || '…'}` : ''}
           </Typography>
         </Box>
       </Box>
@@ -270,6 +273,7 @@ function Dashboard() {
         <Suspense fallback={<Box sx={{ p: 4, textAlign: 'center' }}><Typography>Loading EC/pH Dashboard...</Typography></Box>}>
           <EcphDashboard
             fieldId={filters.field || ''}
+            fieldIds={sliceIds}
             siteId={filters.site || activeSiteId || ''}
             dateFrom={seasonFrom || ''}
             dateTo={seasonTo || ''}
@@ -282,6 +286,7 @@ function Dashboard() {
         <Suspense fallback={<Box sx={{ p: 4, textAlign: 'center' }}><Typography>Loading Fertigation Dashboard...</Typography></Box>}>
           <FertigationDashboard
             fieldId={filters.field || ''}
+            fieldIds={sliceIds}
             siteId={filters.site || activeSiteId || ''}
             dateFrom={seasonFrom || ''}
             dateTo={seasonTo || ''}
@@ -294,6 +299,7 @@ function Dashboard() {
         <Suspense fallback={<Box sx={{ p: 4, textAlign: 'center' }}><Typography>Loading Irrigation Dashboard...</Typography></Box>}>
           <IrrigationDashboard
             fieldId={filters.field || ''}
+            fieldIds={sliceIds}
             siteId={filters.site || activeSiteId || ''}
             dateFrom={seasonFrom || ''}
             dateTo={seasonTo || ''}
@@ -306,6 +312,7 @@ function Dashboard() {
         <Suspense fallback={<Box sx={{ p: 4, textAlign: 'center' }}><Typography>Loading Harvest Dashboard...</Typography></Box>}>
           <HarvestDashboard
             fieldId={filters.field || ''}
+            fieldIds={sliceIds}
             siteId={filters.site || activeSiteId || ''}
             dateFrom={seasonFrom || ''}
             dateTo={seasonTo || ''}
