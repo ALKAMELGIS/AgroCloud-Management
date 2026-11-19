@@ -1,10 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
-import { MapContainer, TileLayer, GeoJSON, Marker, useMap } from 'react-leaflet';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
+import StableGeoJSON from '../../components/map/StableGeoJSON';
 import L from 'leaflet';
 import {
-  Autocomplete, Box, Button, ButtonBase, Checkbox, Chip, FormControlLabel, GlobalStyles, Paper, TextField, ToggleButton, ToggleButtonGroup, Tooltip, Typography,
+  Autocomplete, Box, Button, ButtonBase, Checkbox, Chip, Collapse, GlobalStyles, IconButton, MenuItem, Paper, Slider, Switch, TextField, ToggleButton, ToggleButtonGroup, Tooltip, Typography,
 } from '@mui/material';
-import { LayersOutlined as LayersIcon, FilterAltOffOutlined as ClearIcon } from '@mui/icons-material';
+import {
+  LayersOutlined as LayersIcon, FilterAltOffOutlined as ClearIcon, MoreHorizRounded as MoreIcon, ZoomInMapRounded as ZoomLayerIcon,
+} from '@mui/icons-material';
 import { apiRequest } from '../../utils/api';
 import { useGeo } from '../../components/geo/FieldSelect';
 import { boundsOf } from '../../components/geo/geoUtils';
@@ -50,6 +53,115 @@ function FocusFlash({ value, geometry }) {
   return null;
 }
 
+/* ---------- label settings, like ArcGIS Online "Labels" ---------- */
+const LABEL_COLORS = ['#ffffff', '#13201a', '#ffd54f', '#7fd3ff', '#ff8a80', '#b9f6ca'];
+// Single quotes only: these go inside a style="" attribute.
+const LABEL_FONTS = { sans: 'Inter, sans-serif', mono: "'IBM Plex Mono', monospace", serif: 'Georgia, serif' };
+const FIELD_LABEL_CONTENT = [['name_value', 'Name · value'], ['name', 'Name'], ['code', 'Farm_Code'], ['crop', 'Crop'], ['value', 'Value']];
+const STRUCT_LABEL_CONTENT = [['code', 'Farm_Code'], ['name', 'Farm_Name'], ['key', 'ZONE_ID-Farm_Code'], ['type', 'Structure type']];
+const DEFAULT_LAYERS = {
+  show: { fields: true, alerts: true, structures: false },
+  opacity: { fields: 0.55, structures: 0.35 },
+  label: {
+    fields: { show: true, content: 'name_value', size: 11, color: '#ffffff', style: 'box', font: 'mono', onlyData: true },
+    structures: { show: false, content: 'code', size: 10, color: '#ffffff', style: 'halo', font: 'sans' },
+  },
+};
+const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+function labelHtml(text, ls) {
+  const dark = ['#13201a'].includes(ls.color);
+  const deco = ls.style === 'box'
+    ? `background:${dark ? 'rgba(255,255,255,.88)' : 'rgba(17,32,25,.78)'};padding:2px 6px;border-radius:4px`
+    : ls.style === 'halo' ? `text-shadow:0 0 2px ${dark ? '#fff' : '#000'},0 0 2px ${dark ? '#fff' : '#000'},0 0 4px ${dark ? '#fff' : '#000'}` : '';
+  return `<span style="display:inline-block;white-space:nowrap;font:600 ${ls.size}px/1.25 ${LABEL_FONTS[ls.font] || LABEL_FONTS.sans};color:${ls.color};${deco}">${esc(text)}</span>`;
+}
+
+/** Arcgis renderer classes -> { value: { label, color } } */
+function typesFromMeta(meta) {
+  const out = {};
+  const r = meta?.drawingInfo?.renderer;
+  const rgba = (c) => (Array.isArray(c) ? `rgb(${c[0]},${c[1]},${c[2]})` : null);
+  (r?.uniqueValueGroups || []).forEach((g) => (g.classes || []).forEach((c) => (c.values || []).forEach((v) => {
+    out[String(Array.isArray(v) ? v[0] : v)] = { label: c.label, color: rgba(c.symbol?.color) || '#7fd3ff' };
+  })));
+  (r?.uniqueValueInfos || []).forEach((u) => { out[String(u.value)] = { label: u.label, color: rgba(u.symbol?.color) || '#7fd3ff' }; });
+  (meta?.types || []).forEach((t) => { if (!out[String(t.id)]) out[String(t.id)] = { label: t.name, color: '#7fd3ff' }; });
+  return out;
+}
+
+function MapGrab({ mapRef }) {
+  const map = useMap();
+  useEffect(() => { mapRef.current = map; return () => { mapRef.current = null; }; }, [map, mapRef]);
+  return null;
+}
+
+/** One row of the Layers list with its "..." settings, like the ArcGIS Online layer list. */
+function LayerRow({ name, count, on, onToggle, open, onOpen, onZoom, opacity, onOpacity, label, onLabel, contentOptions }) {
+  return (
+    <Box sx={{ borderBottom: 1, borderColor: 'divider', '&:last-of-type': { borderBottom: 0 } }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.5 }}>
+        <Checkbox size="small" checked={on} onChange={onToggle} sx={{ p: 1 }} inputProps={{ 'aria-label': name }} />
+        <Typography sx={{ fontSize: 13, flex: 1, minWidth: 0 }} noWrap>{name}{count != null && <Box component="span" sx={{ color: 'text.secondary', fontFamily: MONO, ml: 1 }}>{count}</Box>}</Typography>
+        {(onZoom || onOpacity || onLabel) && (
+          <IconButton size="small" onClick={onOpen} aria-expanded={open} aria-label={`${name} options`} sx={{ bgcolor: open ? 'action.selected' : 'transparent' }}><MoreIcon fontSize="small" /></IconButton>
+        )}
+      </Box>
+      <Collapse in={open} unmountOnExit>
+        <Box sx={{ pl: 2, pr: 1, pb: 3, display: 'grid', gap: 2 }}>
+          {onZoom && <Button size="small" startIcon={<ZoomLayerIcon />} onClick={onZoom} sx={{ justifyContent: 'flex-start', textTransform: 'none' }}>Zoom to layer</Button>}
+          {onOpacity && (
+            <Box>
+              <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>Transparency · {Math.round((1 - opacity) * 100)}%</Typography>
+              <Slider size="small" min={0} max={0.95} step={0.05} value={1 - opacity} onChange={(_, v) => onOpacity(1 - v)} aria-label="Transparency" />
+            </Box>
+          )}
+          {onLabel && (
+            <Box sx={{ display: 'grid', gap: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                <Typography sx={{ fontSize: 12.5, fontWeight: 600, flex: 1 }}>Labels</Typography>
+                <Switch size="small" checked={label.show} onChange={() => onLabel({ show: !label.show })} inputProps={{ 'aria-label': `${name} labels` }} />
+              </Box>
+              {label.show && (
+                <>
+                  <TextField select size="small" label="Label text" value={label.content} onChange={(e) => onLabel({ content: e.target.value })}>
+                    {contentOptions.map(([k, t]) => <MenuItem key={k} value={k} sx={{ fontSize: 13 }}>{t}</MenuItem>)}
+                  </TextField>
+                  <Box>
+                    <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>Size · {label.size}px</Typography>
+                    <Slider size="small" min={8} max={20} step={1} value={label.size} onChange={(_, v) => onLabel({ size: v })} aria-label="Label size" />
+                  </Box>
+                  <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
+                    <Typography sx={{ fontSize: 12, color: 'text.secondary', width: 40 }}>Color</Typography>
+                    {LABEL_COLORS.map((c) => (
+                      <ButtonBase key={c} onClick={() => onLabel({ color: c })} aria-label={`Label colour ${c}`} aria-pressed={label.color === c}
+                        sx={{ width: 20, height: 20, borderRadius: '50%', bgcolor: c, border: '1px solid rgba(0,0,0,0.25)', boxShadow: label.color === c ? '0 0 0 2px #fff, 0 0 0 4px #1d5c3c' : 'none' }} />
+                    ))}
+                  </Box>
+                  <ToggleButtonGroup size="small" exclusive value={label.style} onChange={(_, v) => v && onLabel({ style: v })} aria-label="Label style"
+                    sx={{ '& .MuiToggleButton-root': { textTransform: 'none', fontSize: 12, flex: 1, py: 0.5 } }}>
+                    <ToggleButton value="box">Box</ToggleButton><ToggleButton value="halo">Halo</ToggleButton><ToggleButton value="plain">Plain</ToggleButton>
+                  </ToggleButtonGroup>
+                  <ToggleButtonGroup size="small" exclusive value={label.font} onChange={(_, v) => v && onLabel({ font: v })} aria-label="Label font"
+                    sx={{ '& .MuiToggleButton-root': { textTransform: 'none', fontSize: 12, flex: 1, py: 0.5 } }}>
+                    <ToggleButton value="sans">Sans</ToggleButton><ToggleButton value="mono">Mono</ToggleButton><ToggleButton value="serif">Serif</ToggleButton>
+                  </ToggleButtonGroup>
+                  {label.onlyData !== undefined && (
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <Typography sx={{ fontSize: 12, flex: 1 }}>Only fields with readings</Typography>
+                      <Switch size="small" checked={label.onlyData} onChange={() => onLabel({ onlyData: !label.onlyData })} />
+                    </Box>
+                  )}
+                  <Box sx={{ p: 2, borderRadius: 1, bgcolor: '#5b6b5f', textAlign: 'center' }} dangerouslySetInnerHTML={{ __html: labelHtml('NH 07 · 2.28', label) }} />
+                </>
+              )}
+            </Box>
+          )}
+        </Box>
+      </Collapse>
+    </Box>
+  );
+}
+
 /** A slicer, like in a BI report: pick one or more values, empty = all. */
 function Slicer({ label, options, value, onChange, width = 170 }) {
   return (
@@ -86,26 +198,44 @@ export default function FieldMapPanel({ fieldOverview = [], allFields = [], sele
   const [f, setF] = useState({ zone: [], type: [], crop: [], status: [], code: [] });
   const setFilter = (k) => (v) => setF((x) => ({ ...x, [k]: v }));
   const anyFilter = Object.values(f).some((v) => v.length);
-  const [layers, setLayers] = useState(() => {
-    try { return { fields: true, labels: true, alerts: true, structures: false, ...JSON.parse(localStorage.getItem('agro_dash_layers') || '{}') }; } catch { return { fields: true, labels: true, alerts: true, structures: false }; }
+  const [cfg, setCfg] = useState(() => {
+    try {
+      const v = JSON.parse(localStorage.getItem('agro_dash_layers_v2') || 'null');
+      if (v) return { show: { ...DEFAULT_LAYERS.show, ...v.show }, opacity: { ...DEFAULT_LAYERS.opacity, ...v.opacity }, label: { fields: { ...DEFAULT_LAYERS.label.fields, ...v.label?.fields }, structures: { ...DEFAULT_LAYERS.label.structures, ...v.label?.structures } } };
+    } catch { /* ignore */ }
+    return DEFAULT_LAYERS;
   });
-  useEffect(() => { try { localStorage.setItem('agro_dash_layers', JSON.stringify(layers)); } catch { /* ignore */ } }, [layers]);
+  useEffect(() => { try { localStorage.setItem('agro_dash_layers_v2', JSON.stringify(cfg)); } catch { /* ignore */ } }, [cfg]);
+  const toggleLayer = (k) => setCfg((c) => ({ ...c, show: { ...c.show, [k]: !c.show[k] } }));
+  const setOpacity = (k) => (v) => setCfg((c) => ({ ...c, opacity: { ...c.opacity, [k]: v } }));
+  const setLabel = (k) => (patch) => setCfg((c) => ({ ...c, label: { ...c.label, [k]: { ...c.label[k], ...patch } } }));
   const [layersOpen, setLayersOpen] = useState(false);
-  const [structs, setStructs] = useState(null); // Agro_Structures features (loaded when the layer is turned on)
+  const [settingsFor, setSettingsFor] = useState(null);
+  const mapRef = useRef(null);
+  // Agro_Structures: the layer and its type classes load at once (slicer options); features when shown.
+  const [structLayer, setStructLayer] = useState(null); // { id, types }
+  const [structs, setStructs] = useState(null);
   useEffect(() => {
-    if (!layers.structures || structs) return;
     let alive = true;
     (async () => {
       try {
         const list = await apiRequest('/gis/layers');
         const lyr = (Array.isArray(list) ? list : []).find((l) => /arcgis/i.test(l.sourceType || '') || /structure/i.test(l.name || ''));
-        if (!lyr) { if (alive) setStructs({ features: [] }); return; }
-        const fc = await apiRequest(`/gis/layers/${lyr.id}/features`);
-        if (alive) setStructs(fc && fc.features ? fc : { features: [] });
-      } catch { if (alive) setStructs({ features: [] }); }
+        if (!lyr) return;
+        let meta = null;
+        try { meta = await apiRequest(`/gis/layers/${lyr.id}/metadata`); } catch { /* optional */ }
+        if (alive) setStructLayer({ id: lyr.id, name: lyr.name, types: typesFromMeta(meta) });
+      } catch { /* no layer */ }
     })();
     return () => { alive = false; };
-  }, [layers.structures, structs]);
+  }, []);
+  useEffect(() => {
+    if (!cfg.show.structures || structs || !structLayer) return undefined;
+    let alive = true;
+    apiRequest(`/gis/layers/${structLayer.id}/features`).then((fc) => { if (alive) setStructs(fc && fc.features ? fc : { features: [] }); })
+      .catch(() => { if (alive) setStructs({ features: [] }); });
+    return () => { alive = false; };
+  }, [cfg.show.structures, structs, structLayer]);
   const fieldInfo = useMemo(() => Object.fromEntries((allFields || []).map((x) => [x.id, x])), [allFields]);
 
   const thresholds = useMemo(() => {
@@ -132,8 +262,10 @@ export default function FieldMapPanel({ fieldOverview = [], allFields = [], sele
   }), [fieldOverview, thresholds, dateTo, geo, fieldInfo]);
   const opts = useMemo(() => {
     const u = (k) => [...new Set(allRows.map((r) => r[k]))].filter((x) => x && x !== '—').sort();
-    return { zone: u('zone'), type: u('type'), crop: u('crop'), code: u('code') };
-  }, [allRows]);
+    const types = new Set(u('type'));
+    Object.values(structLayer?.types || {}).forEach((t) => t.label && types.add(t.label));
+    return { zone: u('zone'), type: [...types].sort(), crop: u('crop'), code: u('code') };
+  }, [allRows, structLayer]);
 
   const statusOf = (r) => (measure === 'ec' ? r.ec.status : measure === 'ph' ? r.ph.status : r.status);
   // Slicers filter the map, the counts and the list together.
@@ -191,8 +323,19 @@ export default function FieldMapPanel({ fieldOverview = [], allFields = [], sele
 
   const bm = BASEMAPS[basemap] || BASEMAPS.satellite;
   if (!allRows.length) return null;
-  const structFc = structs ? { type: 'FeatureCollection', features: structs.features.filter((x) => x.geometry && (!f.zone.length || f.zone.includes(String(x.properties?.ZONE_ID || '').toUpperCase()))) } : null;
-  const LAYERS = [['fields', 'Fields (status fill)'], ['labels', 'Field labels'], ['alerts', 'Alerts (PHI · pest · spray)'], ['structures', 'Agro_Structures (ArcGIS)']];
+  const stType = (pr) => structLayer?.types?.[String(pr?.Structure_Type)] || { label: String(pr?.Structure_Type ?? ''), color: '#7fd3ff' };
+  const structFc = structs ? { type: 'FeatureCollection', features: structs.features.filter((x) => x.geometry
+    && (!f.zone.length || f.zone.includes(String(x.properties?.ZONE_ID || '').toUpperCase()))
+    && (!f.type.length || f.type.includes(stType(x.properties).label))) } : null;
+  const fl = cfg.label.fields;
+  const sl = cfg.label.structures;
+  const fieldLabelText = (r) => ({ name_value: `${r.field.name} · ${valueText(r)}`, name: r.field.name, code: r.code, crop: r.crop, value: valueText(r) }[fl.content] || r.field.name);
+  const structLabelText = (pr) => ({ code: pr.Farm_Code, name: pr.Farm_Name || pr.Farm_Code, key: `${pr.ZONE_ID || ''}-${pr.Farm_Code || ''}`, type: stType(pr).label }[sl.content] || pr.Farm_Code || '');
+  const zoomTo = (fcx) => {
+    const map = mapRef.current;
+    if (!map || !fcx?.features?.length) return;
+    try { map.fitBounds(L.geoJSON(fcx).getBounds(), { padding: [24, 24], maxZoom: 18 }); } catch { /* ignore */ }
+  };
 
   return (
     <Paper variant="outlined" sx={{ mb: 4, borderRadius: 3, overflow: 'hidden' }}>
@@ -202,6 +345,8 @@ export default function FieldMapPanel({ fieldOverview = [], allFields = [], sele
           padding: '2px 6px', fontSize: 11, fontWeight: 600, fontFamily: MONO, whiteSpace: 'nowrap',
         },
         '.leaflet-tooltip.agro-field-label::before': { display: 'none' },
+        '.leaflet-tooltip.agro-lbl': { background: 'transparent', border: 0, boxShadow: 'none', padding: 0 },
+        '.leaflet-tooltip.agro-lbl::before': { display: 'none' },
       }} />
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, px: 4, py: 2.5, borderBottom: 1, borderColor: 'divider', flexWrap: 'wrap' }}>
         <Box sx={{ width: 4, height: 18, borderRadius: 1, bgcolor: '#1d5c3c' }} />
@@ -235,35 +380,45 @@ export default function FieldMapPanel({ fieldOverview = [], allFields = [], sele
               {bm.overlay && <TileLayer key={`${basemap}-labels`} url={bm.overlay} maxNativeZoom={bm.maxNativeZoom || 19} maxZoom={21} zIndex={2} />}
               <FitOnce bounds={bounds} sig={fc.features.map((f) => f.properties.id).join(',')} />
               <FocusFlash value={selectedFieldId} geometry={selectedFieldId ? byId[selectedFieldId]?.geometry : null} />
-              {layers.structures && structFc && (
-                <GeoJSON key={`st-${structFc.features.length}-${f.zone.join()}`} data={structFc}
-                  style={() => ({ color: '#7fd3ff', weight: 1, fillOpacity: 0.04, dashArray: '3 3' })}
-                  onEachFeature={(ft, lyr) => { const pr = ft.properties || {}; lyr.bindTooltip(`${pr.Farm_Name || pr.Farm_Code || ''} · ${pr.ZONE_ID || ''}-${pr.Farm_Code || ''}`, { sticky: true }); }} />
+              <MapGrab mapRef={mapRef} />
+              {cfg.show.structures && structFc && (
+                <StableGeoJSON
+                  data={structFc}
+                  dataKey={`st-${structFc.features.length}-${f.zone.join()}-${f.type.join()}`}
+                  style={(ft) => {
+                    const t = stType(ft.properties);
+                    return { color: t.color, weight: 1.2, fillColor: t.color, fillOpacity: cfg.opacity.structures * 0.5, opacity: Math.min(1, cfg.opacity.structures + 0.4) };
+                  }}
+                  label={sl.show ? (ft) => ({ html: labelHtml(structLabelText(ft.properties || {}), sl), permanent: true, className: 'agro-lbl' }) : (ft) => ({ html: labelHtml(`${(ft.properties || {}).Farm_Name || ''} · ${stType(ft.properties).label}`, { ...sl, style: 'box', size: 11 }), permanent: false, className: 'agro-lbl' })}
+                />
               )}
-              {layers.fields && (
-              <GeoJSON
-                key={`${measure}-${selectedFieldId}-${hover}-${fc.features.length}-${layers.labels}-${rows.length}`}
-                data={fc}
-                style={(f) => {
-                  const r = byId[f.properties.id];
-                  const sel = f.properties.id === selectedFieldId;
-                  const hot = f.properties.id === hover;
-                  return { color: sel ? '#ffd54f' : '#ffffff', weight: sel ? 3.5 : hot ? 2.5 : 1.5, fillColor: FILL[statusOf(r)], fillOpacity: sel ? 0.75 : hot ? 0.7 : 0.55 };
-                }}
-                onEachFeature={(f, lyr) => {
-                  const r = byId[f.properties.id];
-                  const tip = `<b>${r.field.name}</b><br/>EC out ${Number.isFinite(r.ec.value) ? r.ec.value.toFixed(2) : '–'} · pH out ${Number.isFinite(r.ph.value) ? r.ph.value.toFixed(1) : '–'}<br/>${WORD[r.status]}`;
-                  // Permanent labels for fields with readings; the rest show theirs on hover (keeps a busy site readable).
-                  if (layers.labels && (r.status !== 'none' || r.field.id === selectedFieldId)) lyr.bindTooltip(`${r.field.name} · ${valueText(r)}`, { permanent: true, direction: 'center', className: 'agro-field-label' });
-                  else lyr.bindTooltip(`${r.field.name} · ${valueText(r)}`, { sticky: true, className: 'agro-field-label' });
-                  lyr.bindPopup(tip);
-                  lyr.on('mouseover', () => setHover(r.field.id));
-                  lyr.on('mouseout', () => setHover(null));
-                  lyr.on('click', () => pick(r));
-                }}
-              />
+              {cfg.show.fields && (
+                <StableGeoJSON
+                  data={fc}
+                  dataKey={fc.features.map((x) => x.properties.id).join(',')}
+                  style={(ft) => {
+                    const r = byId[ft.properties.id];
+                    if (!r) return {};
+                    const sel = ft.properties.id === selectedFieldId;
+                    const hot = ft.properties.id === hover;
+                    const op = cfg.opacity.fields;
+                    return { color: sel ? '#ffd54f' : '#ffffff', weight: sel ? 3.5 : hot ? 2.5 : 1.5, fillColor: FILL[statusOf(r)], fillOpacity: sel ? Math.min(1, op + 0.2) : hot ? Math.min(1, op + 0.15) : op };
+                  }}
+                  label={(ft) => {
+                    const r = byId[ft.properties.id];
+                    if (!r) return null;
+                    const permanent = fl.show && (!fl.onlyData || r.status !== 'none' || r.field.id === selectedFieldId);
+                    return { html: labelHtml(fieldLabelText(r), permanent ? fl : { ...fl, style: 'box', size: 11 }), permanent, className: 'agro-lbl' };
+                  }}
+                  popup={(ft) => {
+                    const r = byId[ft.properties.id];
+                    return r ? `<b>${esc(r.field.name)}</b> · ${esc(r.zone)}-${esc(r.code)}<br/>EC out ${Number.isFinite(r.ec.value) ? r.ec.value.toFixed(2) : '–'} · pH out ${Number.isFinite(r.ph.value) ? r.ph.value.toFixed(1) : '–'}<br/>${WORD[r.status]}` : '';
+                  }}
+                  onHover={(ft) => setHover(ft ? ft.properties.id : null)}
+                  onClick={(ft) => { const r = byId[ft.properties.id]; if (r) pick(r); }}
+                />
               )}
-              {layers.alerts && shaped.filter((r) => r.phi || r.pest || r.spray).map((r) => {
+              {cfg.show.alerts && shaped.filter((r) => r.phi || r.pest || r.spray).map((r) => {
                 const marks = [r.phi && 'P', r.pest && '!', r.spray && 'S'].filter(Boolean);
                 return <Marker key={`al-${r.field.id}`} position={centerOf(r.geometry)} interactive={false} icon={pin(marks, r.pest ? '#c0392b' : '#6a46b8')} />;
               })}
@@ -276,18 +431,25 @@ export default function FieldMapPanel({ fieldOverview = [], allFields = [], sele
           {shaped.length > 0 && <BasemapSwitcher value={basemap} onChange={setBasemap} side="right" />}
           {shaped.length > 0 && (
             <Box onMouseDown={(e) => e.stopPropagation()} onWheel={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}
-              sx={{ position: 'absolute', top: 12, right: 56, zIndex: 1000, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1.5 }}>
+              sx={{ position: 'absolute', top: 12, right: 56, zIndex: 1001, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1.5 }}>
               <ButtonBase onClick={() => setLayersOpen((o) => !o)} aria-expanded={layersOpen} aria-label="Map layers" title="Map layers"
                 sx={{ height: 34, px: 2.5, gap: 1.5, borderRadius: 1, fontSize: 12.5, fontWeight: 600, bgcolor: layersOpen ? 'primary.main' : 'background.paper', color: layersOpen ? 'primary.contrastText' : 'text.primary', border: '1px solid rgba(0,0,0,0.2)', boxShadow: '0 1px 5px rgba(0,0,0,0.3)' }}>
                 <LayersIcon sx={{ fontSize: 18 }} />Layers
               </ButtonBase>
               {layersOpen && (
-                <Box sx={{ width: 240, bgcolor: 'background.paper', borderRadius: 2, boxShadow: '0 6px 24px rgba(0,0,0,0.28)', py: 1.5, px: 3 }}>
-                  {LAYERS.map(([k, label]) => (
-                    <FormControlLabel key={k} sx={{ display: 'flex', m: 0, '& .MuiFormControlLabel-label': { fontSize: 13 } }}
-                      control={<Checkbox size="small" checked={!!layers[k]} onChange={() => setLayers((x) => ({ ...x, [k]: !x[k] }))} sx={{ p: 1 }} />}
-                      label={k === 'structures' && layers.structures && !structs ? `${label} · loading…` : k === 'structures' && structFc ? `${label} · ${structFc.features.length}` : label} />
-                  ))}
+                <Box sx={{ width: 300, maxHeight: 340, overflowY: 'auto', bgcolor: 'background.paper', borderRadius: 2, boxShadow: '0 6px 24px rgba(0,0,0,0.28)', py: 1, px: 2 }}>
+                  <LayerRow name="Fields (status fill)" count={fc.features.length} on={cfg.show.fields} onToggle={() => toggleLayer('fields')}
+                    open={settingsFor === 'fields'} onOpen={() => setSettingsFor((x) => (x === 'fields' ? null : 'fields'))}
+                    onZoom={() => zoomTo(fc)} opacity={cfg.opacity.fields} onOpacity={setOpacity('fields')}
+                    label={fl} onLabel={setLabel('fields')} contentOptions={FIELD_LABEL_CONTENT} />
+                  <LayerRow name="Alerts (PHI · pest · spray)" on={cfg.show.alerts} onToggle={() => toggleLayer('alerts')} />
+                  {structLayer && (
+                    <LayerRow name={structLayer.name || 'Agro_Structures'} count={cfg.show.structures ? (structFc ? structFc.features.length : '…') : null}
+                      on={cfg.show.structures} onToggle={() => toggleLayer('structures')}
+                      open={settingsFor === 'structures'} onOpen={() => setSettingsFor((x) => (x === 'structures' ? null : 'structures'))}
+                      onZoom={structFc ? () => zoomTo(structFc) : null} opacity={cfg.opacity.structures} onOpacity={setOpacity('structures')}
+                      label={sl} onLabel={setLabel('structures')} contentOptions={STRUCT_LABEL_CONTENT} />
+                  )}
                 </Box>
               )}
             </Box>
@@ -300,7 +462,15 @@ export default function FieldMapPanel({ fieldOverview = [], allFields = [], sele
                 {WORD[s]} <Box component="span" sx={{ fontFamily: MONO, color: 'text.secondary' }}>{counts[s]}</Box>
               </Box>
             ))}
-            {layers.alerts && (
+            {cfg.show.structures && structFc && [...new Set(structFc.features.map((x) => stType(x.properties).label))].slice(0, 6).map((lb) => {
+              const t = Object.values(structLayer?.types || {}).find((x) => x.label === lb);
+              return (
+                <Box key={`st-${lb}`} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, fontSize: 12 }}>
+                  <Box sx={{ width: 12, height: 12, borderRadius: 0.75, border: `2px solid ${t?.color || '#7fd3ff'}` }} />{lb}
+                </Box>
+              );
+            })}
+            {cfg.show.alerts && (
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, fontSize: 12, color: 'text.secondary' }}>
                 <b style={{ color: '#6a46b8' }}>P</b> PHI <b style={{ color: '#c0392b', marginLeft: 4 }}>!</b> Pest <b style={{ color: '#6a46b8', marginLeft: 4 }}>S</b> Sprayed
               </Box>

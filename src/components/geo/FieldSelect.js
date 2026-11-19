@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { MapContainer, TileLayer, GeoJSON, CircleMarker, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, CircleMarker, useMap } from 'react-leaflet';
 import {
   TextField, MenuItem, Box, IconButton, InputAdornment, Tooltip, Dialog, DialogTitle, DialogContent,
   ButtonBase, Typography, useMediaQuery, useTheme,
@@ -15,6 +15,7 @@ import { MapLifecycle } from '../../utils/leafletSafe';
 import { useIsArabic } from '../../i18n/shellLabels';
 import { boundsOf } from './geoUtils';
 import { flyAndFlash } from '../map/mapFlash';
+import StableGeoJSON from '../map/StableGeoJSON';
 
 /*
  * Field picker for every form: the field is the system's own map feature
@@ -182,8 +183,8 @@ export function FieldMapView({ fields, value, onPick, height = 380, inline = fal
           <FitMap bounds={fit.bounds} fitKey={fit.key} />
           <FocusFlash value={value} geometry={value ? geo.byId[value]?.geometry : null} />
           {me && <CircleMarker center={me} radius={7} pathOptions={{ color: '#ffffff', weight: 2, fillColor: '#1a73e8', fillOpacity: 1 }} />}
-          <GeoJSON
-            key={`${value}-${hover}-${fc.features.length}`}
+          <StableGeoJSON
+            dataKey={fc.features.map((f) => f.properties.id).join(',')}
             data={fc}
             style={(f) => {
               const st = subtypeOf(geo, f.properties.sub);
@@ -191,10 +192,8 @@ export function FieldMapView({ fields, value, onPick, height = 380, inline = fal
               const hot = f.properties.id === hover;
               return { color: sel ? '#f2c94c' : hot ? '#ffffff' : (st?.line_color || '#1f7a4d'), weight: sel || hot ? 3 : 1.5, fillColor: st?.fill_color || '#e8f2ec', fillOpacity: sel ? 0.55 : hot ? 0.45 : 0.3 };
             }}
-            onEachFeature={(f, lyr) => {
-              lyr.bindTooltip(`${f.properties.key || ''} · ${f.properties.name}`, { sticky: true, direction: 'top' });
-              lyr.on('click', () => pick(f.properties.id));
-            }}
+            label={(f) => ({ html: `${f.properties.key || ''} · ${f.properties.name}`, permanent: false, direction: 'top' })}
+            onClick={(f) => pick(f.properties.id)}
           />
         </MapContainer>
       </MapWorkspace>
