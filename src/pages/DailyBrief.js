@@ -12,6 +12,7 @@ import {
   RateReviewOutlined as ReviewIcon,
 } from '@mui/icons-material';
 import { apiRequest } from '../utils/api';
+import { displayDateTime, displayDate, displayDay } from '../utils/displayDate';
 import { useActiveSite } from '../contexts/ActiveSiteContext';
 import useReadOnlyMode from '../hooks/useReadOnlyMode';
 import ReadOnlyBanner from '../components/ReadOnlyBanner';
@@ -28,12 +29,7 @@ const WORK_ORDER_STATUS_LABELS = {
 };
 
 function formatPhiEndDate(phiEndDate) {
-  const d = new Date(phiEndDate);
-  const dateStr = d.toLocaleDateString('en-GB');
-  if (d.getHours() || d.getMinutes()) {
-    return `${dateStr}, ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-  }
-  return dateStr;
+  return displayDateTime(phiEndDate);
 }
 
 function alertPath(alert) {
@@ -169,7 +165,7 @@ export default function DailyBrief() {
 
   if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}><CircularProgress /></Box>;
 
-  const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  const today = displayDay();
   const summary = data?.summary || {};
 
   return (
@@ -430,7 +426,7 @@ export default function DailyBrief() {
                   <TableCell>
                     <Chip label={p.severity} color={SEVERITY_COLORS[p.severity] || 'default'} size="small" />
                   </TableCell>
-                  <TableCell>{new Date(p.reportDate).toLocaleDateString()}</TableCell>
+                  <TableCell>{displayDate(p.reportDate)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

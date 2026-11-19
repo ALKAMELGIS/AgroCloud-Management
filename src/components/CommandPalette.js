@@ -11,7 +11,6 @@ import {
   InputAdornment,
   Typography,
   Box,
-  Chip,
 } from '@mui/material';
 import {
   SearchOutlined as SearchIcon,
@@ -150,24 +149,27 @@ export default function CommandPalette() {
           position: 'fixed',
           top: '15%',
           m: 0,
-          borderRadius: 2.5,
+          borderRadius: '16px',
           maxHeight: '60vh',
+          maxWidth: 600,
+          boxShadow: '0 30px 80px -20px rgba(22,40,30,0.45), 0 0 0 1px rgba(22,40,30,0.06)',
         },
       }}
-      slotProps={{ backdrop: { sx: { backdropFilter: 'blur(4px)' } } }}
+      slotProps={{ backdrop: { sx: { backdropFilter: 'blur(3px)', bgcolor: 'rgba(22,40,30,0.22)' } } }}
     >
-      <Box sx={{ p: 2, pb: 0 }}>
+      <Box sx={{ px: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
         <TextField
           inputRef={inputRef}
           autoFocus
           fullWidth
-          placeholder={isAr ? 'ابحث في الصفحات…' : 'Search pages…'}
+          placeholder={isAr ? 'بحث' : 'Search'}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}
-          variant="outlined"
-          size="small"
+          variant="standard"
           InputProps={{
+            disableUnderline: true,
+            sx: { height: 56, fontSize: 15 },
             startAdornment: (
               <InputAdornment position="start">
                 <SearchIcon color="action" />
@@ -175,13 +177,13 @@ export default function CommandPalette() {
             ),
             endAdornment: (
               <InputAdornment position="end">
-                <Chip label="ESC" size="small" variant="outlined" sx={{ height: 22 }} />
+                <Box component="kbd" sx={{ font: "500 10.5px 'IBM Plex Mono', monospace", px: 1.5, py: 0.25, borderRadius: '5px', border: '1px solid', borderColor: 'divider', color: 'text.secondary' }}>Esc</Box>
               </InputAdornment>
             ),
           }}
         />
       </Box>
-      <List sx={{ maxHeight: '50vh', overflow: 'auto', pt: 1 }}>
+      <List sx={{ maxHeight: '50vh', overflow: 'auto', p: 2 }}>
         {filtered.length === 0 ? (
           <ListItem>
             <ListItemText
@@ -198,21 +200,24 @@ export default function CommandPalette() {
               <ListItemButton
                 selected={idx === selectedIndex}
                 onClick={() => handleSelect(cmd.path)}
-                sx={{ mx: 1, borderRadius: 1 }}
+                sx={{ borderRadius: '9px', minHeight: 40, '&.Mui-selected': { bgcolor: 'rgba(22,40,30,0.06)' } }}
               >
                 <ListItemIcon sx={{ minWidth: 36 }}>{cmd.icon}</ListItemIcon>
                 <ListItemText
                   primary={L(cmd.label)}
                   primaryTypographyProps={{ fontWeight: idx === selectedIndex ? 600 : 400 }}
                 />
-                <Typography variant="caption" color="text.secondary">
-                  {cmd.path}
-                </Typography>
+                {idx === selectedIndex && (
+                  <Typography variant="caption" color="text.secondary">Enter</Typography>
+                )}
               </ListItemButton>
             </ListItem>
           ))
         )}
       </List>
+      <Box sx={{ display: 'flex', gap: 4, px: 4.5, py: 2.5, borderTop: '1px solid', borderColor: 'divider', fontSize: 11.5, color: 'text.secondary' }}>
+        <span>↑↓ {isAr ? 'للتنقل' : 'to move'}</span><span>Enter {isAr ? 'للفتح' : 'to open'}</span><span>Esc {isAr ? 'للإغلاق' : 'to close'}</span>
+      </Box>
     </Dialog>
   );
 }

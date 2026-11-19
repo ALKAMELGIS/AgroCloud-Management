@@ -117,6 +117,68 @@ function readingAge(dateStr, refDate) {
   return `Read ${days} d ago`;
 }
 
+/** Dense field status table (Option C): one row per field, sorted worst first. */
+function FieldStatusTable({ fields, total, showAll, onShowAll, thresholdMap, dateTo, selectedId, onPick }) {
+  const rank = { out: 3, warn: 2, good: 1, none: 0 };
+  const rows = fields.map((field) => {
+    const th = thresholdMap[field.current_crop_id] || {};
+    const stale = isStale(field.latest_ecph?.date, dateTo);
+    const ec = meter(field.latest_ecph?.ec_out, th.ec_out || th.ec, DEFAULT_BANDS.ec, stale);
+    const ph = meter(field.latest_ecph?.ph_out, th.ph_out || th.ph, DEFAULT_BANDS.ph, stale);
+    const worst = rank[ec.status] >= rank[ph.status] ? ec.status : ph.status;
+    return { field, ec, ph, overall: stale ? 'none' : worst, stale };
+  }).sort((a, b) => rank[b.overall] - rank[a.overall] || String(a.field.name).localeCompare(String(b.field.name)));
+  const num = (m, d) => (Number.isFinite(m.value) ? m.value.toFixed(d) : '–');
+  const tone = (m) => (m.status === 'out' ? STATUS.out.color : m.status === 'warn' ? STATUS.warn.color : 'text.primary');
+  const cell = { py: 2.25, px: 3, fontSize: 13, borderBottom: '1px solid', borderColor: 'divider', whiteSpace: 'nowrap' };
+  return (
+    <Box>
+      <Box sx={{ overflowX: 'auto', border: '1px solid', borderColor: 'divider', borderRadius: '12px' }}>
+        <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', minWidth: 640 }}>
+          <Box component="thead">
+            <Box component="tr" sx={{ bgcolor: 'background.muted' }}>
+              {['Field', 'Crop · type', 'EC out', 'pH out', 'Alerts', 'Read', 'Status'].map((h, i) => (
+                <Box component="th" key={h} sx={{ ...cell, fontSize: 12, fontWeight: 600, color: 'text.secondary', textAlign: i === 2 || i === 3 ? 'right' : 'left' }}>{h}</Box>
+              ))}
+            </Box>
+          </Box>
+          <Box component="tbody">
+            {rows.map(({ field, ec, ph, overall, stale }) => {
+              const sel = selectedId === field.id;
+              const alerts = [
+                field.active_phi_count > 0 && 'PHI',
+                field.latest_scouting?.id && field.latest_scouting?.status !== 'resolved' && (field.latest_scouting.pest || 'Pest'),
+                field.spray_today && 'Sprayed',
+              ].filter(Boolean).join(' · ');
+              return (
+                <Box component="tr" key={field.id} onClick={() => onPick(field)} tabIndex={0} aria-selected={sel}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPick(field); } }}
+                  sx={{ cursor: 'pointer', bgcolor: sel ? 'rgba(22,67,46,0.07)' : 'transparent', '&:hover': { bgcolor: sel ? 'rgba(22,67,46,0.09)' : 'action.hover' }, '&:last-of-type td': { borderBottom: 0 } }}>
+                  <Box component="td" sx={{ ...cell, fontFamily: MONO, fontWeight: 600, boxShadow: sel ? 'inset 3px 0 0 #16432e' : 'none' }}>{field.name}</Box>
+                  <Box component="td" sx={{ ...cell, color: 'text.secondary' }}>{[field.crop_name, field.field_type_name].filter(Boolean).join(' · ') || '—'}</Box>
+                  <Box component="td" sx={{ ...cell, textAlign: 'right', fontFamily: MONO, fontWeight: ec.status === 'out' ? 600 : 400, color: tone(ec) }}>{num(ec, 2)}</Box>
+                  <Box component="td" sx={{ ...cell, textAlign: 'right', fontFamily: MONO, fontWeight: ph.status === 'out' ? 600 : 400, color: tone(ph) }}>{num(ph, 1)}</Box>
+                  <Box component="td" sx={{ ...cell, color: alerts ? 'text.primary' : 'text.disabled' }}>{alerts || '—'}</Box>
+                  <Box component="td" sx={{ ...cell, color: 'text.secondary' }}>{readingAge(field.latest_ecph?.date, dateTo)}</Box>
+                  <Box component="td" sx={cell}><StatusChip status={overall}>{stale ? (field.latest_ecph?.date ? 'Stale' : 'No data') : STATUS_WORD[overall]}</StatusChip></Box>
+                </Box>
+              );
+            })}
+          </Box>
+        </Box>
+      </Box>
+      {total > 12 && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
+          <Box component="button" type="button" onClick={onShowAll}
+            sx={{ border: 0, bgcolor: 'transparent', color: 'primary.main', font: 'inherit', fontSize: 13, fontWeight: 600, cursor: 'pointer', px: 3, py: 1.5, borderRadius: 1, '&:hover': { bgcolor: 'action.hover' } }}>
+            {showAll ? 'Show fewer' : `Show all ${total}`}
+          </Box>
+        </Box>
+      )}
+    </Box>
+  );
+}
+
 export default function FarmMonitor({
   fieldOverview,
   onFieldSelect,
@@ -133,6 +195,10 @@ export default function FarmMonitor({
   const navigate = useNavigate();
   const [fieldSummary, setFieldSummary] = useState(null);
   const [typeFilter, setTypeFilter] = useState('All');
+  // Many fields read better as a table; few fields as cards. The choice is remembered.
+  const [view, setView] = useState(() => { try { return localStorage.getItem('agro_fm_view') || 'auto'; } catch { return 'auto'; } });
+  const pickView = (v) => { setView(v); try { localStorage.setItem('agro_fm_view', v); } catch { /* ignore */ } };
+  const [showAll, setShowAll] = useState(false);
 
   const fieldTypes = useMemo(() => {
     const types = new Set();
@@ -194,6 +260,17 @@ export default function FarmMonitor({
               </span>
             </Tooltip>
           )}
+          <ToggleButtonGroup
+            value={view === 'auto' ? ((fieldOverview || []).length > 8 ? 'table' : 'cards') : view}
+            exclusive
+            onChange={(_, v) => v && pickView(v)}
+            size="small"
+            aria-label="Farm Monitor view"
+            sx={{ '& .MuiToggleButton-root': { color: 'inherit', borderColor: 'rgba(255,255,255,0.35)', textTransform: 'none', px: 1.5, py: 0.25, fontSize: '0.75rem', '&.Mui-selected': { bgcolor: 'rgba(255,255,255,0.22)', color: 'inherit' } } }}
+          >
+            <ToggleButton value="table">Table</ToggleButton>
+            <ToggleButton value="cards">Cards</ToggleButton>
+          </ToggleButtonGroup>
           {fieldTypes.length > 2 && (
             <ToggleButtonGroup
               value={typeFilter}
@@ -225,6 +302,22 @@ export default function FarmMonitor({
       )}
     >
       <Box sx={{ p: { xs: 4, sm: 5 } }}>
+        {(view === 'table' || (view === 'auto' && visibleFields.length > 8)) ? (
+          <FieldStatusTable
+            fields={showAll ? visibleFields : visibleFields.slice(0, 12)}
+            total={visibleFields.length}
+            showAll={showAll}
+            onShowAll={() => setShowAll((x) => !x)}
+            thresholdMap={thresholdMap}
+            dateTo={dateTo}
+            selectedId={selectedFieldId || fieldSummary?.id}
+            onPick={(field) => {
+              const deselect = (selectedFieldId || fieldSummary?.id) === field.id;
+              setFieldSummary(deselect ? null : field);
+              if (onFieldSelect) onFieldSelect(deselect ? null : field);
+            }}
+          />
+        ) : (
         <Box sx={{ display: 'grid', gap: { xs: 3, md: 4 }, gridTemplateColumns: { xs: 'repeat(auto-fill, minmax(160px, 1fr))', sm: 'repeat(auto-fill, minmax(240px, 1fr))' } }}>
         {visibleFields.map((field, idx) => {
           const hasPHI = field.active_phi_count > 0;
@@ -326,6 +419,7 @@ export default function FarmMonitor({
           );
         })}
         </Box>
+        )}
 
         <Box sx={{ display: 'flex', alignItems: 'center', columnGap: 5, rowGap: 2, mt: 5, pt: 4, borderTop: '1px solid', borderColor: 'divider', flexWrap: 'wrap', fontSize: 12, color: 'text.secondary' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>

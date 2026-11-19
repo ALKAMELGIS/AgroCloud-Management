@@ -225,28 +225,29 @@ function SearchBar() {
         display: 'flex',
         alignItems: 'center',
         gap: 2.5,
-        bgcolor: 'background.muted',
+        bgcolor: 'background.paper',
         border: '1px solid',
-        borderColor: 'transparent',
-        borderRadius: 999,
-        px: 3.5,
-        height: 38,
+        borderColor: 'divider',
+        borderRadius: '10px',
+        px: 3,
+        height: 36,
         cursor: 'pointer',
         font: 'inherit',
         color: 'inherit',
         textAlign: 'start',
-        minWidth: { sm: 220, md: 320 },
+        minWidth: { sm: 200, md: 240 },
         flex: { sm: 1, md: 'none' },
-        maxWidth: { sm: 360, md: 420 },
-        transition: 'border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease',
-        '&:hover': { borderColor: 'divider', bgcolor: 'background.paper' },
-        '&:focus-visible': { outline: 'none', borderColor: 'primary.main', bgcolor: 'background.paper' },
+        maxWidth: { sm: 320, md: 280 },
+        transition: 'border-color 160ms ease, box-shadow 160ms ease',
+        '&:hover': { borderColor: 'text.disabled' },
+        '&:focus-visible': { outline: 'none', borderColor: 'primary.main', boxShadow: (t) => `0 0 0 3px ${t.palette.mode === 'dark' ? 'rgba(76,178,126,0.25)' : 'rgba(22,67,46,0.12)'}` },
       }}
     >
-      <SearchIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
-      <Typography component="span" sx={{ fontSize: '0.875rem', color: 'text.secondary', flexGrow: 1, userSelect: 'none' }} noWrap>
-        {L('Search data…')}
+      <SearchIcon sx={{ fontSize: 17, color: 'text.secondary' }} />
+      <Typography component="span" sx={{ fontSize: '0.8125rem', color: 'text.secondary', flexGrow: 1, userSelect: 'none' }} noWrap>
+        {L('Search')}
       </Typography>
+      <Box component="kbd" sx={{ font: "500 10.5px 'IBM Plex Mono', monospace", px: 1.5, py: 0.25, borderRadius: '5px', border: '1px solid', borderColor: 'divider', color: 'text.secondary' }}>Ctrl K</Box>
     </Box>
   );
 }

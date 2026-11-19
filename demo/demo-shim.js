@@ -251,6 +251,19 @@
         pesticides:[]});
     }
     // Demo-only field overview for the Farm Monitor, from the same sample readings as the EC/pH dashboard.
+    /* Daily brief from the same field overview the dashboard uses, so both pages agree. */
+    if(method==='GET'&&path==='/analytics/daily-brief'){
+      var ovr=body('/api/v1/ipm/field-overview'+(q.site_id?'?site_id='+encodeURIComponent(q.site_id):''),'GET',null);
+      var ov=(ovr&&ovr.data)||[], todayD=new Date();
+      var phiFields=ov.filter(function(f){return f.active_phi_count>0;}).map(function(f){var end=f.nearest_phi_end||new Date(todayD.getTime()+2*864e5).toISOString().slice(0,10);
+        return {fieldId:f.id,applicationId:'demo-'+f.id,fieldName:f.name,zoneName:f.field_type_name,productName:(f.spray_today&&f.spray_today.product)||'Movento 150 OD',phiEndDate:end,daysRemaining:Math.max(0,Math.ceil((new Date(end)-todayD)/864e5))};});
+      var pestAlerts=ov.filter(function(f){return f.latest_scouting&&f.latest_scouting.status!=='resolved';}).map(function(f){return {reportId:f.latest_scouting.id+'-'+f.id,fieldName:f.name,pestName:f.latest_scouting.pest,severity:(f.latest_scouting.pct||0)>=10?'high':'medium',reportDate:new Date(todayD.getTime()-864e5).toISOString()};});
+      var byField=ov.slice(0,12).map(function(f){return {fieldName:f.name,zoneName:f.field_type_name,totalKg:Math.round((f.harvest_this_week||0)/7)};}).filter(function(h){return h.totalKg>0;});
+      var totalKg=byField.reduce(function(a,h){return a+h.totalKg;},0);
+      var spray=ov.filter(function(f){return f.spray_today;});
+      return ok({summary:{phiBlocked:phiFields.length,pestAlerts:pestAlerts.length,recentAlerts:0,pendingChangeRequests:0,openWorkOrders:spray.length},
+        phiFields:phiFields,pestAlerts:pestAlerts,yesterdayHarvest:{totalKg:totalKg,byField:byField},pendingChangeRequests:[],openWorkOrders:[],recentAlerts:[]});
+    }
     if(method==='GET'&&path==='/ipm/field-overview'){
       var oSite=q.site_id, oAreas=areas.filter(function(a){return !oSite||a.siteId===oSite;}).map(function(a){return a.id;});
       var oFields=fields.filter(function(f){return oAreas.indexOf(f.farmAreaId)>=0;});
