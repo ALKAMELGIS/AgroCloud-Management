@@ -36,14 +36,14 @@ function getEcPhColor(value, threshold) {
 }
 
 /** "Now" for this view: today, or the end of the chosen range when it lies in the past. */
-function refNow(refDate) {
+export function refNow(refDate) {
   const now = new Date();
   if (!refDate) return now;
   const end = new Date(refDate);
   return Number.isNaN(end.getTime()) || end > now ? now : end;
 }
 
-function isStale(dateStr, refDate) {
+export function isStale(dateStr, refDate) {
   if (!dateStr) return true;
   const d = new Date(dateStr);
   const ref = refNow(refDate);
@@ -58,11 +58,11 @@ const HEADER_GREEN = '#1d5c3c';
 const HEADER_GREEN_SELECTED = '#123f28';
 const STATUS_WORD = { good: 'In range', warn: 'Watch', out: 'Out', none: 'No data' };
 /** Used when no target is set for the crop: the same bands as the EC/pH dashboard. */
-const DEFAULT_BANDS = { ec: [1.8, 2.6], ph: [5.5, 6.5] };
+export const DEFAULT_BANDS = { ec: [1.8, 2.6], ph: [5.5, 6.5] };
 const rise = keyframes`from { opacity: 0; transform: translateY(6px); }`;
 
 /** One reading against its band: status, band and where the dot sits (0–100%). */
-function meter(value, threshold, fallback, stale) {
+export function meter(value, threshold, fallback, stale) {
   const v = value == null || value === '' ? NaN : Number(value);
   const lo = threshold?.warningMin != null ? Number(threshold.warningMin) : fallback[0];
   const hi = threshold?.warningMax != null ? Number(threshold.warningMax) : fallback[1];

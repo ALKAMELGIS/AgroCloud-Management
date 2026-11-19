@@ -14,7 +14,7 @@ import {
   Divider,
 } from '@mui/material';
 import { CloseOutlined as CloseIcon, MapOutlined as MapIcon } from '@mui/icons-material';
-import { FieldMapView } from '../components/geo/FieldSelect';
+import FieldMapPanel from './dashboard/FieldMapPanel';
 import { DashboardSkeleton } from '../components/LoadingSkeleton';
 import FarmMonitor from './dashboard/FarmMonitor';
 import useDashboardData from './dashboard/useDashboardData';
@@ -63,7 +63,7 @@ function Dashboard() {
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [activeTab, setActiveTab] = useState(0);
   const [selectedFieldObj, setSelectedFieldObj] = useState(null);
-  const [showMap, setShowMap] = useState(() => { try { return localStorage.getItem('agro_dash_map') === '1'; } catch { return false; } });
+  const [showMap, setShowMap] = useState(() => { try { return localStorage.getItem('agro_dash_map') !== '0'; } catch { return true; } });
   const toggleMap = () => setShowMap((v) => { try { localStorage.setItem('agro_dash_map', v ? '0' : '1'); } catch { /* ignore */ } return !v; });
   const { activeSiteId, setActiveSiteId, countries, allowAllSites, hasSiteAssignment } = useActiveSite();
   const { activeSeasonId, setActiveSeasonId, seasons, isLoaded: seasonLoaded } = useActiveSeason();
@@ -78,7 +78,7 @@ function Dashboard() {
   }, [activeSiteId]);
 
   const statsRef = useRef(null);
-  const handleFieldSelect = (field) => {
+  const handleFieldSelect = (field, { scroll = true } = {}) => {
     if (!field) {
       setSelectedFieldObj(null);
       setFilters((prev) => ({ ...prev, field: '', farmArea: '' }));
@@ -87,7 +87,7 @@ function Dashboard() {
     setSelectedFieldObj(field);
     setFilters((prev) => ({ ...prev, field: field.id, farmArea: field.farm_area_id || prev.farmArea }));
     // Bring the chosen field's statistics into view.
-    setTimeout(() => statsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 400);
+    if (scroll) setTimeout(() => statsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 400);
   };
 
   const {
@@ -240,21 +240,19 @@ function Dashboard() {
             </Button>
           </Box>
         </Box>
-        <Collapse in={showMap} unmountOnExit>
-          <Box id="dashboard-map" sx={{ borderTop: 1, borderColor: 'divider' }}>
-            <FieldMapView
-              inline
-              height={420}
-              fields={(allFields || []).filter((x) => !filters.site || x.siteId === filters.site)}
-              value={filters.field}
-              onPick={(id) => {
-                const f = (allFields || []).find((x) => x.id === id);
-                if (f) handleFieldSelect(filters.field === id ? null : { ...f, farm_area_id: f.farm_area_id || f.farmAreaId });
-              }}
-            />
-          </Box>
-        </Collapse>
       </Paper>
+
+      <Collapse in={showMap} unmountOnExit>
+        <Box id="dashboard-map">
+          <FieldMapPanel
+            fieldOverview={fieldOverview}
+            selectedFieldId={filters.field}
+            onSelect={(f) => handleFieldSelect(f, { scroll: false })}
+            agronomicThresholds={agronomicThresholds}
+            dateTo={seasonTo}
+          />
+        </Box>
+      </Collapse>
 
       <Box ref={statsRef} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2.5, scrollMarginTop: 96 }}>
         <FormTile form={activeForm} />
