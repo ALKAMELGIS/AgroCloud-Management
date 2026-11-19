@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import { MapContainer, TileLayer, GeoJSON, useMap } from 'react-leaflet';
-import { Box, ButtonBase, GlobalStyles, Paper, ToggleButton, ToggleButtonGroup, Tooltip, Typography } from '@mui/material';
+import { MapContainer, TileLayer, GeoJSON, Marker, useMap } from 'react-leaflet';
+import L from 'leaflet';
+import {
+  Autocomplete, Box, Button, ButtonBase, Checkbox, Chip, FormControlLabel, GlobalStyles, Paper, TextField, ToggleButton, ToggleButtonGroup, Tooltip, Typography,
+} from '@mui/material';
+import { LayersOutlined as LayersIcon, FilterAltOffOutlined as ClearIcon } from '@mui/icons-material';
+import { apiRequest } from '../../utils/api';
 import { useGeo } from '../../components/geo/FieldSelect';
 import { boundsOf } from '../../components/geo/geoUtils';
 import { BasemapSwitcher, useBasemap } from '../../components/map/MapPanel';
@@ -45,12 +50,63 @@ function FocusFlash({ value, geometry }) {
   return null;
 }
 
-export default function FieldMapPanel({ fieldOverview = [], selectedFieldId, onSelect, agronomicThresholds, dateTo }) {
+/** A slicer, like in a BI report: pick one or more values, empty = all. */
+function Slicer({ label, options, value, onChange, width = 170 }) {
+  return (
+    <Autocomplete
+      multiple size="small" options={options} value={value} onChange={(_, v) => onChange(v)} limitTags={1} disableCloseOnSelect
+      getLimitTagsText={(n) => `+${n}`}
+      renderTags={(v, getTagProps) => v.map((o, i) => <Chip {...getTagProps({ index: i })} key={o} label={o} size="small" sx={{ height: 20, fontSize: 11, maxWidth: 90, my: '0 !important' }} />)}
+      renderOption={(props, o, { selected }) => (
+        <li {...props} key={o} style={{ fontSize: 13, paddingTop: 2, paddingBottom: 2 }}><Checkbox size="small" checked={selected} sx={{ p: 0.5, mr: 1 }} />{o}</li>
+      )}
+      renderInput={(params) => <TextField {...params} label={label} placeholder={value.length ? '' : 'All'} InputLabelProps={{ shrink: true }} />}
+      sx={{ width, '& .MuiInputBase-root': { minHeight: 36, py: '1px !important', fontSize: 13 } }}
+    />
+  );
+}
+
+function centerOf(g) {
+  const b = boundsOf(g);
+  return [(b[0][0] + b[1][0]) / 2, (b[0][1] + b[1][1]) / 2];
+}
+
+const pin = (html, bg) => L.divIcon({
+  className: '',
+  html: `<div style="display:flex;gap:2px;transform:translate(-50%,-150%)">${html.map((h) => `<span style="display:grid;place-items:center;width:20px;height:20px;border-radius:50%;background:${bg};color:#fff;font:600 11px/1 Inter,sans-serif;box-shadow:0 0 0 2px #fff,0 1px 4px rgba(0,0,0,.4)">${h}</span>`).join('')}</div>`,
+  iconSize: [0, 0],
+});
+
+export default function FieldMapPanel({ fieldOverview = [], allFields = [], selectedFieldId, onSelect, agronomicThresholds, dateTo }) {
   const geo = useGeo();
   const [measure, setMeasure] = useState(() => { try { return localStorage.getItem('agro_dash_measure') || 'status'; } catch { return 'status'; } });
   useEffect(() => { try { localStorage.setItem('agro_dash_measure', measure); } catch { /* ignore */ } }, [measure]);
   const [basemap, setBasemap] = useBasemap('dash.basemap', 'satellite');
   const [hover, setHover] = useState(null);
+  const [f, setF] = useState({ zone: [], type: [], crop: [], status: [], code: [] });
+  const setFilter = (k) => (v) => setF((x) => ({ ...x, [k]: v }));
+  const anyFilter = Object.values(f).some((v) => v.length);
+  const [layers, setLayers] = useState(() => {
+    try { return { fields: true, labels: true, alerts: true, structures: false, ...JSON.parse(localStorage.getItem('agro_dash_layers') || '{}') }; } catch { return { fields: true, labels: true, alerts: true, structures: false }; }
+  });
+  useEffect(() => { try { localStorage.setItem('agro_dash_layers', JSON.stringify(layers)); } catch { /* ignore */ } }, [layers]);
+  const [layersOpen, setLayersOpen] = useState(false);
+  const [structs, setStructs] = useState(null); // Agro_Structures features (loaded when the layer is turned on)
+  useEffect(() => {
+    if (!layers.structures || structs) return;
+    let alive = true;
+    (async () => {
+      try {
+        const list = await apiRequest('/gis/layers');
+        const lyr = (Array.isArray(list) ? list : []).find((l) => /arcgis/i.test(l.sourceType || '') || /structure/i.test(l.name || ''));
+        if (!lyr) { if (alive) setStructs({ features: [] }); return; }
+        const fc = await apiRequest(`/gis/layers/${lyr.id}/features`);
+        if (alive) setStructs(fc && fc.features ? fc : { features: [] });
+      } catch { if (alive) setStructs({ features: [] }); }
+    })();
+    return () => { alive = false; };
+  }, [layers.structures, structs]);
+  const fieldInfo = useMemo(() => Object.fromEntries((allFields || []).map((x) => [x.id, x])), [allFields]);
 
   const thresholds = useMemo(() => {
     const m = {};
@@ -59,16 +115,31 @@ export default function FieldMapPanel({ fieldOverview = [], selectedFieldId, onS
   }, [agronomicThresholds]);
 
   // One row per field: its EC / pH meters, the worst status and its shape.
-  const rows = useMemo(() => (fieldOverview || []).map((f) => {
+  const allRows = useMemo(() => (fieldOverview || []).map((f) => {
     const th = thresholds[f.current_crop_id] || {};
     const stale = isStale(f.latest_ecph?.date, dateTo);
     const ec = meter(f.latest_ecph?.ec_out, th.ec_out || th.ec, DEFAULT_BANDS.ec, stale);
     const ph = meter(f.latest_ecph?.ph_out, th.ph_out || th.ph, DEFAULT_BANDS.ph, stale);
     const worst = RANK[ec.status] >= RANK[ph.status] ? ec.status : ph.status;
-    return { field: f, ec, ph, status: stale ? 'none' : worst, geometry: geo?.byId[f.id]?.geometry || null, key: geo?.byId[f.id]?.key_id };
-  }), [fieldOverview, thresholds, dateTo, geo]);
+    const info = fieldInfo[f.id] || {};
+    const zone = String(info.gisZoneId || info.gis_zone_id || f.zone_name || '').toUpperCase() || '—';
+    const code = String(info.gisFarmCode || info.gis_farm_code || '') || '—';
+    return {
+      field: f, ec, ph, status: stale ? 'none' : worst, geometry: geo?.byId[f.id]?.geometry || null, key: geo?.byId[f.id]?.key_id,
+      zone, code, type: f.field_type_name || '—', crop: f.crop_name || '—',
+      phi: f.active_phi_count > 0, pest: !!(f.latest_scouting?.id && f.latest_scouting?.status !== 'resolved'), spray: !!f.spray_today,
+    };
+  }), [fieldOverview, thresholds, dateTo, geo, fieldInfo]);
+  const opts = useMemo(() => {
+    const u = (k) => [...new Set(allRows.map((r) => r[k]))].filter((x) => x && x !== '—').sort();
+    return { zone: u('zone'), type: u('type'), crop: u('crop'), code: u('code') };
+  }, [allRows]);
 
   const statusOf = (r) => (measure === 'ec' ? r.ec.status : measure === 'ph' ? r.ph.status : r.status);
+  // Slicers filter the map, the counts and the list together.
+  const rows = allRows.filter((r) => (!f.zone.length || f.zone.includes(r.zone)) && (!f.type.length || f.type.includes(r.type))
+    && (!f.crop.length || f.crop.includes(r.crop)) && (!f.code.length || f.code.includes(r.code))
+    && (!f.status.length || f.status.includes(WORD[statusOf(r)])));
   const m = MEASURES.find((x) => x.key === measure);
   const valueText = (r) => {
     if (measure === 'status') return WORD[r.status];
@@ -81,7 +152,7 @@ export default function FieldMapPanel({ fieldOverview = [], selectedFieldId, onS
     const va = measure === 'ec' ? a.ec.value : a.ph.value;
     const vb = measure === 'ec' ? b.ec.value : b.ph.value;
     return (Number.isFinite(vb) ? vb : -Infinity) - (Number.isFinite(va) ? va : -Infinity);
-  }), [rows, measure]);
+  }), [rows, measure]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const counts = useMemo(() => {
     const c = { good: 0, warn: 0, out: 0, none: 0 };
@@ -93,7 +164,7 @@ export default function FieldMapPanel({ fieldOverview = [], selectedFieldId, onS
   const fc = useMemo(() => ({
     type: 'FeatureCollection',
     features: shaped.map((r) => ({ type: 'Feature', geometry: r.geometry, properties: { id: r.field.id } })),
-  }), [shaped]);
+  }), [shaped]); // eslint-disable-line react-hooks/exhaustive-deps
   const bounds = useMemo(() => {
     let b = null;
     fc.features.forEach((f) => {
@@ -114,7 +185,9 @@ export default function FieldMapPanel({ fieldOverview = [], selectedFieldId, onS
   const pct = (v) => Math.max(2, Math.min(100, ((v - scaleMin) / ((hi - scaleMin) || 1)) * 100));
 
   const bm = BASEMAPS[basemap] || BASEMAPS.satellite;
-  if (!rows.length) return null;
+  if (!allRows.length) return null;
+  const structFc = structs ? { type: 'FeatureCollection', features: structs.features.filter((x) => x.geometry && (!f.zone.length || f.zone.includes(String(x.properties?.ZONE_ID || '').toUpperCase()))) } : null;
+  const LAYERS = [['fields', 'Fields (status fill)'], ['labels', 'Field labels'], ['alerts', 'Alerts (PHI · pest · spray)'], ['structures', 'Agro_Structures (ArcGIS)']];
 
   return (
     <Paper variant="outlined" sx={{ mb: 4, borderRadius: 3, overflow: 'hidden' }}>
@@ -136,6 +209,17 @@ export default function FieldMapPanel({ fieldOverview = [], selectedFieldId, onS
         </ToggleButtonGroup>
       </Box>
 
+      <Box role="group" aria-label="Filters" sx={{ display: 'flex', alignItems: 'center', gap: 2, px: 4, py: 2.5, borderBottom: 1, borderColor: 'divider', flexWrap: 'wrap', bgcolor: 'background.muted' }}>
+        <Slicer label="ZONE_ID" options={opts.zone} value={f.zone} onChange={setFilter('zone')} width={140} />
+        <Slicer label="Farm_Code" options={opts.code} value={f.code} onChange={setFilter('code')} width={190} />
+        <Slicer label="Structure type" options={opts.type} value={f.type} onChange={setFilter('type')} />
+        <Slicer label="Crop" options={opts.crop} value={f.crop} onChange={setFilter('crop')} />
+        <Slicer label="Status" options={['In range', 'Watch', 'Out', 'No data']} value={f.status} onChange={setFilter('status')} width={150} />
+        <Box sx={{ flex: 1 }} />
+        <Typography sx={{ fontSize: 12, color: 'text.secondary', fontVariantNumeric: 'tabular-nums' }}>{rows.length} of {allRows.length} fields</Typography>
+        <Button size="small" startIcon={<ClearIcon />} disabled={!anyFilter} onClick={() => setF({ zone: [], type: [], crop: [], status: [], code: [] })} sx={{ textTransform: 'none' }}>Clear</Button>
+      </Box>
+
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: 'minmax(0,1fr) minmax(0,1fr)' } }}>
         {/* Map: half of the width */}
         <Box sx={{ position: 'relative', height: { xs: 340, md: 460 }, borderRight: { lg: 1 }, borderBottom: { xs: 1, lg: 0 }, borderColor: 'divider', bgcolor: '#dfe3dd' }}>
@@ -146,8 +230,14 @@ export default function FieldMapPanel({ fieldOverview = [], selectedFieldId, onS
               {bm.overlay && <TileLayer key={`${basemap}-labels`} url={bm.overlay} maxNativeZoom={bm.maxNativeZoom || 19} maxZoom={21} zIndex={2} />}
               <FitOnce bounds={bounds} sig={fc.features.map((f) => f.properties.id).join(',')} />
               <FocusFlash value={selectedFieldId} geometry={selectedFieldId ? byId[selectedFieldId]?.geometry : null} />
+              {layers.structures && structFc && (
+                <GeoJSON key={`st-${structFc.features.length}-${f.zone.join()}`} data={structFc}
+                  style={() => ({ color: '#7fd3ff', weight: 1, fillOpacity: 0.04, dashArray: '3 3' })}
+                  onEachFeature={(ft, lyr) => { const pr = ft.properties || {}; lyr.bindTooltip(`${pr.Farm_Name || pr.Farm_Code || ''} · ${pr.ZONE_ID || ''}-${pr.Farm_Code || ''}`, { sticky: true }); }} />
+              )}
+              {layers.fields && (
               <GeoJSON
-                key={`${measure}-${selectedFieldId}-${hover}-${fc.features.length}`}
+                key={`${measure}-${selectedFieldId}-${hover}-${fc.features.length}-${layers.labels}-${rows.length}`}
                 data={fc}
                 style={(f) => {
                   const r = byId[f.properties.id];
@@ -158,13 +248,19 @@ export default function FieldMapPanel({ fieldOverview = [], selectedFieldId, onS
                 onEachFeature={(f, lyr) => {
                   const r = byId[f.properties.id];
                   const tip = `<b>${r.field.name}</b><br/>EC out ${Number.isFinite(r.ec.value) ? r.ec.value.toFixed(2) : '–'} · pH out ${Number.isFinite(r.ph.value) ? r.ph.value.toFixed(1) : '–'}<br/>${WORD[r.status]}`;
-                  lyr.bindTooltip(`${r.field.name} · ${valueText(r)}`, { permanent: true, direction: 'center', className: 'agro-field-label' });
+                  if (layers.labels) lyr.bindTooltip(`${r.field.name} · ${valueText(r)}`, { permanent: true, direction: 'center', className: 'agro-field-label' });
+                  else lyr.bindTooltip(`${r.field.name} · ${valueText(r)}`, { sticky: true, className: 'agro-field-label' });
                   lyr.bindPopup(tip);
                   lyr.on('mouseover', () => setHover(r.field.id));
                   lyr.on('mouseout', () => setHover(null));
                   lyr.on('click', () => pick(r));
                 }}
               />
+              )}
+              {layers.alerts && shaped.filter((r) => r.phi || r.pest || r.spray).map((r) => {
+                const marks = [r.phi && 'P', r.pest && '!', r.spray && 'S'].filter(Boolean);
+                return <Marker key={`al-${r.field.id}`} position={centerOf(r.geometry)} interactive={false} icon={pin(marks, r.pest ? '#c0392b' : '#6a46b8')} />;
+              })}
             </MapContainer>
           ) : (
             <Typography sx={{ p: 4, fontSize: 13, color: 'text.secondary' }}>
@@ -172,6 +268,24 @@ export default function FieldMapPanel({ fieldOverview = [], selectedFieldId, onS
             </Typography>
           )}
           {shaped.length > 0 && <BasemapSwitcher value={basemap} onChange={setBasemap} side="right" />}
+          {shaped.length > 0 && (
+            <Box onMouseDown={(e) => e.stopPropagation()} onWheel={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}
+              sx={{ position: 'absolute', top: 12, right: 56, zIndex: 1000, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1.5 }}>
+              <ButtonBase onClick={() => setLayersOpen((o) => !o)} aria-expanded={layersOpen} aria-label="Map layers" title="Map layers"
+                sx={{ height: 34, px: 2.5, gap: 1.5, borderRadius: 1, fontSize: 12.5, fontWeight: 600, bgcolor: layersOpen ? 'primary.main' : 'background.paper', color: layersOpen ? 'primary.contrastText' : 'text.primary', border: '1px solid rgba(0,0,0,0.2)', boxShadow: '0 1px 5px rgba(0,0,0,0.3)' }}>
+                <LayersIcon sx={{ fontSize: 18 }} />Layers
+              </ButtonBase>
+              {layersOpen && (
+                <Box sx={{ width: 240, bgcolor: 'background.paper', borderRadius: 2, boxShadow: '0 6px 24px rgba(0,0,0,0.28)', py: 1.5, px: 3 }}>
+                  {LAYERS.map(([k, label]) => (
+                    <FormControlLabel key={k} sx={{ display: 'flex', m: 0, '& .MuiFormControlLabel-label': { fontSize: 13 } }}
+                      control={<Checkbox size="small" checked={!!layers[k]} onChange={() => setLayers((x) => ({ ...x, [k]: !x[k] }))} sx={{ p: 1 }} />}
+                      label={k === 'structures' && layers.structures && !structs ? `${label} · loading…` : k === 'structures' && structFc ? `${label} · ${structFc.features.length}` : label} />
+                  ))}
+                </Box>
+              )}
+            </Box>
+          )}
           {/* Legend */}
           <Box sx={{ position: 'absolute', left: 12, bottom: 12, zIndex: 1000, display: 'flex', gap: 3, px: 3, py: 1.5, borderRadius: 2, bgcolor: 'rgba(255,255,255,0.94)', boxShadow: 1, flexWrap: 'wrap' }}>
             {['good', 'warn', 'out', 'none'].map((s) => (
@@ -180,6 +294,11 @@ export default function FieldMapPanel({ fieldOverview = [], selectedFieldId, onS
                 {WORD[s]} <Box component="span" sx={{ fontFamily: MONO, color: 'text.secondary' }}>{counts[s]}</Box>
               </Box>
             ))}
+            {layers.alerts && (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, fontSize: 12, color: 'text.secondary' }}>
+                <b style={{ color: '#6a46b8' }}>P</b> PHI <b style={{ color: '#c0392b', marginLeft: 4 }}>!</b> Pest <b style={{ color: '#6a46b8', marginLeft: 4 }}>S</b> Sprayed
+              </Box>
+            )}
           </Box>
         </Box>
 

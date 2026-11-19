@@ -246,6 +246,7 @@ function Dashboard() {
         <Box id="dashboard-map">
           <FieldMapPanel
             fieldOverview={fieldOverview}
+            allFields={allFields}
             selectedFieldId={filters.field}
             onSelect={(f) => handleFieldSelect(f, { scroll: false })}
             agronomicThresholds={agronomicThresholds}
