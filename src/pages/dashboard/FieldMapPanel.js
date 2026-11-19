@@ -15,7 +15,7 @@ import { BasemapSwitcher, useBasemap } from '../../components/map/MapPanel';
 import { BASEMAPS } from '../../utils/mapBasemaps';
 import { MapLifecycle } from '../../utils/leafletSafe';
 import { flyAndFlash } from '../../components/map/mapFlash';
-import { STATUS } from '../../theme/formIdentity';
+import { STATUS, FORM_IDENTITY } from '../../theme/formIdentity';
 import { meter, isStale, DEFAULT_BANDS } from './FarmMonitor';
 
 /*
@@ -33,6 +33,29 @@ const MEASURES = [
   { key: 'ec', label: 'EC out', unit: 'mS/cm', decimals: 2 },
   { key: 'ph', label: 'pH out', unit: '', decimals: 1 },
 ];
+/* Each form colours the same map by its own measure (sequential, in the form colour). */
+const FORM_MEASURES = {
+  ecph: MEASURES,
+  fertigation: [
+    { key: 'fert', label: 'Fertilizer', unit: 'kg', decimals: 0, seq: true, get: (x) => x?.fert },
+    { key: 'fwater', label: 'Water / day', unit: 'm³', decimals: 1, seq: true, get: (x) => x?.waterAvg },
+  ],
+  irrigation: [
+    { key: 'iwater', label: 'Water', unit: 'm³', decimals: 0, seq: true, get: (x) => x?.water },
+    { key: 'freq', label: 'Cycles / day', unit: '', decimals: 1, seq: true, get: (x) => x?.freqAvg },
+  ],
+  harvest: [
+    { key: 'kg', label: 'Harvest', unit: 'kg', decimals: 0, seq: true, get: (x) => x?.kg },
+    { key: 'hn', label: 'Entries', unit: '', decimals: 0, seq: true, get: (x) => x?.n },
+  ],
+};
+const BIN_KEYS = ['b0', 'b1', 'b2', 'b3', 'b4'];
+const mix = (hex, t) => {
+  const h = hex.replace('#', '');
+  const c = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16));
+  return `#${c.map((v) => Math.round(255 + (v - 255) * t).toString(16).padStart(2, '0')).join('')}`;
+};
+const fmtNum = (v, d = 0) => (Number.isFinite(v) ? v.toLocaleString('en-US', { maximumFractionDigits: d, minimumFractionDigits: d }) : '–');
 
 function FitOnce({ bounds, sig }) {
   const map = useMap();
@@ -224,10 +247,14 @@ const alertIcon = (keys) => L.divIcon({
   iconSize: [0, 0],
 });
 
-export default function FieldMapPanel({ fieldOverview = [], allFields = [], selectedFieldId, onSelect, onFilterChange, agronomicThresholds, dateTo }) {
+export default function FieldMapPanel({ fieldOverview = [], allFields = [], selectedFieldId, onSelect, onFilterChange, agronomicThresholds, dateTo, form = 'ecph', formStats = null }) {
   const geo = useGeo();
-  const [measure, setMeasure] = useState(() => { try { return localStorage.getItem('agro_dash_measure') || 'status'; } catch { return 'status'; } });
-  useEffect(() => { try { localStorage.setItem('agro_dash_measure', measure); } catch { /* ignore */ } }, [measure]);
+  const measures = FORM_MEASURES[form] || MEASURES;
+  const [measureBy, setMeasureBy] = useState(() => { try { return JSON.parse(localStorage.getItem('agro_dash_measure_v2') || '{}'); } catch { return {}; } });
+  useEffect(() => { try { localStorage.setItem('agro_dash_measure_v2', JSON.stringify(measureBy)); } catch { /* ignore */ } }, [measureBy]);
+  const measure = measures.some((x) => x.key === measureBy[form]) ? measureBy[form] : measures[0].key;
+  const setMeasure = (v) => setMeasureBy((x) => ({ ...x, [form]: v }));
+  const formColor = (FORM_IDENTITY[form] || FORM_IDENTITY.ecph).base;
   const [basemap, setBasemap] = useBasemap('dash.basemap', 'satellite');
   const [hover, setHover] = useState(null);
   const [f, setF] = useState({ zone: [], type: [], crop: [], status: [], code: [] });
@@ -303,15 +330,42 @@ export default function FieldMapPanel({ fieldOverview = [], allFields = [], sele
     return { zone: u('zone'), type: [...types].sort(), crop: u('crop'), code: u('code') };
   }, [allRows, structLayer]);
 
-  const statusOf = (r) => (measure === 'ec' ? r.ec.status : measure === 'ph' ? r.ph.status : r.status);
+  const mDef = measures.find((x) => x.key === measure) || measures[0];
+  const isSeq = !!mDef.seq;
+  const numOf = (r) => (measure === 'ec' ? r.ec.value : measure === 'ph' ? r.ph.value : isSeq ? Number(mDef.get(formStats?.[r.field.id])) : NaN);
+  // Five quantile classes for form measures, like a choropleth.
+  const breaks = (() => {
+    if (!isSeq) return null;
+    const v = allRows.map(numOf).filter((x) => Number.isFinite(x) && x > 0).sort((a, b) => a - b);
+    if (!v.length) return null;
+    const q = (p) => v[Math.min(v.length - 1, Math.floor(p * v.length))];
+    return { min: v[0], max: v[v.length - 1], cuts: [q(0.2), q(0.4), q(0.6), q(0.8)] };
+  })();
+  const binOf = (val) => {
+    if (!breaks || !Number.isFinite(val) || val <= 0) return 'none';
+    const i = breaks.cuts.findIndex((c) => val < c);
+    return BIN_KEYS[i === -1 ? 4 : i];
+  };
+  const binColor = (k) => mix(formColor, [0.22, 0.4, 0.6, 0.8, 1][BIN_KEYS.indexOf(k)]);
+  const fillOf = (k) => FILL[k] || (k.startsWith('b') ? binColor(k) : FILL.none);
+  const binRange = (k) => {
+    if (!breaks) return '';
+    const i = BIN_KEYS.indexOf(k);
+    const lo = i === 0 ? breaks.min : breaks.cuts[i - 1];
+    const hi = i === 4 ? breaks.max : breaks.cuts[i];
+    return `${fmtNum(lo, mDef.decimals)}–${fmtNum(hi, mDef.decimals)}`;
+  };
+  const wordOf = (k) => WORD[k] || binRange(k);
+  const statusOf = (r) => (measure === 'ec' ? r.ec.status : measure === 'ph' ? r.ph.status : isSeq ? binOf(numOf(r)) : r.status);
   // Slicers filter the map, the counts and the list together.
   const rows = allRows.filter((r) => (!f.zone.length || f.zone.includes(r.zone)) && (!f.type.length || f.type.includes(r.type))
     && (!f.crop.length || f.crop.includes(r.crop)) && (!f.code.length || f.code.includes(r.code))
-    && (!f.status.length || f.status.includes(WORD[statusOf(r)])));
-  const m = MEASURES.find((x) => x.key === measure);
+    && (!f.status.length || f.status.includes(WORD[r.status])));
+  const m = mDef;
   const valueText = (r) => {
     if (measure === 'status') return WORD[r.status];
-    const v = measure === 'ec' ? r.ec.value : r.ph.value;
+    const v = numOf(r);
+    if (isSeq) return Number.isFinite(v) && v > 0 ? `${fmtNum(v, m.decimals)}${m.unit ? ` ${m.unit}` : ''}` : '–';
     return Number.isFinite(v) ? v.toFixed(m.decimals) : '–';
   };
 
@@ -322,16 +376,27 @@ export default function FieldMapPanel({ fieldOverview = [], allFields = [], sele
 
   const ranked = useMemo(() => [...rows].sort((a, b) => {
     if (measure === 'status') return RANK[b.status] - RANK[a.status] || a.field.name.localeCompare(b.field.name);
-    const va = measure === 'ec' ? a.ec.value : a.ph.value;
-    const vb = measure === 'ec' ? b.ec.value : b.ph.value;
+    const va = numOf(a);
+    const vb = numOf(b);
     return (Number.isFinite(vb) ? vb : -Infinity) - (Number.isFinite(va) ? va : -Infinity);
-  }), [rows, measure]); // eslint-disable-line react-hooks/exhaustive-deps
+  }), [rows, measure, formStats]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const counts = useMemo(() => {
-    const c = { good: 0, warn: 0, out: 0, none: 0 };
+    const c = { good: 0, warn: 0, out: 0, none: 0, b0: 0, b1: 0, b2: 0, b3: 0, b4: 0 };
     rows.forEach((r) => { c[statusOf(r)] += 1; });
     return c;
-  }, [rows, measure]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [rows, measure, formStats]); // eslint-disable-line react-hooks/exhaustive-deps
+  const legendKeys = isSeq ? [...BIN_KEYS, 'none'] : ['good', 'warn', 'out', 'none'];
+  // Summary cards: status counts for EC/pH, totals for the other forms.
+  const seqVals = isSeq ? rows.map((r) => ({ r, v: numOf(r) })).filter((x) => Number.isFinite(x.v) && x.v > 0) : [];
+  const seqTotal = seqVals.reduce((a, x) => a + x.v, 0);
+  const seqTop = seqVals.reduce((a, x) => (!a || x.v > a.v ? x : a), null);
+  const cards = isSeq ? [
+    { k: 'tot', label: mDef.key === 'fwater' || mDef.key === 'freq' ? 'Average' : 'Total', value: mDef.key === 'fwater' || mDef.key === 'freq' ? fmtNum(seqVals.length ? seqTotal / seqVals.length : NaN, mDef.decimals) : fmtNum(seqTotal, mDef.decimals), unit: mDef.unit, dot: formColor },
+    { k: 'avg', label: 'Per field', value: fmtNum(seqVals.length ? seqTotal / seqVals.length : NaN, mDef.decimals), unit: mDef.unit, dot: mix(formColor, 0.6) },
+    { k: 'top', label: 'Highest', value: seqTop ? seqTop.r.field.name : '–', unit: seqTop ? fmtNum(seqTop.v, mDef.decimals) : '', dot: mix(formColor, 0.8) },
+    { k: 'n', label: 'Fields with data', value: `${seqVals.length}`, unit: `of ${rows.length}`, dot: FILL.none },
+  ] : ['good', 'warn', 'out', 'none'].map((k) => ({ k, label: WORD[k], value: String(counts[k]), dot: FILL[k] }));
 
   const shaped = rows.filter((r) => r.geometry);
   const fc = useMemo(() => ({
@@ -352,11 +417,11 @@ export default function FieldMapPanel({ fieldOverview = [], allFields = [], sele
   const pick = (r) => onSelect(selectedFieldId === r.field.id ? null : r.field);
 
   // Scale for the ranked bars (value measures only).
-  const vals = rows.map((r) => (measure === 'ec' ? r.ec.value : r.ph.value)).filter(Number.isFinite);
+  const vals = rows.map(numOf).filter(Number.isFinite);
   const band = measure === 'ec' ? rows[0]?.ec : measure === 'ph' ? rows[0]?.ph : null;
-  const lo = Math.min(...vals, band?.lo ?? Infinity);
+  const lo = isSeq ? 0 : Math.min(...vals, band?.lo ?? Infinity);
   const hi = Math.max(...vals, band?.hi ?? -Infinity);
-  const scaleMin = lo - (hi - lo) * 0.15;
+  const scaleMin = isSeq ? 0 : lo - (hi - lo) * 0.15;
   const pct = (v) => Math.max(2, Math.min(100, ((v - scaleMin) / ((hi - scaleMin) || 1)) * 100));
 
   const bm = BASEMAPS[basemap] || BASEMAPS.satellite;
@@ -404,8 +469,8 @@ export default function FieldMapPanel({ fieldOverview = [], allFields = [], sele
         <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>Filters and clicks here filter every analysis below</Typography>
         <Box sx={{ flex: 1 }} />
         <ToggleButtonGroup size="small" exclusive value={measure} onChange={(_, v) => v && setMeasure(v)} aria-label="Colour fields by"
-          sx={{ '& .MuiToggleButton-root': { textTransform: 'none', fontSize: 12, fontWeight: 600, px: 3, py: 0.75 } }}>
-          {MEASURES.map((x) => <ToggleButton key={x.key} value={x.key}>{x.label}</ToggleButton>)}
+          sx={{ '& .MuiToggleButton-root': { textTransform: 'none', fontSize: 12, fontWeight: 600, px: 3, py: 0.75 }, '& .Mui-selected': { color: `${(FORM_IDENTITY[form] || FORM_IDENTITY.ecph).dark} !important` } }}>
+          {measures.map((x) => <ToggleButton key={x.key} value={x.key}>{x.label}</ToggleButton>)}
         </ToggleButtonGroup>
       </Box>
 
@@ -433,6 +498,7 @@ export default function FieldMapPanel({ fieldOverview = [], allFields = [], sele
               <MapGrab mapRef={mapRef} />
               {cfg.show.structures && structFc && (
                 <StableGeoJSON
+                  declutter
                   data={structFc}
                   dataKey={`st-${structFc.features.length}-${f.zone.join()}-${f.type.join()}`}
                   style={(ft) => {
@@ -444,6 +510,7 @@ export default function FieldMapPanel({ fieldOverview = [], allFields = [], sele
               )}
               {cfg.show.fields && (
                 <StableGeoJSON
+                  declutter
                   data={fc}
                   dataKey={fc.features.map((x) => x.properties.id).join(',')}
                   style={(ft) => {
@@ -452,7 +519,7 @@ export default function FieldMapPanel({ fieldOverview = [], allFields = [], sele
                     const sel = ft.properties.id === selectedFieldId;
                     const hot = ft.properties.id === hover;
                     const op = cfg.opacity.fields;
-                    return { color: sel ? '#ffd54f' : '#ffffff', weight: sel ? 3.5 : hot ? 2.5 : 1.5, fillColor: FILL[statusOf(r)], fillOpacity: sel ? Math.min(1, op + 0.2) : hot ? Math.min(1, op + 0.15) : op };
+                    return { color: sel ? '#ffd54f' : '#ffffff', weight: sel ? 3.5 : hot ? 2.5 : 1.5, fillColor: fillOf(statusOf(r)), fillOpacity: sel ? Math.min(1, op + 0.2) : hot ? Math.min(1, op + 0.15) : op };
                   }}
                   label={(ft) => {
                     const r = byId[ft.properties.id];
@@ -524,10 +591,11 @@ export default function FieldMapPanel({ fieldOverview = [], allFields = [], sele
           )}
           {/* Legend */}
           <Box sx={{ position: 'absolute', left: 12, bottom: 12, zIndex: 1000, display: 'flex', gap: 3, px: 3, py: 1.5, borderRadius: 2, bgcolor: 'rgba(255,255,255,0.94)', boxShadow: 1, flexWrap: 'wrap' }}>
-            {['good', 'warn', 'out', 'none'].map((s) => (
+            {isSeq && <Box sx={{ fontSize: 12, fontWeight: 600, mr: -1 }}>{m.label}{m.unit ? ` (${m.unit})` : ''}</Box>}
+            {legendKeys.map((s) => (
               <Box key={s} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, fontSize: 12 }}>
-                <Box sx={{ width: 12, height: 12, borderRadius: 0.75, bgcolor: FILL[s], border: '1px solid rgba(0,0,0,0.15)' }} />
-                {WORD[s]} <Box component="span" sx={{ fontFamily: MONO, color: 'text.secondary' }}>{counts[s]}</Box>
+                <Box sx={{ width: 12, height: 12, borderRadius: 0.75, bgcolor: fillOf(s), border: '1px solid rgba(0,0,0,0.15)' }} />
+                <Box component="span" sx={{ fontFamily: isSeq && s !== 'none' ? MONO : undefined }}>{wordOf(s)}</Box> <Box component="span" sx={{ fontFamily: MONO, color: 'text.secondary' }}>{counts[s]}</Box>
               </Box>
             ))}
             {cfg.show.structures && structFc && [...new Set(structFc.features.map((x) => stType(x.properties).label))].slice(0, 6).map((lb) => {
@@ -551,12 +619,14 @@ export default function FieldMapPanel({ fieldOverview = [], allFields = [], sele
         {/* Ranked fields: the other half */}
         <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: 0, height: { lg: 460 } }}>
           <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', borderBottom: 1, borderColor: 'divider' }}>
-            {['good', 'warn', 'out', 'none'].map((s, i) => (
-              <Box key={s} sx={{ px: 4, py: 3, borderLeft: i ? 1 : 0, borderColor: 'divider' }}>
+            {cards.map((c, i) => (
+              <Box key={c.k} sx={{ px: 4, py: 3, borderLeft: i ? 1 : 0, borderColor: 'divider', minWidth: 0 }}>
                 <Typography sx={{ fontSize: 11.5, color: 'text.secondary', display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                  <Box component="span" sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: FILL[s] }} />{WORD[s]}
+                  <Box component="span" sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: c.dot }} />{c.label}
                 </Typography>
-                <Typography sx={{ fontSize: 22, fontWeight: 600, fontVariantNumeric: 'tabular-nums', lineHeight: 1.3 }}>{counts[s]}</Typography>
+                <Typography noWrap sx={{ fontSize: 22, fontWeight: 600, fontVariantNumeric: 'tabular-nums', lineHeight: 1.3 }}>
+                  {c.value}{c.unit ? <Box component="span" sx={{ fontSize: 12, fontWeight: 500, color: 'text.secondary', ml: 1 }}>{c.unit}</Box> : null}
+                </Typography>
               </Box>
             ))}
           </Box>
@@ -570,11 +640,11 @@ export default function FieldMapPanel({ fieldOverview = [], allFields = [], sele
             {ranked.map((r) => {
               const s = statusOf(r);
               const sel = r.field.id === selectedFieldId;
-              const v = measure === 'ec' ? r.ec.value : measure === 'ph' ? r.ph.value : null;
+              const v = measure === 'status' ? null : numOf(r);
               return (
                 <Box component="li" key={r.field.id}>
                   <ButtonBase onClick={() => pick(r)} onMouseEnter={() => setHover(r.field.id)} onMouseLeave={() => setHover(null)} aria-pressed={sel}
-                    sx={{ width: '100%', display: 'grid', gridTemplateColumns: '88px minmax(0,1fr) 64px', alignItems: 'center', columnGap: 3, px: 2, height: 44, borderRadius: 1.5, textAlign: 'start',
+                    sx={{ width: '100%', display: 'grid', gridTemplateColumns: isSeq ? '88px minmax(0,1fr) 96px' : '88px minmax(0,1fr) 64px', alignItems: 'center', columnGap: 3, px: 2, height: 44, borderRadius: 1.5, textAlign: 'start',
                       bgcolor: sel ? 'rgba(29,92,60,0.10)' : hover === r.field.id ? 'action.hover' : 'transparent', boxShadow: sel ? 'inset 3px 0 0 #1d5c3c' : 'none' }}>
                     <Box sx={{ minWidth: 0 }}>
                       <Typography noWrap sx={{ fontSize: 13, fontWeight: 600, fontFamily: MONO }}>{r.field.name}</Typography>
@@ -588,10 +658,10 @@ export default function FieldMapPanel({ fieldOverview = [], allFields = [], sele
                     ) : (
                       <Box dir="ltr" sx={{ position: 'relative', height: 14, borderRadius: 1, bgcolor: 'action.hover' }}>
                         {band && <Box style={{ left: `${pct(band.lo)}%`, width: `${pct(band.hi) - pct(band.lo)}%` }} sx={{ position: 'absolute', top: 0, bottom: 0, bgcolor: '#d9ece3' }} />}
-                        {Number.isFinite(v) && <Box style={{ width: `${pct(v)}%` }} sx={{ position: 'absolute', left: 0, top: 3, bottom: 3, borderRadius: '0 3px 3px 0', bgcolor: FILL[s], transition: 'width 300ms ease' }} />}
+                        {Number.isFinite(v) && <Box style={{ width: `${pct(v)}%` }} sx={{ position: 'absolute', left: 0, top: 3, bottom: 3, borderRadius: '0 3px 3px 0', bgcolor: fillOf(s), transition: 'width 300ms ease' }} />}
                       </Box>
                     )}
-                    <Typography sx={{ fontSize: 13, fontWeight: 600, textAlign: 'right', fontFamily: MONO, fontVariantNumeric: 'tabular-nums', color: s === 'good' || s === 'none' ? 'text.primary' : STATUS[s].color }}>
+                    <Typography sx={{ fontSize: 13, fontWeight: 600, textAlign: 'right', fontFamily: MONO, fontVariantNumeric: 'tabular-nums', color: s === 'good' || s === 'none' || !STATUS[s] ? 'text.primary' : STATUS[s].color }}>
                       {measure === 'status' ? WORD[s] : valueText(r)}
                     </Typography>
                   </ButtonBase>

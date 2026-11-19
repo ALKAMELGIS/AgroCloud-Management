@@ -37,7 +37,7 @@ function lastTwoWeeksByField(rows, key) {
     .sort((a, b) => b.now - a.now);
 }
 
-export default function EcphDashboard({ fieldId, fieldIds = null, siteId, dateFrom, dateTo, allFields = [] }) {
+export default function EcphDashboard({ onFieldStats, fieldId, fieldIds = null, siteId, dateFrom, dateTo, allFields = [] }) {
   const [rawData, setData] = useState([]);
   // Slicers on the field map (zone, Farm_Code, type, crop, status) narrow the rows to their fields.
   const data = useMemo(() => (fieldIds && !fieldId ? rawData.filter((e) => fieldIds.includes(e.fieldId)) : rawData), [rawData, fieldIds, fieldId]);
@@ -58,6 +58,17 @@ export default function EcphDashboard({ fieldId, fieldIds = null, siteId, dateFr
 
     return () => { cancelled = true; };
   }, [fieldId, siteId, dateFrom, dateTo]);
+
+  // Per-field mean EC / pH out for the field map.
+  useEffect(() => {
+    if (!onFieldStats) return;
+    const m = {};
+    rawData.forEach((e) => (e.valveReadings || []).forEach((v) => {
+      const x = (m[e.fieldId] = m[e.fieldId] || { ec: 0, ph: 0, n: 0 });
+      if (Number.isFinite(Number(v.ec))) { x.ec += Number(v.ec); x.ph += Number(v.ph) || 0; x.n += 1; }
+    }));
+    onFieldStats(m);
+  }, [rawData]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fieldMap = useMemo(() => {
     const m = {};

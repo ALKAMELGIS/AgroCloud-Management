@@ -9,7 +9,7 @@ import DashboardSection from '../../components/dashboard/DashboardSection';
 import DashboardStatCard from '../../components/dashboard/DashboardStatCard';
 import { excelTableSx, GutterCell } from '../../components/table/ExcelTable';
 
-export default function FertigationDashboard({ fieldId, fieldIds = null, siteId, dateFrom, dateTo, allFields = [] }) {
+export default function FertigationDashboard({ onFieldStats, fieldId, fieldIds = null, siteId, dateFrom, dateTo, allFields = [] }) {
   const [rawData, setData] = useState([]);
   // Slicers on the field map (zone, Farm_Code, type, crop, status) narrow the rows to their fields.
   const data = useMemo(() => (fieldIds && !fieldId ? rawData.filter((e) => fieldIds.includes(e.fieldId)) : rawData), [rawData, fieldIds, fieldId]);
@@ -31,6 +31,18 @@ export default function FertigationDashboard({ fieldId, fieldIds = null, siteId,
 
     return () => { cancelled = true; };
   }, [fieldId, siteId, dateFrom, dateTo]);
+
+  // Per-field totals for the field map (all fields of the site, before slicers).
+  useEffect(() => {
+    if (!onFieldStats) return;
+    const m = {};
+    rawData.forEach((e) => {
+      const x = (m[e.fieldId] = m[e.fieldId] || { water: 0, fert: 0, n: 0 });
+      x.water += Number(e.dailyWater) || 0; x.fert += Number(e.totalFertilizer) || 0; x.n += 1;
+    });
+    Object.values(m).forEach((x) => { x.waterAvg = x.n ? x.water / x.n : null; });
+    onFieldStats(m);
+  }, [rawData]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fieldMap = useMemo(() => {
     const m = {};

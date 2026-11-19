@@ -30,6 +30,7 @@ function matchesField(entryFieldId, locationLabel, fieldId, fieldName) {
 
 /** Hover for the daily water chart: water in m³, plus that day's site temperature when logged. */
 export default function IrrigationDashboard({
+  onFieldStats,
   fieldId = '',
   fieldIds = null,
   siteId = '',
@@ -102,6 +103,19 @@ export default function IrrigationDashboard({
   }, [siteId, dateFrom, dateTo, fieldId]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Per-field water for the field map (all fields of the site, before slicers).
+  useEffect(() => {
+    if (!onFieldStats) return;
+    const m = {};
+    (entries || []).forEach((e) => {
+      if (!e.fieldId) return;
+      const x = (m[e.fieldId] = m[e.fieldId] || { water: 0, freq: 0, n: 0 });
+      x.water += Number(e.dailyWater) || 0; x.freq += Number(e.frequency) || 0; x.n += 1;
+    });
+    Object.values(m).forEach((x) => { x.freqAvg = x.n ? x.freq / x.n : null; });
+    onFieldStats(m);
+  }, [entries]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const dripRows = useMemo(() => (
     (entries || []).filter((e) => (

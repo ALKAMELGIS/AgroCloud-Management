@@ -134,18 +134,37 @@ const Enrollment = lazy(() => import('./pages/admin/Enrollment'));
 const PumpRoom = lazy(() => import('./pages/PumpRoom'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 
-// Suspense fallback for lazy-loaded routes
+// Suspense fallback for lazy-loaded routes. It waits a moment before showing, so a
+// page that loads fast never flashes a spinner, and it keeps the page height.
 function PageLoader() {
+  const [show, setShow] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setShow(true), 280); return () => clearTimeout(t); }, []);
   return (
     <Box
       role="status"
       aria-live="polite"
-      sx={{ display: 'flex', flexDirection: 'column', gap: 3, justifyContent: 'center', alignItems: 'center', minHeight: '40vh' }}
+      sx={{ display: 'flex', flexDirection: 'column', gap: 3, justifyContent: 'center', alignItems: 'center', minHeight: '60vh',
+        opacity: show ? 1 : 0, transition: 'opacity 200ms ease' }}
     >
       <CircularProgress size={28} />
       <Typography variant="caption" color="text.secondary">Loading…</Typography>
     </Box>
   );
+}
+
+// The pages people open most, fetched in the background once the app is idle so
+// moving between them does not wait for a download.
+const PRELOAD = [
+  () => import('./pages/Home'), () => import('./pages/Dashboard'), () => import('./pages/GISMap'),
+  () => import('./pages/AreaHub'), () => import('./pages/HarvestEntry'), () => import('./pages/ECPHEntry'), () => import('./pages/fertigation/FertigationEntry'),
+  () => import('./pages/irrigation/IrrigationEntry'),
+];
+function usePreloadPages() {
+  useEffect(() => {
+    const run = () => PRELOAD.forEach((f, i) => setTimeout(() => { f().catch(() => {}); }, i * 400));
+    const id = typeof window.requestIdleCallback === 'function' ? window.requestIdleCallback(run, { timeout: 4000 }) : setTimeout(run, 2500);
+    return () => { if (typeof window.cancelIdleCallback === 'function') window.cancelIdleCallback(id); else clearTimeout(id); };
+  }, []);
 }
 
 function RouteGuard({ children }) {
@@ -351,6 +370,7 @@ function AuthenticatedLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [navArea, setNavArea] = useState(DEFAULT_NAV_AREA);
   const location = useLocation();
+  usePreloadPages();
   const navigate = useNavigate();
   const { user } = useAuth();
   const { activeSeason, isSeasonReadOnly } = useActiveSeason();
@@ -508,6 +528,9 @@ function AuthenticatedLayout() {
           </Alert>
         ) : null}
         <AppChromeContext.Provider value={chromeValue}>
+        <Box key={location.pathname} sx={{ animation: 'agroPageIn 220ms cubic-bezier(.2,.7,.2,1) both',
+          '@keyframes agroPageIn': { from: { opacity: 0, transform: 'translateY(6px)' }, to: { opacity: 1, transform: 'none' } },
+          '@media (prefers-reduced-motion: reduce)': { animation: 'none' } }}>
         <Suspense fallback={<PageLoader />}>
           <Routes>
             <Route path="/" element={guarded(Home)} />
@@ -599,6 +622,7 @@ function AuthenticatedLayout() {
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>
+        </Box>
         </AppChromeContext.Provider>
       </Box>
     </Box>

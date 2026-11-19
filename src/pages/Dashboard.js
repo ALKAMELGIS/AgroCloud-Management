@@ -62,8 +62,12 @@ function Dashboard() {
   } = useSeasonListDates();
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [activeTab, setActiveTab] = useState(0);
+  const [visitedTabs, setVisitedTabs] = useState([0]);
+  useEffect(() => { setVisitedTabs((v) => (v.includes(activeTab) ? v : [...v, activeTab])); }, [activeTab]);
   const [selectedFieldObj, setSelectedFieldObj] = useState(null);
-  const [sliceIds, setSliceIds] = useState(null); // fields left by the map slicers (null = all)
+  const [sliceIds, setSliceIds] = useState(null);
+  const [formStats, setFormStats] = useState({}); // per-field totals each form dashboard reports, for the map
+ // fields left by the map slicers (null = all)
   const [showMap, setShowMap] = useState(() => { try { return localStorage.getItem('agro_dash_map') !== '0'; } catch { return true; } });
   const toggleMap = () => setShowMap((v) => { try { localStorage.setItem('agro_dash_map', v ? '0' : '1'); } catch { /* ignore */ } return !v; });
   const { activeSiteId, setActiveSiteId, countries, allowAllSites, hasSiteAssignment } = useActiveSite();
@@ -254,6 +258,8 @@ function Dashboard() {
             onFilterChange={setSliceIds}
             agronomicThresholds={agronomicThresholds}
             dateTo={seasonTo}
+            form={DASHBOARD_TABS[activeTab].key}
+            formStats={formStats[DASHBOARD_TABS[activeTab].key]}
           />
         </Box>
       </Collapse>
@@ -269,57 +275,26 @@ function Dashboard() {
       </Box>
 
       <FormIdentityProvider form={activeForm}>
-      {activeTab === 0 && (
-        <Suspense fallback={<Box sx={{ p: 4, textAlign: 'center' }}><Typography>Loading EC/pH Dashboard...</Typography></Box>}>
-          <EcphDashboard
-            fieldId={filters.field || ''}
-            fieldIds={sliceIds}
-            siteId={filters.site || activeSiteId || ''}
-            dateFrom={seasonFrom || ''}
-            dateTo={seasonTo || ''}
-            allFields={allFields}
-          />
-        </Suspense>
-      )}
-
-      {activeTab === 1 && (
-        <Suspense fallback={<Box sx={{ p: 4, textAlign: 'center' }}><Typography>Loading Fertigation Dashboard...</Typography></Box>}>
-          <FertigationDashboard
-            fieldId={filters.field || ''}
-            fieldIds={sliceIds}
-            siteId={filters.site || activeSiteId || ''}
-            dateFrom={seasonFrom || ''}
-            dateTo={seasonTo || ''}
-            allFields={allFields}
-          />
-        </Suspense>
-      )}
-
-      {activeTab === 2 && (
-        <Suspense fallback={<Box sx={{ p: 4, textAlign: 'center' }}><Typography>Loading Irrigation Dashboard...</Typography></Box>}>
-          <IrrigationDashboard
-            fieldId={filters.field || ''}
-            fieldIds={sliceIds}
-            siteId={filters.site || activeSiteId || ''}
-            dateFrom={seasonFrom || ''}
-            dateTo={seasonTo || ''}
-            allFields={allFields}
-          />
-        </Suspense>
-      )}
-
-      {activeTab === 3 && (
-        <Suspense fallback={<Box sx={{ p: 4, textAlign: 'center' }}><Typography>Loading Harvest Dashboard...</Typography></Box>}>
-          <HarvestDashboard
-            fieldId={filters.field || ''}
-            fieldIds={sliceIds}
-            siteId={filters.site || activeSiteId || ''}
-            dateFrom={seasonFrom || ''}
-            dateTo={seasonTo || ''}
-            allFields={allFields}
-          />
-        </Suspense>
-      )}
+      {/* Tabs stay mounted once opened: switching back is instant, with no reload or jump. */}
+      {[
+        [0, EcphDashboard, 'EC/pH'], [1, FertigationDashboard, 'Fertigation'], [2, IrrigationDashboard, 'Irrigation'], [3, HarvestDashboard, 'Harvest'],
+      ].filter(([i]) => visitedTabs.includes(i)).map(([i, Comp, name]) => (
+        <Box key={i} hidden={activeTab !== i}
+          sx={{ display: activeTab === i ? 'block' : 'none', animation: activeTab === i ? 'agroTabIn 200ms ease both' : 'none',
+            '@keyframes agroTabIn': { from: { opacity: 0 }, to: { opacity: 1 } }, '@media (prefers-reduced-motion: reduce)': { animation: 'none' } }}>
+          <Suspense fallback={<Box sx={{ minHeight: 600, p: 4, textAlign: 'center' }}><Typography color="text.secondary">Loading {name}…</Typography></Box>}>
+            <Comp
+              fieldId={filters.field || ''}
+              fieldIds={sliceIds}
+              siteId={filters.site || activeSiteId || ''}
+              dateFrom={seasonFrom || ''}
+              dateTo={seasonTo || ''}
+              allFields={allFields}
+              onFieldStats={(m) => setFormStats((x) => ({ ...x, [DASHBOARD_TABS[i].key]: m }))}
+            />
+          </Suspense>
+        </Box>
+      ))}
       </FormIdentityProvider>
     </Box>
   );

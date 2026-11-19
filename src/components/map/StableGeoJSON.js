@@ -14,7 +14,22 @@ import L from 'leaflet';
  * popup(feature)   -> null | html string (built when opened)
  * onClick / onHover(feature | null)
  */
-export default function StableGeoJSON({ data, dataKey, style, label, popup, onClick, onHover, interactive = true }) {
+/** Hide permanent labels that would overlap one drawn before them (like ArcGIS label placement). */
+function declutterLabels(layer) {
+  const placed = [];
+  layer.eachLayer((lyr) => {
+    const tip = lyr.getTooltip && lyr.getTooltip();
+    const el = tip && tip.options.permanent && tip.getElement && tip.getElement();
+    if (!el) return;
+    el.style.visibility = '';
+    const r = el.getBoundingClientRect();
+    if (!r.width) return;
+    const hit = placed.some((p) => r.left < p.right + 2 && r.right > p.left - 2 && r.top < p.bottom + 1 && r.bottom > p.top - 1);
+    if (hit) el.style.visibility = 'hidden'; else placed.push(r);
+  });
+}
+
+export default function StableGeoJSON({ data, dataKey, style, label, popup, onClick, onHover, interactive = true, declutter = false }) {
   const map = useMap();
   const layerRef = useRef(null);
   const props = useRef({});
@@ -34,7 +49,9 @@ export default function StableGeoJSON({ data, dataKey, style, label, popup, onCl
       },
     }).addTo(map);
     layerRef.current = layer;
-    return () => { map.removeLayer(layer); layerRef.current = null; };
+    const tidy = () => { if (declutter) declutterLabels(layer); };
+    map.on('zoomend moveend', tidy);
+    return () => { map.off('zoomend moveend', tidy); map.removeLayer(layer); layerRef.current = null; };
   }, [map, dataKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Restyle and relabel in place after every render (cheap; only changed labels are rebound).
@@ -56,6 +73,7 @@ export default function StableGeoJSON({ data, dataKey, style, label, popup, onCl
         });
       }
     });
+    if (declutter) requestAnimationFrame(() => { if (layerRef.current === layer) declutterLabels(layer); });
   });
 
   return null;
