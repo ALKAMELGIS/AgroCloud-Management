@@ -1,6 +1,7 @@
 import { logger } from '../../utils/logger';
 import { AppError } from '../../utils/errors';
 import * as settingsSvc from '../systemSettings.service';
+import { providerError } from './providerError';
 
 /**
  * One tool-calling interface over the provider chosen in Settings → AI Brain
@@ -31,7 +32,13 @@ export type CallModel = (args: { system: string; turns: Turn[]; tools: ToolDef[]
 
 async function config() {
   const provider = (await settingsSvc.get('ai_provider')) || 'anthropic';
-  const model = (await settingsSvc.get('ai_model')) || 'claude-sonnet-4-20250514';
+  const saved = (await settingsSvc.get('ai_model')) || '';
+  // A model saved for the other provider (e.g. a Claude id after switching to OpenAI) is not sent.
+  const fits = provider === 'openai' ? saved && !/^claude/i.test(saved) : saved && /^claude/i.test(saved);
+  const model = fits ? saved : (provider === 'openai' ? '' : 'claude-sonnet-4-20250514');
+  if (!model) {
+    throw new AppError('Choose an OpenAI model in Settings → API Keys → AI Brain.', 'AI_NOT_CONFIGURED', 503);
+  }
   const apiKey = (await settingsSvc.getAIKey()) || process.env.ANTHROPIC_API_KEY || '';
   if (!apiKey) {
     throw new AppError('The AI assistant is not set up yet: add the API key in Settings → API Keys → AI Brain.', 'AI_NOT_CONFIGURED', 503);
@@ -54,7 +61,7 @@ async function callAnthropic(model: string, apiKey: string, args: Parameters<Cal
   if (!res.ok) {
     const body = await res.text();
     logger.error({ status: res.status, body: body.slice(0, 500) }, 'Claude API error');
-    throw new AppError(`The AI service returned an error (${res.status}).`, 'AI_PROVIDER_ERROR', 502);
+    throw new AppError(providerError('Anthropic', res.status, body), 'AI_PROVIDER_ERROR', 502);
   }
   const data = await res.json() as any;
   const content: Block[] = (data.content || [])
@@ -89,7 +96,8 @@ async function callOpenAI(model: string, apiKey: string, args: Parameters<CallMo
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
       model,
-      max_tokens: args.maxTokens ?? 2048,
+      // Current OpenAI chat models take max_completion_tokens (max_tokens is refused by reasoning models).
+      max_completion_tokens: args.maxTokens ?? 4096,
       messages,
       tools: args.tools.map((tool) => ({ type: 'function', function: { name: tool.name, description: tool.description, parameters: tool.input_schema } })),
     }),
@@ -97,7 +105,7 @@ async function callOpenAI(model: string, apiKey: string, args: Parameters<CallMo
   if (!res.ok) {
     const body = await res.text();
     logger.error({ status: res.status, body: body.slice(0, 500) }, 'OpenAI API error');
-    throw new AppError(`The AI service returned an error (${res.status}).`, 'AI_PROVIDER_ERROR', 502);
+    throw new AppError(providerError('OpenAI', res.status, body), 'AI_PROVIDER_ERROR', 502);
   }
   const data = await res.json() as any;
   const msg = data.choices?.[0]?.message || {};

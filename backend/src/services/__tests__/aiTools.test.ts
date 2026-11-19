@@ -29,9 +29,9 @@ beforeEach(() => {
   });
 });
 
-test('every tool is read only (no write tool is offered)', () => {
+test('no tool writes business data: the only non-read tool is propose_action', () => {
   expect(TOOL_DEFS.map((t) => t.name).sort()).toEqual(
-    ['aggregate_records', 'app_guide', 'describe_form', 'equipment_positions', 'find_locations', 'get_record', 'gis_feature_forms', 'list_forms', 'query_records', 'sensor_readings', 'show_result', 'soil_properties'],
+    ['aggregate_records', 'app_guide', 'describe_form', 'equipment_positions', 'find_locations', 'get_record', 'gis_feature_forms', 'list_forms', 'propose_action', 'query_records', 'sensor_readings', 'show_result', 'soil_properties'],
   );
 });
 
@@ -71,7 +71,8 @@ test('show_result attaches the full table with a chart and records the source fo
 test('the system prompt keeps the assistant on the database and read only', () => {
   const p = systemPrompt({ userId: 'u', role: 'worker', orgId: 'o' }, 'ar', 2);
   expect(p).toMatch(/Never invent numbers/);
-  expect(p).toMatch(/read only/i);
+  expect(p).toMatch(/never change data yourself/i);
+  expect(p).toMatch(/propose_action/);
   expect(p).toMatch(/Arabic/);
   expect(p).toMatch(/2 site/);
 });

@@ -3,7 +3,7 @@ import {
   Container, Paper, Typography, Box, Button, TextField, Dialog, DialogTitle, DialogContent,
   DialogActions, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   IconButton, Chip, Alert, Select, MenuItem, FormControl, InputLabel, CircularProgress,
-  Card, CardContent, Divider, InputAdornment,
+  Card, CardContent, Divider, InputAdornment, Autocomplete,
 } from '@mui/material';
 import {
   VpnKeyOutlined as KeyIcon, AddOutlined as AddIcon, DeleteOutlined as DeleteIcon, ContentCopyOutlined as CopyIcon,
@@ -20,17 +20,14 @@ import { canManageSystemSettings } from '../../utils/roleAccess';
 import InfoNote from '../../components/InfoNote';
 import SatelliteSettingsCard from '../../components/map/satellite/SatelliteSettingsCard';
 
+// Starting points only: "Load models" reads the real list from the provider with your key,
+// and any model id can be typed.
 const AI_MODELS = {
   anthropic: [
-    { value: 'claude-sonnet-4-20250514', label: 'Claude Sonnet 4' },
-    { value: 'claude-opus-4-20250514', label: 'Claude Opus 4' },
-    { value: 'claude-3-5-haiku-20241022', label: 'Claude 3.5 Haiku (fast)' },
+    { value: 'claude-sonnet-4-20250514', label: 'claude-sonnet-4-20250514' },
+    { value: 'claude-opus-4-20250514', label: 'claude-opus-4-20250514' },
   ],
-  openai: [
-    { value: 'gpt-4o', label: 'GPT-4o' },
-    { value: 'gpt-4o-mini', label: 'GPT-4o Mini (fast)' },
-    { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
-  ],
+  openai: [],
 };
 
 function AIBrainCard() {
@@ -46,6 +43,25 @@ function AIBrainCard() {
   const [showKey, setShowKey] = useState(false);
   const [hasExistingKey, setHasExistingKey] = useState(false);
   const [keyMasked, setKeyMasked] = useState(null);
+  const [liveModels, setLiveModels] = useState({});
+  const [loadingModels, setLoadingModels] = useState(false);
+
+  const loadModels = async () => {
+    if (!apiKey && !hasExistingKey) { notify.warning('Enter an API key first'); return; }
+    setLoadingModels(true);
+    try {
+      const res = await apiRequest('/settings/ai/models', { method: 'POST', body: JSON.stringify({ provider, apiKey: apiKey || 'USE_SAVED' }) });
+      const list = (res?.data || res)?.models || [];
+      setLiveModels((c) => ({ ...c, [provider]: list.map((m) => ({ value: m.id, label: m.id })) }));
+      if (list.length && !list.some((m) => m.id === model)) setModel(list[0].id);
+      notify.success(`${list.length} models available`);
+    } catch (err) {
+      notify.error(err.message || 'Could not load models');
+    } finally {
+      setLoadingModels(false);
+    }
+  };
+  const modelOptions = liveModels[provider]?.length ? liveModels[provider] : (AI_MODELS[provider] || []);
 
   useEffect(() => {
     apiRequest('/settings/ai')
@@ -62,8 +78,8 @@ function AIBrainCard() {
 
   const handleProviderChange = (newProvider) => {
     setProvider(newProvider);
-    const models = AI_MODELS[newProvider];
-    if (models?.length) setModel(models[0].value);
+    const models = liveModels[newProvider]?.length ? liveModels[newProvider] : AI_MODELS[newProvider];
+    setModel(models?.length ? models[0].value : '');
   };
 
   const handleSave = async () => {
@@ -158,7 +174,7 @@ function AIBrainCard() {
         </Box>
 
         <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-          Configure the AI provider that powers the lesson generator, AI tutor, and quiz generator.
+          The model behind the AI Assistant, the training tutor and the quiz generator. With OpenAI, paste the key, press Load models and pick one.
         </Typography>
 
         <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
@@ -170,14 +186,19 @@ function AIBrainCard() {
             </Select>
           </FormControl>
 
-          <FormControl sx={{ minWidth: 240 }}>
-            <InputLabel id="apikeys-model-label-2">Model</InputLabel>
-            <Select labelId="apikeys-model-label-2" value={model} label="Model" onChange={(e) => setModel(e.target.value)}>
-              {(AI_MODELS[provider] || []).map((m) => (
-                <MenuItem key={m.value} value={m.value}>{m.label}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+          <Autocomplete
+            freeSolo
+            options={modelOptions.map((m) => m.value)}
+            value={model}
+            onInputChange={(_e, v) => setModel(v || '')}
+            sx={{ minWidth: 280, flex: 1 }}
+            renderInput={(params) => (
+              <TextField {...params} label="Model" placeholder={provider === 'openai' ? 'Load models, or type an id' : ''} />
+            )}
+          />
+          <Button variant="text" onClick={loadModels} disabled={loadingModels} startIcon={loadingModels ? <CircularProgress size={14} /> : null} sx={{ alignSelf: 'center' }}>
+            Load models
+          </Button>
         </Box>
 
         <Divider sx={{ my: 2 }} />
@@ -226,7 +247,7 @@ function AIBrainCard() {
           <Button
             variant="contained"
             onClick={handleSave}
-            disabled={saving || (!apiKey && !hasExistingKey)}
+            disabled={saving || !model || (!apiKey && !hasExistingKey)}
             startIcon={saving ? <CircularProgress size={16} color="inherit" /> : null}
           >
             {saving ? 'Saving...' : 'Save Configuration'}

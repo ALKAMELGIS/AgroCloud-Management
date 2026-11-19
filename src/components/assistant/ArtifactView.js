@@ -9,6 +9,7 @@ import {
 import ExportButton from '../ExportButton';
 import { CHART_COLORS } from '../dashboard/dashboardChartTheme';
 import { excelTableSx } from '../table/ExcelTable';
+import ActionCard from './ActionCard';
 
 const FN_AR = { sum: 'مجموع', avg: 'متوسط', min: 'أدنى', max: 'أعلى', count: 'عدد', count_distinct: 'عدد مختلف' };
 const DIM_AR = { zone: 'المنطقة', site: 'الموقع', farm_area: 'منطقة المزرعة', field: 'الحقل', field_type: 'نوع الحقل', day: 'اليوم', week: 'الأسبوع', month: 'الشهر', year: 'السنة', record_date: 'التاريخ', records: 'عدد السجلات', record_id: 'رقم السجل' };
@@ -100,6 +101,11 @@ td{border-bottom:1px solid #dde2dc;padding:5px 8px;font-variant-numeric:tabular-
 }
 
 export default function ArtifactView({ artifact }) {
+  if (artifact?.kind === 'action') return <ActionCard artifact={artifact} />;
+  return <TableArtifactView artifact={artifact} />;
+}
+
+function TableArtifactView({ artifact }) {
   const theme = useTheme();
   const ar = theme.direction === 'rtl';
   const [showAll, setShowAll] = useState(false);

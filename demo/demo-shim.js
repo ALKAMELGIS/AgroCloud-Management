@@ -199,6 +199,13 @@
     if(path==='/satellite/stats') return ok([]);
     if(path==='/settings/sentinelhub'&&method==='GET'){ var c2=window.__devSat&&window.__devSat.cfg(); return ok(c2?{configured:true,idMasked:c2.id.slice(0,4)+'••••-••••-'+c2.id.slice(-4),service:c2.service,label:c2.label||null}:{configured:false,idMasked:null,service:'sentinel-hub',label:null}); }
     if(path==='/ai/status') return ok({configured:true,provider:'demo',model:'demo'});
+    var actM=path.match(/^\/ai\/actions\/([^/]+)\/(confirm|cancel)$/);
+    if(actM){
+      window.__AIACT=window.__AIACT||{}; var cur=window.__AIACT[actM[1]]||'pending';
+      if(cur!=='pending') return {success:false,error:{message:'This action is already '+cur+'.',code:'CONFLICT'}};
+      window.__AIACT[actM[1]]= actM[2]==='confirm'?'done':'cancelled';
+      return ok(actM[2]==='confirm'?{id:actM[1],status:'done',result:{entity:'task',id:'demo-task',link:'/tasks',label:'Demo task'}}:{id:actM[1],status:'cancelled'});
+    }
     if(path==='/ai/conversations') return ok(AICONV);
     if(/^\/ai\/conversations\/[^/]+\/messages$/.test(path)){ var cid=path.split('/')[3]; return ok(AIMSG[cid]||[]); }
     if(/^\/ai\/conversations\/[^/]+$/.test(path)&&method==='DELETE'){ var did=path.split('/')[3]; AICONV=AICONV.filter(function(c){return c.id!==did;}); return ok(null); }
@@ -208,7 +215,12 @@
       var HF={form_id:'7c774b7b-8363-5887-b013-736ed63651b8',form_key:'harvest.entry',title_en:'Harvest Entry',title_ar:'إدخال الحصاد'};
       var PF={form_id:'9d7636be-db18-5857-811d-afafda3efde8',form_key:'ipm.pesticide_spray',title_en:'Pesticide — Spray',title_ar:'المبيدات — رش'};
       var msg;
-      if(/حصاد|harvest/i.test(t)){
+      if(/مهمة|task/i.test(t)){
+        var fm=(t.match(/\b(GH|NH)-\d{2}\b/i)||['GH-02'])[0].toUpperCase();
+        var dd=new Date(Date.now()+86400000+4*3600000).toISOString().slice(0,10);
+        msg={content: ar?'جهّزت المهمة. راجعها واضغط **Confirm** لإنشائها، ولن يتغير شيء قبل ذلك.':'The task is ready. Check it and press **Confirm** to create it; nothing changes before that.',
+          artifacts:[{kind:'action',id:'demo-act-'+Date.now(),action:'create_task',title:(ar?'New task: فحص النقّاطات':'New task: Check the drippers'),lines:[['Priority','medium'],['Field',fm+' · Site 1'],['Due',dd]],status:'pending'}],sources:[]};
+      } else if(/حصاد|harvest/i.test(t)){
         var rows=[{zone:'MH',field:'GH-01',sum_total_quantity:800,records:12},{zone:'MH',field:'GH-02',sum_total_quantity:450,records:9},{zone:'AD',field:'NH-01',sum_total_quantity:320,records:6},{zone:'AD',field:'NH-02',sum_total_quantity:210,records:4}];
         msg={content: ar?'إجمالي الحصاد في **أكتوبر 2026** بلغ **1,780 كجم** من 4 حقول. أعلى حقل **GH-01** (800 كجم).\n\n- المصدر: استمارة إدخال الحصاد\n- الفترة: 1–31 أكتوبر':'Total harvest in **October 2026** was **1,780 kg** from 4 fields; highest **GH-01** (800 kg).',
           artifacts:[{kind:'table',title:ar?'الحصاد لكل حقل — أكتوبر 2026':'Harvest per field — October 2026',columns:['zone','field','sum_total_quantity','records'],rows:rows,total:4,chart:{type:'bar',x:'field',y:['sum_total_quantity']},form:HF}],sources:[HF]};

@@ -4,9 +4,10 @@ import { logger } from '../../utils/logger';
 import { AssignmentRepository } from '../../repositories/assignment.repository';
 import { callModel as defaultCallModel, CallModel, Turn, Block } from './llm';
 import { TOOL_DEFS, runTool, ToolContext, TurnState, Artifact } from './tools';
+import { overlayStatus } from './actions';
 
 /**
- * AgroCloud AI assistant (phase 1–2: answers, reports, guidance; read only).
+ * AgroCloud AI assistant: answers, reports, guidance, and proposed actions the user confirms.
  * The model never sees the database directly: it calls the tools in tools.ts,
  * which apply the user's organisation and site access on the server.
  */
@@ -36,7 +37,8 @@ Rules:
 - Data lives in forms (each has a FORM_ID). Use list_forms / describe_form to find the right form and fields, find_locations to resolve names of zones, sites and fields, then query_records or aggregate_records.
 - For any list, table or report the user wants, call show_result (it gives the user a table with Excel and PDF export, and a chart if useful). Do not repeat the rows in your text; summarise the key figures in 1–3 sentences.
 - For "how do I…" questions use app_guide and give short numbered steps with the screen path.
-- You can read only. If asked to create, change, approve or delete something, explain which screen does it (the assistant cannot change data yet).
+- You never change data yourself. To create something the user asks for (for now: a task), call propose_action; it shows a card the user must confirm. Never say it is done; say it is ready to confirm. For anything propose_action does not cover (edit, approve, delete, other records), explain which screen does it.
+- Before proposing, resolve names with find_locations and ask for anything essential that is missing (e.g. which field).
 - Reply in ${lang === 'ar' ? 'Arabic' : 'English'} (match the user's language), short and clear, Markdown allowed (bold, lists, small tables). Keep codes, field names and numbers as they are.
 - Mention the period and the form(s) the figures come from.`;
 }
@@ -75,7 +77,7 @@ export async function getMessages(r: Requester, conversationId: string) {
       WHERE conversation_id = $1 ORDER BY created_at, id`,
     [conversationId],
   );
-  return rows;
+  return overlayStatus(rows, r.userId);
 }
 
 export async function deleteConversation(r: Requester, conversationId: string) {
@@ -121,7 +123,7 @@ export async function ask(
 
   const siteIds = await siteScope(r);
   const ctx: ToolContext = { orgId: r.orgId, userId: r.userId, role: r.role, siteIds, lang };
-  const state: TurnState = { results: new Map(), artifacts: [], sources: new Map() };
+  const state: TurnState = { conversationId, results: new Map(), artifacts: [], sources: new Map() };
   // Earlier turns as plain text; roles must alternate and start with the user.
   const past: Array<{ role: 'user' | 'assistant'; text: string }> = [];
   history.rows.filter((m: any) => m.content).forEach((m: any) => {

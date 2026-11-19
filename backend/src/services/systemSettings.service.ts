@@ -1,5 +1,7 @@
 import crypto from 'crypto';
 import { dbPool } from '../db/client';
+import { AppError } from '../utils/errors';
+import { providerError } from './ai/providerError';
 
 const ENCRYPTION_KEY = process.env.SETTINGS_ENCRYPTION_KEY || process.env.JWT_SECRET || 'fallback-key-min-32-chars-long!!';
 const ALGO = 'aes-256-cbc';
@@ -111,6 +113,30 @@ export async function testOpenWeatherConnection(apiKey: string): Promise<{ succe
   }
 }
 
+/**
+ * The chat models this key can use, read from the provider so the list is never stale.
+ * OpenAI: text/chat models only (no audio, image, embedding, moderation or realtime ids).
+ */
+export async function listAIModels(provider: string, apiKey: string): Promise<Array<{ id: string; created?: number }>> {
+  if (provider === 'openai') {
+    const res = await fetch('https://api.openai.com/v1/models', { headers: { Authorization: `Bearer ${apiKey}` } });
+    if (!res.ok) throw new AppError(providerError('OpenAI', res.status, await res.text()), 'AI_PROVIDER_ERROR', 502);
+    const data = await res.json() as any;
+    const skip = /(audio|realtime|tts|transcribe|whisper|dall-e|image|embedding|moderation|search|davinci|babbage|instruct|codex|computer-use)/i;
+    return (data.data || [])
+      .filter((m: any) => /^(gpt-|o\d|chatgpt-)/i.test(m.id) && !skip.test(m.id))
+      .map((m: any) => ({ id: m.id, created: m.created }))
+      .sort((a: any, b: any) => (b.created || 0) - (a.created || 0));
+  }
+  if (provider === 'anthropic') {
+    const res = await fetch('https://api.anthropic.com/v1/models?limit=100', { headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' } });
+    if (!res.ok) throw new AppError(providerError('Anthropic', res.status, await res.text()), 'AI_PROVIDER_ERROR', 502);
+    const data = await res.json() as any;
+    return (data.data || []).map((m: any) => ({ id: m.id, created: Date.parse(m.created_at || '') / 1000 || undefined }));
+  }
+  return [];
+}
+
 export async function testAIConnection(provider: string, model: string, apiKey: string): Promise<{ success: boolean; message: string }> {
   try {
     if (provider === 'anthropic') {
@@ -141,13 +167,13 @@ export async function testAIConnection(provider: string, model: string, apiKey: 
         },
         body: JSON.stringify({
           model,
-          max_tokens: 10,
+          max_completion_tokens: 64,
           messages: [{ role: 'user', content: 'Say "ok"' }],
         }),
       });
-      if (res.ok) return { success: true, message: 'Connected successfully' };
+      if (res.ok) return { success: true, message: `Connected to OpenAI (${model})` };
       const err = await res.text();
-      return { success: false, message: `API error ${res.status}: ${err.substring(0, 100)}` };
+      return { success: false, message: providerError('OpenAI', res.status, err) };
     }
 
     return { success: false, message: `Unsupported provider: ${provider}` };

@@ -4,6 +4,7 @@ import * as forms from '../formRegistry.service';
 import { featureForms } from '../arcgisLink.service';
 import type { ToolDef } from './llm';
 import * as soilGrids from '../soilGrids.service';
+import { PROPOSE_TOOL, propose, ActionArtifact } from './actions';
 
 /**
  * Read-only tools the assistant uses to answer from the system's own database.
@@ -33,7 +34,9 @@ export interface ResultSet {
   form?: { form_id: string; form_key: string; title_en: string; title_ar: string | null };
 }
 
-export interface Artifact {
+export type Artifact = TableArtifact | ActionArtifact;
+
+export interface TableArtifact {
   kind: 'table';
   title: string;
   columns: string[];
@@ -44,6 +47,7 @@ export interface Artifact {
 }
 
 export interface TurnState {
+  conversationId?: string | null;
   results: Map<string, ResultSet>;
   artifacts: Artifact[];
   sources: Map<string, { form_id: string; form_key: string; title_en: string; title_ar: string | null }>;
@@ -191,6 +195,7 @@ const formInfo = (f: forms.FormRow) => ({ form_id: f.form_id, form_key: f.form_k
 // ── tools ──────────────────────────────────────────────────────────────────
 
 export const TOOL_DEFS: ToolDef[] = [
+  PROPOSE_TOOL,
   {
     name: 'list_forms',
     description: 'List every form (data-entry sheet) of the system with its FORM_ID, key, category, screen and how many records the user can see. Call this first when unsure which form holds the data.',
@@ -602,6 +607,12 @@ export async function runTool(name: string, input: any, ctx: ToolContext, state:
       const rows = profile.rows.map((r: any) => Object.fromEntries(columns.map((k) => [k, r[k] ?? null])));
       const rs = register(state, { title, columns, rows, total: rows.length });
       return { ...forModel(rs, 20), source: profile.source, note: 'Modelled from global soil maps at 250 m; confirm with a lab test before fertiliser decisions.' };
+    }
+
+    case 'propose_action': {
+      const card = await propose(String(args.kind || ''), args.input || {}, ctx, state.conversationId ?? null);
+      state.artifacts.push(card);
+      return { proposed: true, id: card.id, shown_to_user: card.title, note: 'Shown as a card. It runs only if the user presses Confirm; tell them to check and confirm.' };
     }
 
     case 'app_guide': {

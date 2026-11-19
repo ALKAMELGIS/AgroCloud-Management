@@ -44,6 +44,21 @@ const testSchema = z.object({
   apiKey: z.string().min(1),
 });
 
+const modelsSchema = z.object({
+  provider: z.enum(['anthropic', 'openai']),
+  apiKey: z.string().min(1).optional(),
+});
+
+/** Chat models the key can use, read from the provider (the key goes in the body, never the URL). */
+settingsRouter.post('/ai/models', requireKeyAdmin, async (req: AuthRequest, res: Response, next) => {
+  try {
+    const body = modelsSchema.parse(req.body);
+    const key = body.apiKey && body.apiKey !== 'USE_SAVED' ? body.apiKey : await settings.getAIKey();
+    if (!key) { res.json({ success: true, data: { models: [], message: 'No saved key found' } }); return; }
+    res.json({ success: true, data: { models: await settings.listAIModels(body.provider, key) } });
+  } catch (e) { next(e); }
+});
+
 settingsRouter.post('/ai/test', requireKeyAdmin, async (req: AuthRequest, res: Response, next) => {
   try {
     const body = testSchema.parse(req.body);

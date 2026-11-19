@@ -33,7 +33,8 @@ export type AuditEntity =
   | 'plantation_opening'
   | 'plantation_closing'
   | 'bio_record'
-  | 'bio_field_setup';
+  | 'bio_field_setup'
+  | 'task';
 
 export interface AuditLogEntry {
   id?: string;

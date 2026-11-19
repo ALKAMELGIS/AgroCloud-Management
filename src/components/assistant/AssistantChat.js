@@ -5,7 +5,7 @@ import {
 import { alpha, useTheme } from '@mui/material/styles';
 import {
   ArrowUpwardRounded as SendIcon, DescriptionOutlined as FormIcon,
-  BarChartRounded as ChartIcon, WarningAmberRounded as PhiIcon, PaidOutlined as CostIcon, HelpOutlineRounded as HowIcon,
+  BarChartRounded as ChartIcon, WarningAmberRounded as PhiIcon, AddTaskRounded as CostIcon, HelpOutlineRounded as HowIcon,
 } from '@mui/icons-material';
 import { Link as RouterLink } from 'react-router-dom';
 import MiniMarkdown from './MiniMarkdown';
@@ -15,14 +15,14 @@ import * as api from './aiApi';
 const SUGGESTIONS_AR = [
   'كم إجمالي الحصاد هذا الشهر لكل حقل؟',
   'ما الحقول التي عليها فترة ما قبل الحصاد سارية الآن؟',
-  'تقرير تكلفة المبيدات لكل موقع هذا الموسم',
+  'أنشئ مهمة لفحص النقّاطات في GH-02 غداً',
   'كيف أسجّل تطبيق مبيد جديد؟',
 ];
 const SUGGESTION_ICONS = [ChartIcon, PhiIcon, CostIcon, HowIcon];
 const SUGGESTIONS_EN = [
   'Total harvest this month per field?',
   'Which fields are inside an active PHI now?',
-  'Pesticide cost per site this season',
+  'Create a task to check the drippers on GH-02 tomorrow',
   'How do I record a new pesticide application?',
 ];
 

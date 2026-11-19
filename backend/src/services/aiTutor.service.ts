@@ -16,13 +16,13 @@ async function callAI(systemPrompt: string, messages: Array<{ role: string; cont
   if (provider === 'openai') {
     const body: any = {
       model,
-      max_tokens: maxTokens,
+      max_completion_tokens: maxTokens,
       messages: [
         { role: 'system', content: systemPrompt },
         ...messages.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
       ],
     };
-    if (temperature !== undefined) body.temperature = temperature;
+    // Newer OpenAI reasoning models accept only the default temperature, so it is not sent.
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },

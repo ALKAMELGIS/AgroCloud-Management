@@ -20,3 +20,5 @@ export const listConversations = () => call('/ai/conversations');
 export const getMessages = (id) => call(`/ai/conversations/${id}/messages`);
 export const deleteConversation = (id) => call(`/ai/conversations/${id}`, { method: 'DELETE' });
 export const ask = (body) => call('/ai/ask', { method: 'POST', body });
+export const confirmAction = (id) => call(`/ai/actions/${id}/confirm`, { method: 'POST' });
+export const cancelAction = (id) => call(`/ai/actions/${id}/cancel`, { method: 'POST' });
