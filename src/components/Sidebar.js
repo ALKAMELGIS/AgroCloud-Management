@@ -58,6 +58,8 @@ import {
   LogoutOutlined as LogoutIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
+import { useActiveSite } from '../contexts/ActiveSiteContext';
+import { useActiveSeason } from '../contexts/ActiveSeasonContext';
 import { useActAsOrg } from '../contexts/ActAsOrgContext';
 import { drawerWidth, getShellSections, RAIL_WIDTH } from '../config/navAreas';
 import { INSIGHT_PATHS } from './InsightsMenu';
@@ -161,6 +163,9 @@ function Sidebar({ open, mobileOpen, onMobileClose, activeNavArea }) {
   const rail = isDesktop && !open;
   const L = useShellLabel();
   const { user, logout } = useAuth();
+  const { activeSite } = useActiveSite();
+  const { activeSeason } = useActiveSeason();
+  const siteLine = [activeSite ? [activeSite.zoneName, activeSite.name].filter(Boolean).join(' · ') : null, activeSeason?.name].filter(Boolean).join(' · ');
   const {
     isSuperAdmin,
     actAsOrgId,
@@ -281,7 +286,7 @@ function Sidebar({ open, mobileOpen, onMobileClose, activeNavArea }) {
             {L('Al Maha Farm')}
           </Typography>
           <Typography sx={{ fontSize: '0.6875rem', color: 'text.secondary', lineHeight: 1.35 }}>
-            {L('Elite Agro Cloud')}
+            {siteLine || L('Elite Agro Cloud')}
           </Typography>
         </Box>
       </Box>

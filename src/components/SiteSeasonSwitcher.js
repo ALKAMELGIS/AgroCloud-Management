@@ -4,7 +4,6 @@ import {
   Box,
   Typography,
   TextField,
-  MenuItem,
   Chip,
   Button,
   Alert,
@@ -15,11 +14,10 @@ import {
   ButtonBase,
   Popover,
 } from '@mui/material';
-import { PlaceOutlined as PlaceIcon, UnfoldMoreRounded as UnfoldIcon } from '@mui/icons-material';
+import { PlaceOutlined as PlaceIcon, UnfoldMoreRounded as UnfoldIcon, CheckRounded as CheckIcon } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import { useActiveSite } from '../contexts/ActiveSiteContext';
 import { useActiveSeason } from '../contexts/ActiveSeasonContext';
-import SiteZoneSelect from './SiteZoneSelect';
 import { useNotification } from '../contexts/NotificationContext';
 import { canManageSeasons } from '../utils/roleAccess';
 import { apiRequest } from '../utils/api';
@@ -27,6 +25,27 @@ import { isSeasonLocked, farmTodayYmd, toSeasonYmd } from '../utils/seasonListDa
 import InfoNote from './InfoNote';
 
 const END_SEASON_CONFIRM = 'END SEASON';
+
+function PickRow({ selected, onClick, children }) {
+  return (
+    <ButtonBase
+      role="option"
+      aria-selected={selected}
+      onClick={onClick}
+      sx={{
+        display: 'flex', width: '100%', justifyContent: 'flex-start', gap: 2, minHeight: 34, px: 2.5, borderRadius: '8px',
+        fontSize: '0.8125rem', fontWeight: selected ? 600 : 400, color: 'text.primary', textAlign: 'start',
+        bgcolor: selected ? 'rgba(22,67,46,0.06)' : 'transparent',
+        '&:hover': { bgcolor: selected ? 'rgba(22,67,46,0.09)' : 'rgba(22,40,30,0.045)' },
+        '&.Mui-focusVisible': { bgcolor: 'action.focus' },
+        '@media (pointer: coarse)': { minHeight: 44 },
+      }}
+    >
+      <Box component="span" sx={{ flex: 1, minWidth: 0 }}>{children}</Box>
+      {selected ? <CheckIcon sx={{ fontSize: 16, color: 'primary.main' }} /> : null}
+    </ButtonBase>
+  );
+}
 
 /**
  * Site and season live in the top bar as one quiet switcher ("MH · Site 1 · 2025-2026").
@@ -97,7 +116,9 @@ export default function SiteSeasonSwitcher() {
     || endDate > farmToday;
 
 
-  const hasSites = (countries || []).some((c) => c.sites?.length) || !hasSiteAssignment;
+  const zones = (countries || []).filter((c) => c.sites?.length);
+  const pickSite = (id) => { setActiveSiteId(id); setAnchor(null); };
+  const hasSites = zones.length > 0 || !hasSiteAssignment;
   if (!hasSites) return null;
 
   const siteText = activeSite
@@ -150,45 +171,61 @@ export default function SiteSeasonSwitcher() {
         onClose={() => setAnchor(null)}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
         transformOrigin={{ vertical: 'top', horizontal: 'left' }}
-        slotProps={{ paper: { sx: { mt: 2, width: 300, p: 4, borderRadius: '12px', boxShadow: '0 12px 32px rgba(22,40,30,0.12), 0 0 0 1px rgba(22,40,30,0.06)' } } }}
+        slotProps={{ paper: { sx: { mt: 2, width: 280, p: 4, borderRadius: '12px', boxShadow: '0 12px 32px rgba(22,40,30,0.12), 0 0 0 1px rgba(22,40,30,0.06)' } } }}
       >
-          <SiteZoneSelect
-            countries={countries}
-            value={activeSiteId}
-            onChange={setActiveSiteId}
-            allowAllSites={allowAllSites}
-            noAssignmentMessage={!hasSiteAssignment ? 'No site assigned — contact your manager.' : undefined}
-          />
-          {activeSiteId ? (
-            <>
-            <Typography component="span" sx={{ display: 'block', fontSize: '0.6875rem', color: 'text.secondary', mt: 1.5, mb: 0.5, px: 0.25 }}>
-              Season
+          {!hasSiteAssignment ? (
+            <Typography variant="caption" color="warning.main" sx={{ display: 'block', mb: 2 }}>
+              No site assigned — contact your manager.
             </Typography>
-            <TextField
-              select
-              size="small"
-              fullWidth
-              value={seasonLoaded ? (activeSeasonId || '') : ''}
-              onChange={(e) => setActiveSeasonId(e.target.value)}
-              disabled={!seasonLoaded || seasons.length === 0}
-              SelectProps={{ inputProps: { 'aria-label': 'Season' } }}
-              sx={{
-                '& .MuiOutlinedInput-root': { bgcolor: 'background.muted', height: 36, borderRadius: 1.25 },
-                '& .MuiSelect-select': { py: 0.75, fontSize: '0.8125rem', fontWeight: 600 },
-              }}
-            >
-              {seasons.length === 0 ? (
-                <MenuItem value="" sx={{ fontSize: '0.8125rem' }}>
-                  {seasonLoaded ? 'No seasons' : 'Loading…'}
-                </MenuItem>
-              ) : seasons.map((season) => (
-                <MenuItem key={season.id} value={season.id} sx={{ fontSize: '0.8125rem' }}>
-                  {season.name}
-                  {season.status && season.status !== 'open' ? ` (${String(season.status).replace(/_/g, ' ')})` : ''}
-                </MenuItem>
-              ))}
-            </TextField>
-            {seasonLoaded && canEndSeason && !seasons.some((season) => season.status === 'open') ? (
+          ) : null}
+          <Box role="listbox" aria-label="Site" ref={(el) => { if (el) requestAnimationFrame(() => el.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'center' })); }} sx={{ maxHeight: 280, overflowY: 'auto', mx: -2, scrollbarWidth: 'thin' }}>
+            {allowAllSites ? (
+              <PickRow selected={!activeSiteId} onClick={() => pickSite('')}>All sites</PickRow>
+            ) : null}
+            {zones.map((zone) => (
+              <Box key={zone.id} role="group" aria-label={zone.name}>
+                <Typography sx={{ px: 2.5, pt: 2.5, pb: 1, fontSize: '0.6875rem', color: 'text.secondary' }}>{zone.name}</Typography>
+                {zone.sites.map((site) => (
+                  <PickRow key={site.id} selected={String(site.id) === String(activeSiteId)} onClick={() => pickSite(site.id)}>
+                    {site.name}
+                  </PickRow>
+                ))}
+              </Box>
+            ))}
+          </Box>
+          {activeSiteId && seasons.length > 0 ? (
+            <>
+              <Box sx={{ height: '1px', bgcolor: 'divider', mx: -4, my: 3 }} />
+              <Typography sx={{ fontSize: '0.6875rem', color: 'text.secondary', mb: 1.5 }}>Season</Typography>
+              <Box role="radiogroup" aria-label="Season" sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, p: 1, borderRadius: '9px', bgcolor: 'background.muted' }}>
+                {seasons.map((season) => {
+                  const on = String(season.id) === String(activeSeasonId);
+                  return (
+                    <ButtonBase
+                      key={season.id}
+                      role="radio"
+                      aria-checked={on}
+                      title={season.status && season.status !== 'open' ? String(season.status).replace(/_/g, ' ') : undefined}
+                      onClick={() => { setActiveSeasonId(season.id); setAnchor(null); }}
+                      sx={{
+                        flex: '1 0 auto', height: 30, px: 2.5, gap: 1.25, borderRadius: '7px',
+                        fontSize: '0.8125rem', fontVariantNumeric: 'tabular-nums', fontWeight: on ? 600 : 400,
+                        color: on ? 'text.primary' : 'text.secondary',
+                        bgcolor: on ? 'background.paper' : 'transparent',
+                        boxShadow: on ? '0 1px 2px rgba(22,40,30,0.08), 0 0 0 1px rgba(22,40,30,0.06)' : 'none',
+                        '&:hover': { color: 'text.primary' },
+                        '@media (pointer: coarse)': { height: 40 },
+                      }}
+                    >
+                      {season.name}
+                      {season.status && season.status !== 'open' ? <Box component="span" sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: 'warning.main' }} /> : null}
+                    </ButtonBase>
+                  );
+                })}
+              </Box>
+            </>
+          ) : null}
+          {seasonLoaded && canEndSeason && !seasons.some((season) => season.status === 'open') ? (
               <Button
                 size="small"
                 variant="text"
@@ -210,8 +247,6 @@ export default function SiteSeasonSwitcher() {
                 Open Seasons
               </Button>
             ) : null}
-            </>
-          ) : null}
           {activeSiteId && canEndSeason && activeSeason?.status === 'open' ? (
             <Button
               size="small"
