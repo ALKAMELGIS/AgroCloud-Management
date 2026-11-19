@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Tooltip as LTooltip, useMap } from 'react-leaflet';
 import StableGeoJSON from '../../components/map/StableGeoJSON';
 import L from 'leaflet';
 import {
-  Autocomplete, Box, Button, ButtonBase, Checkbox, Chip, Collapse, GlobalStyles, IconButton, MenuItem, Paper, Slider, Switch, TextField, ToggleButton, ToggleButtonGroup, Tooltip, Typography,
+  Autocomplete, Box, Button, ButtonBase, Checkbox, Collapse, GlobalStyles, IconButton, MenuItem, Paper, Slider, Switch, TextField, ToggleButton, ToggleButtonGroup, Tooltip, Typography,
 } from '@mui/material';
 import {
   LayersOutlined as LayersIcon, FilterAltOffOutlined as ClearIcon, MoreHorizRounded as MoreIcon, ZoomInMapRounded as ZoomLayerIcon,
@@ -162,18 +162,39 @@ function LayerRow({ name, count, on, onToggle, open, onOpen, onZoom, opacity, on
   );
 }
 
-/** A slicer, like in a BI report: pick one or more values, empty = all. */
+/** A slicer, like in a BI report: pick one or more values, empty = all. Stays one line high. */
 function Slicer({ label, options, value, onChange, width = 170 }) {
+  const [open, setOpen] = useState(false);
+  const summary = value.length === 0 ? '' : value.length === 1 ? value[0] : `${value.length} selected`;
   return (
     <Autocomplete
-      multiple size="small" options={options} value={value} onChange={(_, v) => onChange(v)} limitTags={1} disableCloseOnSelect
-      getLimitTagsText={(n) => `+${n}`}
-      renderTags={(v, getTagProps) => v.map((o, i) => <Chip {...getTagProps({ index: i })} key={o} label={o} size="small" sx={{ height: 20, fontSize: 11, maxWidth: 90, my: '0 !important' }} />)}
-      renderOption={(props, o, { selected }) => (
-        <li {...props} key={o} style={{ fontSize: 13, paddingTop: 2, paddingBottom: 2 }}><Checkbox size="small" checked={selected} sx={{ p: 0.5, mr: 1 }} />{o}</li>
+      multiple size="small" options={options} value={value} onChange={(_, v) => onChange(v)} disableCloseOnSelect
+      open={open} onOpen={() => setOpen(true)} onClose={() => setOpen(false)}
+      renderTags={() => (summary ? (
+        <Box component="span" title={value.join(', ')} sx={{ pl: 1, fontSize: 13, fontWeight: 600, color: 'text.primary', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: width - 76 }}>
+          {summary}
+        </Box>
+      ) : null)}
+      ListboxProps={{ sx: { maxHeight: 280, py: 0.5, '& .MuiAutocomplete-option': { minHeight: 32, px: 2, fontSize: 13 } } }}
+      slotProps={{ paper: { sx: { mt: 1, borderRadius: 2, boxShadow: '0 8px 28px rgba(0,0,0,0.18)', minWidth: 200 } } }}
+      renderOption={(props, o, { selected }) => {
+        const { key, ...rest } = props;
+        return (
+          <li key={o} {...rest}>
+            <Checkbox size="small" checked={selected} sx={{ p: 0.5, mr: 1.5 }} />
+            <Box component="span" sx={{ fontWeight: selected ? 600 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{o}</Box>
+          </li>
+        );
+      }}
+      renderInput={(params) => (
+        <TextField {...params} label={label} placeholder={summary ? '' : open ? 'Search…' : 'All'} InputLabelProps={{ shrink: true }}
+          inputProps={{ ...params.inputProps, style: { minWidth: summary && !open ? 0 : 40, width: summary && !open ? 0 : undefined, padding: summary && !open ? 0 : undefined } }} />
       )}
-      renderInput={(params) => <TextField {...params} label={label} placeholder={value.length ? '' : 'All'} InputLabelProps={{ shrink: true }} />}
-      sx={{ width, '& .MuiInputBase-root': { minHeight: 36, py: '1px !important', fontSize: 13 } }}
+      sx={{
+        width,
+        '& .MuiInputBase-root': { height: 40, flexWrap: 'nowrap', py: '0 !important', fontSize: 13, bgcolor: value.length ? 'rgba(29,92,60,0.06)' : 'background.paper' },
+        '& .MuiOutlinedInput-notchedOutline': { borderColor: value.length ? 'rgba(29,92,60,0.45)' : undefined },
+      }}
     />
   );
 }
@@ -183,9 +204,23 @@ function centerOf(g) {
   return [(b[0][0] + b[1][0]) / 2, (b[0][1] + b[1][1]) / 2];
 }
 
-const pin = (html, bg) => L.divIcon({
-  className: '',
-  html: `<div style="display:flex;gap:2px;transform:translate(-50%,-150%)">${html.map((h) => `<span style="display:grid;place-items:center;width:20px;height:20px;border-radius:50%;background:${bg};color:#fff;font:600 11px/1 Inter,sans-serif;box-shadow:0 0 0 2px #fff,0 1px 4px rgba(0,0,0,.4)">${h}</span>`).join('')}</div>`,
+/* Alert icons: crop-safety signs for protected cultivation, one colour each, never colour alone. */
+const ALERTS = {
+  phi: { label: 'Pre-harvest interval', short: 'PHI', color: '#b45309', path: 'M6 3h12M6 21h12M7 3v2.5a5 5 0 0 0 10 0V3M7 21v-2.5a5 5 0 0 1 10 0V21' },
+  pest: { label: 'Pest found', short: 'Pest', color: '#b42318', path: 'M9 9.5h6v5.5a3 3 0 0 1-6 0zM10 9.5V8a2 2 0 0 1 4 0v1.5M4 13h5M15 13h5M5.5 8l3.5 2.5M18.5 8L15 10.5M5.5 19l3.5-2.5M18.5 19L15 16.5' },
+  spray: { label: 'Sprayed today', short: 'Sprayed', color: '#1d5fa8', path: 'M6 11h7v10H6zM8 11V8h3v3M11 8h3.5l1.5-2M18 4.5h.01M20 7h.01M18 9.5h.01M20.5 11.5h.01' },
+};
+const alertSvg = (k, size = 14) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${ALERTS[k].path}"/></svg>`;
+function AlertGlyph({ k, size = 18 }) {
+  return (
+    <Box component="span" sx={{ width: size, height: size, borderRadius: '50%', bgcolor: ALERTS[k].color, display: 'inline-grid', placeItems: 'center', flexShrink: 0, boxShadow: '0 0 0 1.5px #fff' }}>
+      <svg width={size * 0.66} height={size * 0.66} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={ALERTS[k].path} /></svg>
+    </Box>
+  );
+}
+const alertIcon = (keys) => L.divIcon({
+  className: 'agro-alert',
+  html: `<div class="agro-alert-chip">${keys.map((k) => `<span class="agro-alert-dot" style="background:${ALERTS[k].color}">${alertSvg(k)}</span>`).join('')}</div>`,
   iconSize: [0, 0],
 });
 
@@ -258,6 +293,7 @@ export default function FieldMapPanel({ fieldOverview = [], allFields = [], sele
       field: f, ec, ph, status: stale ? 'none' : worst, geometry: geo?.byId[f.id]?.geometry || null, key: geo?.byId[f.id]?.key_id,
       zone, code, type: f.field_type_name || '—', crop: f.crop_name || '—',
       phi: f.active_phi_count > 0, pest: !!(f.latest_scouting?.id && f.latest_scouting?.status !== 'resolved'), spray: !!f.spray_today,
+      phiEnd: f.nearest_phi_end, pestName: f.latest_scouting?.pest, sprayProduct: f.spray_today?.product,
     };
   }), [fieldOverview, thresholds, dateTo, geo, fieldInfo]);
   const opts = useMemo(() => {
@@ -302,14 +338,16 @@ export default function FieldMapPanel({ fieldOverview = [], allFields = [], sele
     type: 'FeatureCollection',
     features: shaped.map((r) => ({ type: 'Feature', geometry: r.geometry, properties: { id: r.field.id } })),
   }), [shaped]); // eslint-disable-line react-hooks/exhaustive-deps
+  const allShaped = allRows.filter((r) => r.geometry);
   const bounds = useMemo(() => {
     let b = null;
-    fc.features.forEach((f) => {
+    // Nothing drawn among the filtered fields: keep the map on the whole site.
+    (fc.features.length ? fc.features : allShaped.map((r) => ({ geometry: r.geometry }))).forEach((f) => {
       const x = boundsOf(f.geometry);
       b = b ? [[Math.min(b[0][0], x[0][0]), Math.min(b[0][1], x[0][1])], [Math.max(b[1][0], x[1][0]), Math.max(b[1][1], x[1][1])]] : x;
     });
     return b;
-  }, [fc]);
+  }, [fc]); // eslint-disable-line react-hooks/exhaustive-deps
   const byId = useMemo(() => Object.fromEntries(rows.map((r) => [r.field.id, r])), [rows]);
   const pick = (r) => onSelect(selectedFieldId === r.field.id ? null : r.field);
 
@@ -345,6 +383,18 @@ export default function FieldMapPanel({ fieldOverview = [], allFields = [], sele
           padding: '2px 6px', fontSize: 11, fontWeight: 600, fontFamily: MONO, whiteSpace: 'nowrap',
         },
         '.leaflet-tooltip.agro-field-label::before': { display: 'none' },
+        '.agro-alert-chip': {
+          position: 'absolute', left: 0, bottom: 10, transform: 'translateX(-50%)', display: 'flex', gap: 3, padding: 3,
+          borderRadius: 999, background: 'rgba(255,255,255,0.96)', boxShadow: '0 2px 8px rgba(0,0,0,0.35)', cursor: 'pointer',
+          transition: 'transform 150ms ease',
+        },
+        '.agro-alert-chip::after': {
+          content: '""', position: 'absolute', left: '50%', bottom: -6, marginLeft: -6, borderLeft: '6px solid transparent', borderRight: '6px solid transparent', borderTop: '6px solid rgba(255,255,255,0.96)',
+        },
+        '.agro-alert:hover .agro-alert-chip': { transform: 'translateX(-50%) scale(1.12)' },
+        '.agro-alert-dot': { width: 22, height: 22, borderRadius: '50%', display: 'grid', placeItems: 'center' },
+        '.leaflet-tooltip.agro-alert-tip': { fontSize: 12, lineHeight: 1.6, padding: '6px 10px', borderRadius: 6 },
+        '.leaflet-tooltip.agro-alert-tip svg': { verticalAlign: '-2px', marginRight: 4 },
         '.leaflet-tooltip.agro-lbl': { background: 'transparent', border: 0, boxShadow: 'none', padding: 0 },
         '.leaflet-tooltip.agro-lbl::before': { display: 'none' },
       }} />
@@ -373,7 +423,7 @@ export default function FieldMapPanel({ fieldOverview = [], allFields = [], sele
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: 'minmax(0,1fr) minmax(0,1fr)' } }}>
         {/* Map: half of the width */}
         <Box sx={{ position: 'relative', height: { xs: 340, md: 460 }, borderRight: { lg: 1 }, borderBottom: { xs: 1, lg: 0 }, borderColor: 'divider', bgcolor: '#dfe3dd' }}>
-          {shaped.length ? (
+          {allShaped.length ? (
             <MapContainer bounds={bounds} boundsOptions={{ padding: [32, 32], maxZoom: 18 }} attributionControl={false} style={{ height: '100%', width: '100%' }}>
               <MapLifecycle />
               <TileLayer key={basemap} url={bm.url} maxNativeZoom={bm.maxNativeZoom || 19} maxZoom={21} />
@@ -419,8 +469,21 @@ export default function FieldMapPanel({ fieldOverview = [], allFields = [], sele
                 />
               )}
               {cfg.show.alerts && shaped.filter((r) => r.phi || r.pest || r.spray).map((r) => {
-                const marks = [r.phi && 'P', r.pest && '!', r.spray && 'S'].filter(Boolean);
-                return <Marker key={`al-${r.field.id}`} position={centerOf(r.geometry)} interactive={false} icon={pin(marks, r.pest ? '#c0392b' : '#6a46b8')} />;
+                const keys = ['phi', 'pest', 'spray'].filter((k) => r[k]);
+                const days = r.phiEnd ? Math.max(0, Math.ceil((new Date(r.phiEnd) - Date.now()) / 86400000)) : null;
+                const lines = [
+                  r.phi && `${alertSvg('phi', 12).replace('#fff', ALERTS.phi.color)} PHI${days != null ? ` · ${days} d left` : ''} · no harvest`,
+                  r.pest && `${alertSvg('pest', 12).replace('#fff', ALERTS.pest.color)} Pest${r.pestName ? ` · ${esc(r.pestName)}` : ''}`,
+                  r.spray && `${alertSvg('spray', 12).replace('#fff', ALERTS.spray.color)} Sprayed${r.sprayProduct ? ` · ${esc(r.sprayProduct)}` : ''}`,
+                ].filter(Boolean);
+                return (
+                  <Marker key={`al-${r.field.id}`} position={centerOf(r.geometry)} icon={alertIcon(keys)} zIndexOffset={500}
+                    eventHandlers={{ click: () => pick(r) }}>
+                    <LTooltip direction="auto" offset={[0, -24]} className="agro-alert-tip">
+                      <div dangerouslySetInnerHTML={{ __html: `<b>${esc(r.field.name)}</b><br/>${lines.join('<br/>')}` }} />
+                    </LTooltip>
+                  </Marker>
+                );
               })}
             </MapContainer>
           ) : (
@@ -428,8 +491,13 @@ export default function FieldMapPanel({ fieldOverview = [], allFields = [], sele
               {geo ? 'These fields have no shapes yet. Link them to Agro_Structures (Farm_Code) or draw them in Zones & Sites → Map.' : 'Loading map…'}
             </Typography>
           )}
-          {shaped.length > 0 && <BasemapSwitcher value={basemap} onChange={setBasemap} side="right" />}
-          {shaped.length > 0 && (
+          {allShaped.length > 0 && shaped.length === 0 && (
+            <Box sx={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, px: 3, py: 1.5, borderRadius: 2, bgcolor: 'rgba(255,255,255,0.95)', boxShadow: 1, fontSize: 12.5, maxWidth: '70%', textAlign: 'center' }}>
+              The filtered fields have no drawn shape. Link them by Farm_Code or draw them in Zones &amp; Sites → Map.
+            </Box>
+          )}
+          {allShaped.length > 0 && <BasemapSwitcher value={basemap} onChange={setBasemap} side="right" />}
+          {allShaped.length > 0 && (
             <Box onMouseDown={(e) => e.stopPropagation()} onWheel={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}
               sx={{ position: 'absolute', top: 12, right: 56, zIndex: 1001, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1.5 }}>
               <ButtonBase onClick={() => setLayersOpen((o) => !o)} aria-expanded={layersOpen} aria-label="Map layers" title="Map layers"
@@ -472,7 +540,9 @@ export default function FieldMapPanel({ fieldOverview = [], allFields = [], sele
             })}
             {cfg.show.alerts && (
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, fontSize: 12, color: 'text.secondary' }}>
-                <b style={{ color: '#6a46b8' }}>P</b> PHI <b style={{ color: '#c0392b', marginLeft: 4 }}>!</b> Pest <b style={{ color: '#6a46b8', marginLeft: 4 }}>S</b> Sprayed
+                {['phi', 'pest', 'spray'].map((k) => (
+                  <Box key={k} component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, mr: 1.5 }}><AlertGlyph k={k} size={16} />{ALERTS[k].short}</Box>
+                ))}
               </Box>
             )}
           </Box>
