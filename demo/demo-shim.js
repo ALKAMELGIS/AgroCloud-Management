@@ -256,7 +256,11 @@
       var oFields=fields.filter(function(f){return oAreas.indexOf(f.farmAreaId)>=0;});
       var oRnd=function(s){var h=2166136261;for(var i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return ((h>>>0)%10000)/10000;};
       var oDay=new Date(); oDay.setUTCHours(0,0,0,0); oDay=new Date(oDay.getTime()-86400000).toISOString().slice(0,10);
-      return ok(oFields.map(function(f,fi){
+      var oSample=oFields.filter(function(f){return !/^imp/.test(f.id);}), oImported=oFields.filter(function(f){return /^imp/.test(f.id);});
+      /* Fields imported from Agro_Structures have no readings in the demo: they show as "No data". */
+      var noData=oImported.map(function(f){ var a=areas.filter(function(x){return x.id===f.farmAreaId;})[0];
+        return {id:f.id,name:f.name,field_type_name:a?a.name:'Field',crop_name:null,current_crop_id:null,latest_ecph:null,active_phi_count:0,nearest_phi_end:null,active_phi_details:[],latest_scouting:null,spray_today:null,harvest_this_week:0,water_this_week:0}; });
+      return ok(oSample.map(function(f,fi){
         var r=function(k){return oRnd(f.id+oDay+k);}, ecB=2.1+fi*0.11, phB=6.05+fi*0.09+(fi===0?0.9:0);
         var nm=String(f.name||'').toUpperCase();
         return {id:f.id,name:f.name,field_type_name:/^GH/.test(nm)?'Greenhouse':/^NH/.test(nm)?'Nethouse':/PIVOT/.test(nm)?'Pivot':'Open field',
@@ -266,13 +270,13 @@
           latest_scouting:fi===3?{id:'sc1',pest:'Whitefly',pct:12,status:'open'}:null,
           spray_today:fi===1?{id:'sp1',product:'Movento 150 OD'}:null,
           harvest_this_week:Math.round(1800+fi*260+r('h')*600),water_this_week:+(420+fi*35+r('w')*80).toFixed(1)};
-      }));
+      }).concat(noData));
     }
     // Demo-only sample readings so the form dashboards have something to show. The real server never sees these.
     if(method==='GET'&&(path==='/ecph'||path==='/harvests'||path==='/fertigation'||path==='/irrigation-drip')){
       if(Number(q.page||1)>1) return ok([],{meta:{total:0,page:Number(q.page),totalPages:1}});
       var dSite=q.site_id, dAreas=areas.filter(function(a){return !dSite||a.siteId===dSite;}).map(function(a){return a.id;});
-      var dFields=fields.filter(function(f){return dAreas.indexOf(f.farmAreaId)>=0&&(!q.field_id||f.id===q.field_id);});
+      var dFields=fields.filter(function(f){return !/^imp/.test(f.id)&&dAreas.indexOf(f.farmAreaId)>=0&&(!q.field_id||f.id===q.field_id);});
       var dRnd=function(s){var h=2166136261;for(var i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return ((h>>>0)%10000)/10000;};
       var dEnd=new Date(); dEnd.setUTCHours(0,0,0,0); var dOut=[];
       for(var dd=55;dd>=1;dd--){
@@ -474,10 +478,21 @@
     var h=COUNTRY_BOX.filter(function(b){ var q=b[1]; return x>=q[0]&&x<=q[2]&&y>=q[1]&&y<=q[3]; })[0]; return h?h[0]:null; }
   /* Every field that has ZONE_ID + Farm_Code gets its shape from Agro_Structures (no new fields):
      the link is the Farm_Code, the drawing is saved in the system and kept if edited here. */
-  var LINKED=null;
+  var LINKED=null, AUTO_KEY='agro_demo_autoimport_v1';
   function autoLink(){
     if(LINKED) return LINKED;
     LINKED=liveLayer().then(function(fc){
+      /* First run on this device: import the whole Agro_Structures layer (every feature, drawn), like
+         "Import from ArcGIS". Fields link by ZONE_ID + Farm_Code; the sample fields keep their readings. */
+      var done=null; try{ done=localStorage.getItem(AUTO_KEY); }catch(e){}
+      if(!done&&fc&&(fc.features||[]).length){
+        return Promise.resolve(typeof liveMeta==='function'?liveMeta():null).catch(function(){return null;}).then(function(meta){
+          try{ var rep=demoImport(fc,meta||DEMO_META,{buildParents:true}); localStorage.setItem(AUTO_KEY,JSON.stringify({at:new Date().toISOString(),features:rep.features,shapes:rep.shapes.imported,source:fc._live?'live':'copy'})); }catch(e){}
+          return fc;
+        });
+      }
+      return fc;
+    }).then(function(fc){
       var fs=(fc&&fc.features)||[]; if(!fs.length) return;
       var by={}; fs.forEach(function(f){ var p=f.properties||{}, z=String(p.ZONE_ID||'').trim().toUpperCase(), c=String(p.Farm_Code||'').trim().toUpperCase(); if(z&&c&&f.geometry) by[z+'|'+c]=f; });
       var st=geoStore(), now=new Date().toISOString(), n=0;
@@ -491,7 +506,7 @@
       if(n) geoSave(st);
     }).catch(function(){});
     /* Never hold pages up for long: without the layer, fields simply show no shape yet. */
-    LINKED=Promise.race([LINKED,new Promise(function(r){ setTimeout(r,8000); })]);
+    LINKED=Promise.race([LINKED,new Promise(function(r){ setTimeout(r,20000); })]);
     return LINKED;
   }
   function demoImport(fc,meta,opt){
@@ -607,6 +622,9 @@
       return Promise.all([liveLayer(),liveMeta()]).then(function(r){ var fc=r[0]||EMPTYFC, rp=demoImport(fc,r[1]||DEMO_META,ib); rp.layer.source=fc._live?'live':fc._snapshot?'copy':'none'; return jsonRes(ok(rp)); });
     }
     if(isApi(url)&&/\/geo\/layers(\?|$)/.test(url)&&(!init||!init.method||init.method==='GET')){
+      return autoLink().then(function(){ return jsonRes(body(url,'GET',null)); });
+    }
+    if(isApi(url)&&/\/(countries|sites|farm-areas|ipm\/field-overview|geo\/model)(\?|$)/.test(url)&&(!init||!init.method||init.method==='GET')){
       return autoLink().then(function(){ return jsonRes(body(url,'GET',null)); });
     }
     if(isApi(url)&&/\/fields(\?|$)/.test(url)&&(!init||!init.method||init.method==='GET')){

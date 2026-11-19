@@ -248,7 +248,8 @@ export default function FieldMapPanel({ fieldOverview = [], allFields = [], sele
                 onEachFeature={(f, lyr) => {
                   const r = byId[f.properties.id];
                   const tip = `<b>${r.field.name}</b><br/>EC out ${Number.isFinite(r.ec.value) ? r.ec.value.toFixed(2) : '–'} · pH out ${Number.isFinite(r.ph.value) ? r.ph.value.toFixed(1) : '–'}<br/>${WORD[r.status]}`;
-                  if (layers.labels) lyr.bindTooltip(`${r.field.name} · ${valueText(r)}`, { permanent: true, direction: 'center', className: 'agro-field-label' });
+                  // Permanent labels for fields with readings; the rest show theirs on hover (keeps a busy site readable).
+                  if (layers.labels && (r.status !== 'none' || r.field.id === selectedFieldId)) lyr.bindTooltip(`${r.field.name} · ${valueText(r)}`, { permanent: true, direction: 'center', className: 'agro-field-label' });
                   else lyr.bindTooltip(`${r.field.name} · ${valueText(r)}`, { sticky: true, className: 'agro-field-label' });
                   lyr.bindPopup(tip);
                   lyr.on('mouseover', () => setHover(r.field.id));
