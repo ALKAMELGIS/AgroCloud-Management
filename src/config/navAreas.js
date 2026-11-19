@@ -8,7 +8,9 @@ import {
   FIELD_STAFF_MANAGER_ROLES, INTEGRATION_ADMIN_ROLES, SYSTEM_ADMIN_ROLES, MANPOWER_COST_VIEW_ROLES,
 } from '../utils/roleAccess';
 
-export const drawerWidth = 260;
+export const drawerWidth = 272;
+/** Desktop sidebar folded to icons. */
+export const RAIL_WIDTH = 76;
 
 export const NAV_AREAS = [
   { id: 'operations', label: 'Operations' },
@@ -346,4 +348,35 @@ export function resolveNavArea(pathname, user, currentNavArea) {
   if (currentNavArea && visible.includes(currentNavArea)) return currentNavArea;
   if (visible.includes(DEFAULT_NAV_AREA)) return DEFAULT_NAV_AREA;
   return visible[0] || DEFAULT_NAV_AREA;
+}
+
+/**
+ * Option C shell: one sidebar, every section the user may open, grouped by job
+ * (no top area tabs). Role rules come from the original sections.
+ */
+const SHELL_GROUPS = [
+  { label: 'Overview', from: [GENERAL_SECTION], defaultOpen: true },
+  { label: 'Monitor', from: [DASHBOARDS_SECTION, FIELD_WEATHER_SECTION], defaultOpen: true },
+  { label: 'Record', from: [DATA_ENTRY_SECTION], defaultOpen: true },
+  { label: 'Crop protection', from: [IPM_SECTION, AUDIT_SECTION] },
+  { label: 'Reports', from: [REPORTS_SECTION] },
+  { label: 'Team', from: [WORKFORCE_SECTION] },
+  { label: 'Setup', from: [MANAGEMENT_SECTION, INTERNSHIP_SECTION, ADMIN_SECTION] },
+];
+
+export function getShellSections(user) {
+  const seen = new Set();
+  return SHELL_GROUPS.map((g) => {
+    const items = [];
+    g.from.forEach((section) => {
+      if (section !== GENERAL_SECTION && !sectionAllowedForUser(section, user)) return;
+      const allowed = filterSectionForUser(section, user);
+      (allowed?.items || []).forEach((item) => {
+        if (seen.has(item.path)) return;
+        seen.add(item.path);
+        items.push(item);
+      });
+    });
+    return { label: g.label, defaultOpen: !!g.defaultOpen, items };
+  }).filter((g) => g.items.length > 0);
 }

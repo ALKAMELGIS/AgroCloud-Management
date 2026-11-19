@@ -5,9 +5,6 @@ import {
   List,
   ListItem,
   ListItemButton,
-  ListItemIcon,
-  ListItemText,
-  Divider,
   Box,
   Typography,
   useTheme,
@@ -70,7 +67,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useActiveSite } from '../contexts/ActiveSiteContext';
 import { useActiveSeason } from '../contexts/ActiveSeasonContext';
 import { useActAsOrg } from '../contexts/ActAsOrgContext';
-import { drawerWidth, getSidebarSections } from '../config/navAreas';
+import { drawerWidth, getShellSections, RAIL_WIDTH } from '../config/navAreas';
 import SiteZoneSelect from './SiteZoneSelect';
 import { INSIGHT_PATHS } from './InsightsMenu';
 import usePhiAuditBadgeCount from '../hooks/usePhiAuditBadgeCount';
@@ -168,12 +165,15 @@ function sentenceCase(text) {
   }).join(' ');
 }
 
+// eslint-disable-next-line no-unused-vars
 function Sidebar({ open, mobileOpen, onMobileClose, activeNavArea }) {
   const navigate = useNavigate();
   const location = useLocation();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'), { noSsr: true });
   const isDesktop = !isMobile;
+  // Desktop "closed" is a slim icon rail, not a hidden menu (Option C shell).
+  const rail = isDesktop && !open;
   const L = useShellLabel();
   const { user, logout } = useAuth();
   const notify = useNotification();
@@ -250,7 +250,7 @@ function Sidebar({ open, mobileOpen, onMobileClose, activeNavArea }) {
     || endDate > farmToday;
 
   // Summary & Contents and Daily Brief live behind the top-bar "?" menu.
-  const sections = getSidebarSections(user, activeNavArea)
+  const sections = getShellSections(user)
     .map((section) => ({ ...section, items: section.items.filter((item) => !INSIGHT_PATHS.has(item.path)) }))
     .filter((section) => section.items.length > 0);
   const phiAuditBadgeCount = usePhiAuditBadgeCount();
@@ -278,21 +278,22 @@ function Sidebar({ open, mobileOpen, onMobileClose, activeNavArea }) {
   const sectionHasActive = (items) => items.some((item) => isActive(item.path));
 
   // Section groups fold like the reference sidebar; the open/closed choice is remembered per browser.
-  const [collapsed, setCollapsed] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('agrocloud_nav_collapsed') || '{}') || {}; } catch { return {}; }
+  const [openGroups, setOpenGroups] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('agrocloud_nav_open_v2') || '{}') || {}; } catch { return {}; }
   });
   useEffect(() => {
-    try { localStorage.setItem('agrocloud_nav_collapsed', JSON.stringify(collapsed)); } catch { /* private mode */ }
-  }, [collapsed]);
-  const toggleSection = (label) => setCollapsed((c) => ({ ...c, [label]: !c[label] }));
+    try { localStorage.setItem('agrocloud_nav_open_v2', JSON.stringify(openGroups)); } catch { /* private mode */ }
+  }, [openGroups]);
+  const groupOpen = (section) => (openGroups[section.label] ?? section.defaultOpen);
+  const toggleSection = (section) => setOpenGroups((c) => ({ ...c, [section.label]: !groupOpen(section) }));
   const openSearch = () => {
     if (isMobile) onMobileClose();
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }));
   };
 
   const drawerContent = (
-    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', bgcolor: 'background.paper' }}>
-      <Box sx={{ px: 4, height: 60, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 2.5 }}>
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', bgcolor: (t) => (t.palette.mode === 'dark' ? 'background.paper' : '#fbfbf8') }}>
+      <Box sx={{ px: rail ? 0 : 4, height: 64, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: rail ? 'center' : 'flex-start', gap: 3 }}>
         <input
           ref={logoInputRef}
           type="file"
@@ -320,9 +321,10 @@ function Sidebar({ open, mobileOpen, onMobileClose, activeNavArea }) {
             role={canUploadLogo ? 'button' : undefined}
             aria-label={canUploadLogo ? 'Upload organization logo' : undefined}
             sx={{
-              width: 34,
-              height: 34,
-              borderRadius: 1.25,
+              width: 36,
+              height: 36,
+              borderRadius: '10px',
+              boxShadow: '0 0 0 1px rgba(22,40,30,0.08)',
               bgcolor: logoUploading ? 'primary.main' : logoUrl ? 'transparent' : '#fff',
               display: 'flex',
               alignItems: 'center',
@@ -347,7 +349,7 @@ function Sidebar({ open, mobileOpen, onMobileClose, activeNavArea }) {
             )}
           </Box>
         </Tooltip>
-        <Box>
+        <Box sx={{ display: rail ? 'none' : 'block', minWidth: 0 }}>
           <Typography sx={{ fontWeight: 600, fontSize: '0.9375rem', color: 'text.primary', letterSpacing: '-0.015em', lineHeight: 1.2 }}>
             {L('Al Maha Farm')}
           </Typography>
@@ -357,9 +359,7 @@ function Sidebar({ open, mobileOpen, onMobileClose, activeNavArea }) {
         </Box>
       </Box>
 
-      <Divider />
-
-      {isSuperAdmin && (
+      {isSuperAdmin && !rail && (
         <Box sx={{ px: 4, pt: 4, pb: 1 }}>
           <TextField
             select
@@ -395,8 +395,8 @@ function Sidebar({ open, mobileOpen, onMobileClose, activeNavArea }) {
         </Box>
       )}
 
-      {(countries || []).some((c) => c.sites?.length) || !hasSiteAssignment ? (
-        <Box sx={{ px: 3, pt: 3, pb: 3, borderBottom: '1px solid', borderColor: 'divider' }}>
+      {!rail && ((countries || []).some((c) => c.sites?.length) || !hasSiteAssignment) ? (
+        <Box sx={{ mx: 3, mb: 1, p: 3, borderRadius: '12px', bgcolor: (t) => (t.palette.mode === 'dark' ? 'rgba(255,255,255,0.04)' : '#ffffff'), boxShadow: (t) => (t.palette.mode === 'dark' ? 'none' : '0 1px 2px rgba(22,40,30,0.06), 0 0 0 1px rgba(22,40,30,0.06)') }}>
           <SiteZoneSelect
             countries={countries}
             value={activeSiteId}
@@ -496,22 +496,31 @@ function Sidebar({ open, mobileOpen, onMobileClose, activeNavArea }) {
         </Box>
       ) : null}
 
-      <Box component="nav" aria-label="Main navigation" sx={{ flexGrow: 1, overflow: 'auto', pt: 2.5, pb: 3, px: 3, overscrollBehavior: 'contain', scrollbarWidth: 'thin' }}>
-        <ListItemButton
-          onClick={openSearch}
-          sx={{ minHeight: 34, borderRadius: 1.5, px: 2.5, py: 1.5, mb: 2, gap: 2.5, color: 'text.secondary', border: '1px solid', borderColor: 'divider' }}
-        >
-          <TraceIcon sx={{ fontSize: 16 }} />
-          <Typography sx={{ fontSize: '0.8125rem', flex: 1 }}>{L('Search')}</Typography>
-        </ListItemButton>
+      <Box component="nav" aria-label="Main navigation" sx={{ flexGrow: 1, overflow: 'auto', overflowX: 'hidden', pt: 3, pb: 3, px: rail ? 2.5 : 3, overscrollBehavior: 'contain', scrollbarWidth: 'thin' }}>
+        <Tooltip title={rail ? L('Search') : ''} placement="right">
+          <ListItemButton
+            onClick={openSearch}
+            aria-label={L('Search')}
+            sx={{ minHeight: 36, borderRadius: '9px', px: rail ? 0 : 2.5, justifyContent: rail ? 'center' : 'flex-start', mb: 4, gap: 2.5, color: 'text.secondary', bgcolor: (t) => (t.palette.mode === 'dark' ? 'rgba(255,255,255,0.04)' : '#ffffff'), boxShadow: '0 0 0 1px rgba(22,40,30,0.08)', '&:hover .agro-kbd': { opacity: 1 } }}
+          >
+            <TraceIcon sx={{ fontSize: 17 }} />
+            {!rail && <Typography sx={{ fontSize: '0.8125rem', flex: 1 }}>{L('Search')}</Typography>}
+            {!rail && (
+              <Box component="kbd" className="agro-kbd" sx={{ font: "500 10px 'IBM Plex Mono', monospace", px: 1.25, py: 0.25, borderRadius: '4px', border: '1px solid', borderColor: 'divider', color: 'text.secondary', opacity: 0.8 }}>Ctrl K</Box>
+            )}
+          </ListItemButton>
+        </Tooltip>
         {sections.map((section) => {
           const hasActive = sectionHasActive(section.items);
-          const isOpen = hasActive || !collapsed[section.label];
+          const isOpen = rail || hasActive || groupOpen(section);
 
           return (
-            <Box key={section.label} sx={{ mb: 2.5 }}>
+            <Box key={section.label} sx={{ mb: rail ? 2 : 5 }}>
+              {rail ? (
+                <Box sx={{ height: 1, bgcolor: 'divider', mx: 2, mb: 2, display: section === sections[0] ? 'none' : 'block' }} />
+              ) : (
               <ButtonBase
-                onClick={() => toggleSection(section.label)}
+                onClick={() => toggleSection(section)}
                 aria-expanded={isOpen}
                 disabled={hasActive}
                 sx={{ width: '100%', justifyContent: 'flex-start', gap: 1, px: 2.5, py: 1, borderRadius: 1, '&:hover': { bgcolor: 'action.hover' } }}
@@ -521,19 +530,20 @@ function Sidebar({ open, mobileOpen, onMobileClose, activeNavArea }) {
                   sx={{
                     flex: 1,
                     textAlign: 'start',
-                    fontSize: '0.75rem',
+                    fontSize: '0.71875rem',
                     fontWeight: 600,
                     textTransform: 'none',
-                    letterSpacing: 0,
-                    color: hasActive ? 'text.primary' : 'text.secondary',
+                    letterSpacing: '0.01em',
+                    color: hasActive ? 'text.primary' : 'text.disabled',
                   }}
                 >
                   {sentenceCase(L(section.label))}
                 </Typography>
                 {!hasActive && (
-                  <ChevronIcon sx={{ fontSize: 16, color: 'text.secondary', transition: 'transform 200ms', transform: isOpen ? 'rotate(90deg)' : (theme.direction === 'rtl' ? 'rotate(180deg)' : 'none') }} />
+                  <ChevronIcon sx={{ fontSize: 16, color: 'text.disabled', transition: 'transform 200ms', transform: isOpen ? 'rotate(90deg)' : (theme.direction === 'rtl' ? 'rotate(180deg)' : 'none') }} />
                 )}
               </ButtonBase>
+              )}
               <Collapse in={isOpen} timeout={200}>
               <List disablePadding sx={{ mt: 0.5 }}>
                 {section.items.map((item) => {
@@ -547,6 +557,7 @@ function Sidebar({ open, mobileOpen, onMobileClose, activeNavArea }) {
                       onNavigate={handleNavigation}
                       badgeCount={badge?.count ?? 0}
                       badgeColor={badge?.color ?? 'error'}
+                      rail={rail}
                     />
                   );
                 })}
@@ -557,11 +568,13 @@ function Sidebar({ open, mobileOpen, onMobileClose, activeNavArea }) {
         })}
       </Box>
 
-      <Box sx={{ px: 3, py: 2, borderTop: '1px solid', borderColor: 'divider' }}>
-        <ListItemButton onClick={() => logout && logout()} sx={{ minHeight: 34, borderRadius: 1.5, px: 2.5, py: 1.5, gap: 2.5, color: 'text.secondary' }}>
-          <LogoutIcon sx={{ fontSize: 16 }} />
-          <Typography sx={{ fontSize: '0.8125rem' }}>{L('Sign out')}</Typography>
-        </ListItemButton>
+      <Box sx={{ px: rail ? 2.5 : 3, py: 3, borderTop: '1px solid', borderColor: 'divider' }}>
+        <Tooltip title={rail ? L('Sign out') : ''} placement="right">
+          <ListItemButton onClick={() => logout && logout()} aria-label={L('Sign out')} sx={{ minHeight: 36, borderRadius: '9px', px: rail ? 0 : 2.5, justifyContent: rail ? 'center' : 'flex-start', gap: 2.5, color: 'text.secondary' }}>
+            <LogoutIcon sx={{ fontSize: 17 }} />
+            {!rail && <Typography sx={{ fontSize: '0.8125rem' }}>{L('Sign out')}</Typography>}
+          </ListItemButton>
+        </Tooltip>
       </Box>
     </Box>
   );
@@ -588,11 +601,11 @@ function Sidebar({ open, mobileOpen, onMobileClose, activeNavArea }) {
 
       {isDesktop && (
       <Drawer
-        variant="persistent"
-        open={open}
+        variant="permanent"
+        open
         sx={{
           display: { xs: 'none', md: 'block' },
-          width: open ? drawerWidth : 0,
+          width: open ? drawerWidth : RAIL_WIDTH,
           flexShrink: 0,
           '& .MuiDrawer-paper': {
             width: drawerWidth,
@@ -601,13 +614,14 @@ function Sidebar({ open, mobileOpen, onMobileClose, activeNavArea }) {
               easing: theme.transitions.easing.sharp,
               duration: theme.transitions.duration.enteringScreen,
             }),
+            borderRight: '1px solid rgba(22,40,30,0.07)',
             ...(!open && {
               overflowX: 'hidden',
               transition: theme.transitions.create('width', {
                 easing: theme.transitions.easing.sharp,
                 duration: theme.transitions.duration.leavingScreen,
               }),
-              width: 0,
+              width: RAIL_WIDTH,
             }),
           },
         }}
@@ -700,82 +714,54 @@ function Sidebar({ open, mobileOpen, onMobileClose, activeNavArea }) {
   );
 }
 
-function SidebarItem({ item, active, onNavigate, badgeCount = 0, badgeColor = 'error' }) {
+function SidebarItem({ item, active, onNavigate, badgeCount = 0, badgeColor = 'error', rail = false }) {
+  const button = (
+    <ListItemButton
+      onClick={() => onNavigate(item.path)}
+      aria-current={active ? 'page' : undefined}
+      aria-label={rail ? item.text : undefined}
+      sx={{
+        position: 'relative',
+        minHeight: 34,
+        borderRadius: '8px',
+        px: rail ? 0 : 2.5,
+        py: 1,
+        gap: 2.75,
+        justifyContent: rail ? 'center' : 'flex-start',
+        color: active ? 'text.primary' : 'text.secondary',
+        transition: 'background-color 150ms ease, color 150ms ease, box-shadow 150ms ease',
+        ...(active ? {
+          bgcolor: (t) => (t.palette.mode === 'dark' ? 'rgba(255,255,255,0.07)' : '#ffffff'),
+          boxShadow: (t) => (t.palette.mode === 'dark' ? 'none' : '0 1px 2px rgba(22,40,30,0.08), 0 0 0 1px rgba(22,40,30,0.05)'),
+          '&:hover': { bgcolor: (t) => (t.palette.mode === 'dark' ? 'rgba(255,255,255,0.09)' : '#ffffff') },
+        } : {
+          '&:hover': { bgcolor: 'rgba(22,40,30,0.045)', color: 'text.primary' },
+        }),
+      }}
+    >
+      <Box component="span" sx={{ display: 'inline-flex', '& .MuiSvgIcon-root': { fontSize: 17, color: active ? 'primary.main' : 'inherit' } }}>
+        {badgeCount > 0 && rail ? (
+          <Badge variant="dot" color={badgeColor}>{item.icon}</Badge>
+        ) : item.icon}
+      </Box>
+      {!rail && (
+        <Typography component="span" sx={{ flex: 1, minWidth: 0, fontSize: '0.8125rem', fontWeight: active ? 600 : 450, letterSpacing: '-0.005em', lineHeight: 1.35, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', overflowWrap: 'anywhere' }}>
+          {item.text}
+        </Typography>
+      )}
+      {!rail && badgeCount > 0 && (
+        <Box component="span" sx={{ minWidth: 20, height: 20, px: 1.5, boxSizing: 'border-box', borderRadius: '10px', display: 'inline-grid', placeItems: 'center', fontSize: 11, fontWeight: 600, bgcolor: badgeColor === 'success' ? 'rgba(22,67,46,0.09)' : 'rgba(180,35,24,0.1)', color: badgeColor === 'success' ? 'primary.dark' : 'error.main' }}>
+          {badgeCount > 99 ? '99+' : badgeCount}
+        </Box>
+      )}
+    </ListItemButton>
+  );
   return (
-    <ListItem disablePadding sx={{ mb: 0.25 }}>
-      <ListItemButton
-        onClick={() => onNavigate(item.path)}
-        selected={active}
-        aria-current={active ? 'page' : undefined}
-        sx={{
-          position: 'relative',
-          minHeight: 34,
-          borderRadius: 1.5,
-          px: 2.5,
-          py: 1.5,
-          gap: 0.5,
-          '&.Mui-selected': {
-            bgcolor: (t) => (t.palette.mode === 'dark' ? 'rgba(76,178,126,0.12)' : 'rgba(31,122,77,0.07)'),
-          },
-          '&.Mui-selected:hover': {
-            bgcolor: (t) => (t.palette.mode === 'dark' ? 'rgba(76,178,126,0.18)' : 'rgba(31,122,77,0.11)'),
-          },
-          '&::before': {
-            content: '""',
-            position: 'absolute',
-            left: -12,
-            top: 9,
-            bottom: 9,
-            width: 3,
-            borderRadius: '0 3px 3px 0',
-            bgcolor: 'primary.main',
-            opacity: active ? 1 : 0,
-            transform: active ? 'scaleY(1)' : 'scaleY(0.4)',
-            transition: 'opacity 200ms ease, transform 200ms ease',
-          },
-        }}
-      >
-        <ListItemIcon
-          sx={{
-            minWidth: 28,
-            '& .MuiSvgIcon-root': {
-              fontSize: 17,
-              color: active ? 'primary.main' : 'text.secondary',
-              transition: 'color 160ms ease',
-            },
-          }}
-        >
-          {badgeCount > 0 ? (
-            <Badge badgeContent={badgeCount} color={badgeColor} max={99}>
-              {item.icon}
-            </Badge>
-          ) : (
-            item.icon
-          )}
-        </ListItemIcon>
-        <ListItemText
-          primary={item.text}
-          primaryTypographyProps={{
-            fontSize: '0.8125rem',
-            fontWeight: active ? 600 : 450,
-            color: active ? 'text.primary' : 'text.secondary',
-            letterSpacing: '-0.005em',
-            // Long names (common in Arabic) wrap to a second line instead of being cut off.
-            sx: {
-              lineHeight: 1.35,
-              display: '-webkit-box',
-              WebkitLineClamp: 2,
-              WebkitBoxOrient: 'vertical',
-              overflow: 'hidden',
-              overflowWrap: 'anywhere',
-            },
-          }}
-          sx={{ my: 0 }}
-        />
-      </ListItemButton>
+    <ListItem disablePadding sx={{ mb: 0.5 }}>
+      {rail ? <Tooltip title={item.text} placement="right">{button}</Tooltip> : button}
     </ListItem>
   );
 }
 
 export default Sidebar;
-export { drawerWidth };
+export { drawerWidth, RAIL_WIDTH };

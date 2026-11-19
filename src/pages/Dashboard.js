@@ -132,6 +132,8 @@ function Dashboard() {
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 2.5 }}>
         <PageTitle>Analytics Dashboard</PageTitle>
         <Box sx={{ flex: 1 }} />
+        {/* Site and season live in the sidebar on desktop; phones keep them here. */}
+        <Box sx={{ display: { xs: 'flex', md: 'none' }, gap: 1, flexWrap: 'wrap' }}>
         {hasSiteAssignment && (
           <SiteZoneSelect
             variant="chip"
@@ -155,6 +157,7 @@ function Dashboard() {
             ))}
           </TextField>
         )}
+        </Box>
       </Box>
 
       {readOnly && <ReadOnlyBanner message="View only — dashboard data is read-only for your role." />}

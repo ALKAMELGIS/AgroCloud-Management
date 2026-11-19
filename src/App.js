@@ -30,6 +30,7 @@ import PageContextBar from './components/PageContextBar';
 import MobileBottomNav, { MOBILE_NAV_HEIGHT } from './components/MobileBottomNav';
 import {
   drawerWidth,
+  RAIL_WIDTH,
   DEFAULT_NAV_AREA,
   getVisibleNavAreas,
   resolveNavArea,
@@ -376,7 +377,8 @@ function AuthenticatedLayout() {
   const { activeSeason, isSeasonReadOnly } = useActiveSeason();
   const themeMUI = useTheme();
   const visibleNavAreas = getVisibleNavAreas(user);
-  const showNavTabs = visibleNavAreas.length > 1;
+  // Option C shell: one grouped sidebar, no area tabs row.
+  const showNavTabs = false && visibleNavAreas.length > 1;
   const { isMobile, isTablet, isPhone, topBarHeight, appBarHeight, contentPadding, contentMinHeight } = useAppLayout({ showNavTabs });
   const chromeValue = useMemo(() => ({ showNavTabs }), [showNavTabs]);
   const prevTablet = useRef(isTablet);
@@ -438,8 +440,13 @@ function AuthenticatedLayout() {
         position="fixed"
         elevation={0}
         sx={{
-          width: { md: `calc(100% - ${sidebarOpen ? drawerWidth : 0}px)` },
-          ml: { md: `${sidebarOpen ? drawerWidth : 0}px` },
+          width: { md: `calc(100% - ${sidebarOpen ? drawerWidth : RAIL_WIDTH}px)` },
+          ml: { md: `${sidebarOpen ? drawerWidth : RAIL_WIDTH}px` },
+          bgcolor: (t) => (t.palette.mode === 'dark' ? t.palette.background.default : 'rgba(246,246,242,0.88)'),
+          backdropFilter: 'saturate(1.4) blur(10px)',
+          color: 'text.primary',
+          borderBottom: '1px solid',
+          borderColor: 'divider',
           pt: 'env(safe-area-inset-top, 0px)',
           transition: themeMUI.transitions.create(['width', 'margin'], {
             easing: themeMUI.transitions.easing.sharp,
@@ -508,7 +515,7 @@ function AuthenticatedLayout() {
             md: `calc(${themeMUI.spacing(contentPadding.md)} + env(safe-area-inset-bottom, 0px))`,
             lg: `calc(${themeMUI.spacing(contentPadding.lg)} + env(safe-area-inset-bottom, 0px))`,
           },
-          width: { md: `calc(100% - ${sidebarOpen ? drawerWidth : 0}px)` },
+          width: { md: `calc(100% - ${sidebarOpen ? drawerWidth : RAIL_WIDTH}px)` },
           transition: themeMUI.transitions.create(['width', 'margin'], {
             easing: themeMUI.transitions.easing.sharp,
             duration: themeMUI.transitions.duration.leavingScreen,
