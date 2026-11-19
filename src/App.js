@@ -18,6 +18,7 @@ import OfflineBanner from './components/OfflineBanner';
 import InstallPrompt from './components/InstallPrompt';
 import OfflineQueueBanner from './components/OfflineQueueBanner';
 import AppUpdateBanner from './components/AppUpdateBanner';
+import SiteSeasonSwitcher from './components/SiteSeasonSwitcher';
 import CommandPalette from './components/CommandPalette';
 import NotificationCenter from './components/NotificationCenter';
 import { ConfirmHost } from './components/ConfirmDialog';
@@ -466,6 +467,7 @@ function AuthenticatedLayout() {
             <MenuIcon fontSize="small" />
           </IconButton>
 
+          <SiteSeasonSwitcher />
           <SearchBar />
 
           <Box sx={{ flexGrow: 1 }} />
