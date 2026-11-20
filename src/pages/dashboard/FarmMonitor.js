@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box, Card, Chip, Grid, ToggleButton, ToggleButtonGroup,
-  Typography, Tooltip, IconButton, CircularProgress, Popover, useMediaQuery,
+  Typography, Tooltip, IconButton, CircularProgress, Popover, useMediaQuery, InputBase,
 } from '@mui/material';
 import { keyframes } from '@mui/system';
 import {
@@ -13,6 +13,7 @@ import {
   ChevronRightRounded as ChevronIcon,
   UnfoldMoreRounded as UnfoldIcon,
   CheckRounded as CheckIcon,
+  SearchRounded as SearchIcon,
 } from '@mui/icons-material';
 import { StatusChip } from '../../components/dashboard/clearCharts';
 import { STATUS } from '../../theme/formIdentity';
@@ -165,65 +166,99 @@ function groupSummary(rows, withReadings) {
   return parts.join(' · ');
 }
 
-const COLS = 'minmax(88px,120px) minmax(0,1fr) 80px 80px minmax(120px,180px) 130px';
+const COLS = '84px minmax(0,1fr) 64px 56px minmax(96px,150px)';
+const QUICK = [
+  ['All', () => true],
+  ['EC', (r) => r.ec.status === 'out' || r.ec.status === 'warn'],
+  ['pH', (r) => r.ph.status === 'out' || r.ph.status === 'warn'],
+  ['Pest', (r) => !!(r.field.latest_scouting?.id && r.field.latest_scouting?.status !== 'resolved')],
+  ['PHI', (r) => r.field.active_phi_count > 0],
+];
 
-/** Desktop: one droplist per status. Out of range is open; the rest stay closed until needed. */
+/** Desktop: one button per status in a row; each opens a floating droplist, so the page never grows. */
 function FieldStatusGroups({ rows, dateTo, selectedId, onPick }) {
-  const firstKey = (GROUPS.find((g) => rows.some((r) => r.overall === g.key)) || GROUPS[0]).key;
-  const [open, setOpen] = useState(() => ({ [firstKey]: true }));
+  const [open, setOpen] = useState(null); // { key, el }
+  const [q, setQ] = useState('');
+  const [quick, setQuick] = useState('All');
   const num = (m, d) => (Number.isFinite(m.value) ? m.value.toFixed(d) : '–');
   const tone = (m) => (m.status === 'out' ? STATUS.out.color : m.status === 'warn' ? STATUS.warn.color : 'text.primary');
+  const groups = GROUPS.map((g) => ({ ...g, list: rows.filter((r) => r.overall === g.key) })).filter((g) => g.list.length);
+  const cur = open ? groups.find((g) => g.key === open.key) : null;
+  const test = (QUICK.find(([k]) => k === quick) || QUICK[0])[1];
+  const shown = cur ? cur.list.filter((r) => test(r) && (!q || `${r.field.name} ${r.crop}`.toLowerCase().includes(q.toLowerCase()))) : [];
+  const close = () => setOpen(null);
   return (
-    <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: '12px', overflow: 'hidden' }}>
-      {GROUPS.map((g) => {
-        const list = rows.filter((r) => r.overall === g.key);
-        if (!list.length) return null;
-        const isOpen = !!open[g.key];
-        const summary = groupSummary(list, g.key === 'out' || g.key === 'warn');
-        const chips = list.slice(0, 3).map((r) => r.field.name);
-        return (
-          <Box key={g.key} sx={{ '& + &': { borderTop: '1px solid', borderColor: 'divider' } }}>
-            <Box component="button" type="button" aria-expanded={isOpen} onClick={() => setOpen((o) => ({ ...o, [g.key]: !isOpen }))}
-              sx={{ width: '100%', minHeight: 52, display: 'flex', alignItems: 'center', gap: 3, px: 4, border: 0, bgcolor: 'background.paper', font: 'inherit', color: 'inherit', cursor: 'pointer', textAlign: 'start', '&:hover': { bgcolor: 'action.hover' }, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: -2 } }}>
-              <ChevronIcon sx={{ fontSize: 18, color: 'text.secondary', transition: 'transform 150ms ease', transform: isOpen ? 'rotate(90deg)' : 'none' }} />
+    <>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { sm: `repeat(${groups.length}, minmax(0,1fr))` }, gap: 3 }}>
+        {groups.map((g) => {
+          const on = open?.key === g.key;
+          const summary = groupSummary(g.list, g.key === 'out' || g.key === 'warn') || (g.key === 'good' ? 'Within target' : 'No reading in the last 3 days');
+          return (
+            <Box key={g.key} component="button" type="button" aria-haspopup="dialog" aria-expanded={on}
+              onClick={(e) => { setQ(''); setQuick('All'); setOpen(on ? null : { key: g.key, el: e.currentTarget }); }}
+              sx={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gridTemplateRows: 'auto auto', alignItems: 'center', columnGap: 3, rowGap: 1,
+                minHeight: 72, px: 4, py: 3, border: 0, borderRadius: '12px', bgcolor: 'background.paper', font: 'inherit', color: 'inherit', cursor: 'pointer', textAlign: 'start',
+                boxShadow: on ? `0 0 0 2px ${STATUS_DOT[g.key]}55` : '0 0 0 1px rgba(19,32,26,0.1)', transition: 'box-shadow 150ms ease',
+                '&:hover': { boxShadow: on ? `0 0 0 2px ${STATUS_DOT[g.key]}77` : '0 0 0 1px rgba(19,32,26,0.2)' },
+                '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 } }}>
               <StatusChip status={g.key}>{g.label}</StatusChip>
-              <Typography component="span" sx={{ fontSize: 13, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{list.length} {list.length === 1 ? 'field' : 'fields'}</Typography>
-              {summary ? <Typography component="span" noWrap sx={{ fontSize: 13, color: 'text.secondary', minWidth: 0 }}>{summary}</Typography> : null}
-              {!isOpen ? (
-                <Box component="span" sx={{ ml: 'auto', display: { xs: 'none', md: 'flex' }, gap: 1.5, flexShrink: 0 }}>
-                  {chips.map((c) => <Box key={c} component="span" sx={{ fontFamily: MONO, fontSize: 11.5, px: 1.75, py: 0.75, borderRadius: '6px', bgcolor: 'background.muted', color: 'text.secondary' }}>{c}</Box>)}
-                  {list.length > 3 ? <Box component="span" sx={{ fontFamily: MONO, fontSize: 11.5, px: 1.75, py: 0.75, borderRadius: '6px', bgcolor: 'background.muted', color: 'text.secondary' }}>+{list.length - 3}</Box> : null}
-                </Box>
-              ) : null}
+              <Typography component="span" sx={{ fontSize: 22, fontWeight: 600, lineHeight: 1, fontVariantNumeric: 'tabular-nums', justifySelf: 'start' }}>{g.list.length}</Typography>
+              <ChevronIcon sx={{ fontSize: 18, color: 'text.secondary', transform: on ? 'rotate(-90deg)' : 'rotate(90deg)', transition: 'transform 150ms ease' }} />
+              <Typography component="span" noWrap sx={{ gridColumn: '1 / -1', fontSize: 12.5, color: 'text.secondary', minWidth: 0 }}>{summary}</Typography>
             </Box>
-            {isOpen ? (
-              <Box role="table" aria-label={g.label} sx={{ animation: `${rise} 160ms ease both`, overflowX: 'auto' }}>
-                <Box role="row" sx={{ display: 'grid', gridTemplateColumns: COLS, columnGap: 4, px: 4, pl: 11, py: 2, bgcolor: 'background.muted', borderTop: '1px solid', borderColor: 'divider', fontSize: 12, color: 'text.secondary', minWidth: 720 }}>
-                  {['Field', 'Crop · type', 'EC out', 'pH out', 'Alerts', 'Read'].map((h, i) => <Box role="columnheader" key={h} sx={{ textAlign: i === 2 || i === 3 ? 'right' : 'left' }}>{h}</Box>)}
-                </Box>
-                {list.map((r) => {
-                  const sel = selectedId === r.field.id;
-                  return (
-                    <Box role="row" key={r.field.id} tabIndex={0} aria-selected={sel} onClick={() => onPick(r.field)}
-                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPick(r.field); } }}
-                      sx={{ display: 'grid', gridTemplateColumns: COLS, columnGap: 4, alignItems: 'center', minHeight: 40, px: 4, pl: 11, borderTop: '1px solid', borderColor: 'divider', fontSize: 13, cursor: 'pointer', minWidth: 720,
-                        bgcolor: sel ? 'rgba(22,67,46,0.07)' : 'transparent', boxShadow: sel ? 'inset 3px 0 0 #16432e' : 'none',
-                        '&:hover': { bgcolor: sel ? 'rgba(22,67,46,0.09)' : 'action.hover' }, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: -2 } }}>
-                      <Box role="cell" sx={{ fontFamily: MONO, fontWeight: 600 }}>{r.field.name}</Box>
-                      <Box role="cell" sx={{ color: 'text.secondary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.crop || '—'}</Box>
-                      <Box role="cell" sx={{ textAlign: 'right', fontFamily: MONO, fontWeight: r.ec.status === 'out' ? 600 : 400, color: tone(r.ec) }}>{num(r.ec, 2)}</Box>
-                      <Box role="cell" sx={{ textAlign: 'right', fontFamily: MONO, fontWeight: r.ph.status === 'out' ? 600 : 400, color: tone(r.ph) }}>{num(r.ph, 1)}</Box>
-                      <Box role="cell" sx={{ color: r.alerts ? 'text.primary' : 'text.disabled' }}>{r.alerts || '—'}</Box>
-                      <Box role="cell" sx={{ color: 'text.secondary' }}>{readingAge(r.field.latest_ecph?.date, dateTo)}</Box>
-                    </Box>
-                  );
-                })}
+          );
+        })}
+      </Box>
+      <Popover open={Boolean(cur)} anchorEl={open?.el} onClose={close}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }} transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+        slotProps={{ paper: { 'aria-label': cur?.label, sx: { mt: 2, width: 640, maxWidth: 'calc(100vw - 32px)', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 16px 40px rgba(22,40,30,0.16), 0 0 0 1px rgba(22,40,30,0.07)' } } }}>
+        {cur ? (
+          <Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, p: 3, borderBottom: 1, borderColor: 'divider' }}>
+              <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', gap: 1.5, height: 34, px: 2.5, borderRadius: '8px', bgcolor: 'background.muted' }}>
+                <SearchIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
+                <InputBase autoFocus placeholder="Search" value={q} onChange={(e) => setQ(e.target.value)} sx={{ fontSize: 13, flex: 1 }} inputProps={{ 'aria-label': 'Search fields' }} />
               </Box>
-            ) : null}
+              <Box role="radiogroup" aria-label="Show" sx={{ display: 'flex', gap: 0.5 }}>
+                {QUICK.map(([k]) => (
+                  <Box key={k} component="button" type="button" role="radio" aria-checked={quick === k} onClick={() => setQuick(k)}
+                    sx={{ height: 30, px: 2.5, border: 0, borderRadius: '8px', font: 'inherit', fontSize: 12, fontWeight: 500, cursor: 'pointer',
+                      bgcolor: quick === k ? '#16432e' : 'transparent', color: quick === k ? '#ffffff' : 'text.secondary', '&:hover': { color: quick === k ? '#ffffff' : 'text.primary' } }}>
+                    {k}
+                  </Box>
+                ))}
+              </Box>
+            </Box>
+            <Box role="row" sx={{ display: 'grid', gridTemplateColumns: COLS, columnGap: 4, px: 4, py: 1.75, bgcolor: 'background.muted', fontSize: 11.5, color: 'text.secondary' }}>
+              {['Field', 'Crop · type', 'EC out', 'pH out', 'Alerts'].map((h, i) => <Box role="columnheader" key={h} sx={{ textAlign: i === 2 || i === 3 ? 'right' : 'left' }}>{h}</Box>)}
+            </Box>
+            <Box role="table" aria-label={cur.label} sx={{ maxHeight: 320, overflowY: 'auto' }}>
+              {shown.map((r) => {
+                const sel = selectedId === r.field.id;
+                return (
+                  <Box role="row" key={r.field.id} tabIndex={0} aria-selected={sel} onClick={() => { onPick(r.field, { keep: true }); close(); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPick(r.field, { keep: true }); close(); } }}
+                    sx={{ display: 'grid', gridTemplateColumns: COLS, columnGap: 4, alignItems: 'center', minHeight: 40, px: 4, borderTop: '1px solid', borderColor: 'divider', fontSize: 13, cursor: 'pointer',
+                      bgcolor: sel ? 'rgba(22,67,46,0.07)' : 'transparent', boxShadow: sel ? 'inset 3px 0 0 #16432e' : 'none',
+                      '&:hover': { bgcolor: sel ? 'rgba(22,67,46,0.09)' : 'action.hover' }, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: -2 } }}>
+                    <Box role="cell" sx={{ fontFamily: MONO, fontWeight: 600 }}>{r.field.name}</Box>
+                    <Box role="cell" sx={{ color: 'text.secondary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.crop || '—'}</Box>
+                    <Box role="cell" sx={{ textAlign: 'right', fontFamily: MONO, fontWeight: r.ec.status === 'out' ? 600 : 400, color: tone(r.ec) }}>{num(r.ec, 2)}</Box>
+                    <Box role="cell" sx={{ textAlign: 'right', fontFamily: MONO, fontWeight: r.ph.status === 'out' ? 600 : 400, color: tone(r.ph) }}>{num(r.ph, 1)}</Box>
+                    <Box role="cell" sx={{ color: r.alerts ? 'text.primary' : 'text.disabled', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.alerts || '—'}</Box>
+                  </Box>
+                );
+              })}
+              {!shown.length ? <Typography sx={{ px: 4, py: 4, fontSize: 13, color: 'text.secondary' }}>No field matches</Typography> : null}
+            </Box>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', px: 4, py: 2.5, borderTop: 1, borderColor: 'divider', fontSize: 12, color: 'text.secondary' }}>
+              <span style={{ fontVariantNumeric: 'tabular-nums' }}>{shown.length} of {cur.list.length} fields</span>
+              <span>Click a field to select it on the map</span>
+            </Box>
           </Box>
-        );
-      })}
-    </Box>
+        ) : null}
+      </Popover>
+    </>
   );
 }
 
