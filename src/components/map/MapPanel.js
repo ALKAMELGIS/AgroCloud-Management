@@ -185,7 +185,7 @@ export function MapWorkspace({
     <Box sx={{ display: 'flex', flexDirection: 'column', height, minHeight: 0, bgcolor: 'background.paper' }}>
       <PhoneToolStrip groups={groups} />
       <Box sx={{ flex: 1, minHeight: 0, position: 'relative', display: 'flex' }}>
-        {!isPhone && <PhoneSheet {...sheetProps} docked width={endCurrent ? endPanelWidth : panelWidth} />}
+        {!isPhone && <PhoneSheet {...sheetProps} docked width={endCurrent ? endPanelWidth : (current?.width || panelWidth)} />}
         <Box sx={{ flex: 1, minWidth: 0, minHeight: 0, position: 'relative' }}>
           {children}
           {isPhone && <PhoneSheet {...sheetProps} />}

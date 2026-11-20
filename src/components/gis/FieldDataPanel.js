@@ -55,7 +55,7 @@ function Stat({ label, value, unit, sub, tone }) {
   );
 }
 
-export default function FieldDataPanel({ fieldId, summary, onClose }) {
+export default function FieldDataPanel({ fieldId, summary, onClose, embedded = false }) {
   const navigate = useNavigate();
   const [data, setData] = useState(null); // { zone_id, farm_code, forms }
   const [formId, setFormId] = useState(null);
@@ -80,18 +80,18 @@ export default function FieldDataPanel({ fieldId, summary, onClose }) {
   const keyLine = [data?.zone_id || f.zoneCode, data?.farm_code].filter(Boolean).join(' · ');
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', bgcolor: '#f6f7f3' }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: embedded ? '100%' : undefined, bgcolor: '#f6f7f3' }}>
       {/* Header */}
-      <Box sx={{ px: 5, pt: 4, pb: 3.5, bgcolor: 'background.paper', borderBottom: 1, borderColor: 'divider' }}>
+      <Box sx={{ px: embedded ? 4 : 5, pt: embedded ? 3 : 4, pb: 3.5, bgcolor: 'background.paper', borderBottom: 1, borderColor: 'divider' }}>
         <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>Field</Typography>
+            {!embedded ? <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>Field</Typography> : null}
             <Typography component="h2" sx={{ fontFamily: MONO, fontSize: 22, fontWeight: 600, letterSpacing: '-0.01em', mt: 0.5 }} noWrap>{f.name || '…'}</Typography>
             <Typography sx={{ fontSize: 13, color: 'text.secondary', mt: 0.5 }} noWrap>
               {[f.siteName, f.farmAreaName, f.area ? `${f.area} ha` : null].filter(Boolean).join(' · ')}
             </Typography>
           </Box>
-          <IconButton onClick={onClose} aria-label="Close" size="small" sx={{ mt: -0.5, mr: -1.5 }}><CloseIcon /></IconButton>
+          {onClose ? <IconButton onClick={onClose} aria-label="Close" size="small" sx={{ mt: -0.5, mr: -1.5 }}><CloseIcon /></IconButton> : null}
         </Box>
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, mt: 2.5 }}>
           {f.cropName ? <Box sx={{ px: 2, py: 0.75, borderRadius: '7px', bgcolor: 'rgba(29,107,69,0.09)', color: '#1d6b45', fontSize: 12, fontWeight: 600 }}>{f.cropName}{f.varietyName ? ` · ${f.varietyName}` : ''}</Box> : null}

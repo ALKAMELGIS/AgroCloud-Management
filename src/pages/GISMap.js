@@ -4,7 +4,7 @@ import FieldDataPanel from '../components/gis/FieldDataPanel';
 import FeatureInfoPanel from '../components/gis/FeatureInfoPanel';
 import { makeArcgisStyler } from '../utils/arcgisRenderer';
 import {
-  Box, Typography, IconButton, Drawer, List, ListItem, ListItemText,
+  Box, Typography, IconButton, List, ListItem, ListItemText,
   ListItemIcon, ListItemSecondaryAction, Switch, Button, TextField, Dialog,
   DialogTitle, DialogContent, DialogActions, FormControl, InputLabel, Select,
   MenuItem, Chip, CircularProgress, Alert, Snackbar, Tooltip,
@@ -19,7 +19,7 @@ import {
   CloudDownloadOutlined as CloudIcon, MapOutlined as MapIcon,
   PaletteOutlined as PaletteIcon, CheckOutlined as CheckIcon,
   InfoOutlined as InfoIcon, AutoFixHighOutlined as AutoLinkIcon,
-  WarningOutlined as WarningIcon,
+  WarningOutlined as WarningIcon, CropSquareRounded as FieldIcon,
 } from '@mui/icons-material';
 import { MapContainer, TileLayer, GeoJSON, Popup, Marker, ZoomControl } from 'react-leaflet';
 import { MapLifecycle, SafeFitLatLngBounds } from '../utils/leafletSafe';
@@ -133,6 +133,9 @@ export default function GISMap() {
   soilOnRef.current = soilOn;
   const mapHeight = `calc(100dvh - ${topBarHeight + padPx + bottomChrome + CONTEXT_BAR_HEIGHT}px)`;
   const workspace = useMapWorkspace('gis.workspace', 'layers');
+  // Field data opens as the 'field' tool of the docked panel (left of the map), not over it.
+  const fieldInfoOpen = workspace.active === 'field';
+  const setFieldInfoOpen = (on) => (on ? workspace.setActive('field') : workspace.close());
   const closeWorkspace = workspace.close;
   const [basemap, setBasemap] = useBasemap('gis.basemap', 'satellite');
   const theme = useTheme();
@@ -185,7 +188,6 @@ export default function GISMap() {
   const [orphanBannerHidden, setOrphanBannerHidden] = useState(false);
   const isAr = useIsArabic();
 
-  const [fieldInfoOpen, setFieldInfoOpen] = useState(false);
   const [fieldSummary, setFieldSummary] = useState(null);
   const [fieldInfoId, setFieldInfoId] = useState(null);
   const [fieldInfoLoading, setFieldInfoLoading] = useState(false);
@@ -843,6 +845,14 @@ export default function GISMap() {
         tools={[
           { key: 'layers', label: 'Layers', title: 'GIS Layers', icon: <LayersIcon />, badge: layers.length || undefined, content: layersPanel },
           { key: 'legend', label: 'Legend', icon: <LegendIcon />, badge: visibleLayers.length || undefined, content: <MapLegend sections={legendSections} /> },
+          fieldInfoId && {
+            key: 'field', label: 'Field', title: 'Field data', icon: <FieldIcon />, width: 400,
+            content: fieldInfoLoading || !fieldSummary ? (
+              <Box sx={{ p: 6, display: 'grid', placeItems: 'center', gap: 2 }}><CircularProgress size={22} /><Typography sx={{ fontSize: 13, color: 'text.secondary' }}>Loading field data</Typography></Box>
+            ) : (
+              <FieldDataPanel embedded fieldId={fieldSummary.field.id || fieldInfoId} summary={fieldSummary} />
+            ),
+          },
           canEdit && { key: 'add', label: 'Add data', icon: <AddIcon />, onClick: () => { setAddDialog(true); setAddTab(0); } },
         ]}
         endTools={satTools}
@@ -932,6 +942,15 @@ export default function GISMap() {
               />
             );
           })}
+          {/* The selected feature, outlined on top (the field panel shows its data). */}
+          {selectedFeature?.feature?.geometry && !/Point/.test(selectedFeature.feature.geometry.type) && (
+            <GeoJSON
+              key={`sel-${selectedFeature.feature.id || selectedFeature.feature.properties?._id || JSON.stringify(selectedFeature.feature.geometry).length}`}
+              data={selectedFeature.feature}
+              interactive={false}
+              style={() => ({ color: '#ffd54f', weight: 4, fill: false, opacity: 1 })}
+            />
+          )}
 
           <SatelliteMapLayers sat={sat} clipFeatures={clipFeatures} />
           <SoilMapPicker active={soilOn} point={soilPoint} onPick={setSoilPoint} />
@@ -982,20 +1001,6 @@ export default function GISMap() {
           />
         )}
 
-        {/* Field data: key figures and every form linked to the field (ZONE_ID + Farm_Code) */}
-        <Drawer
-          anchor="right"
-          open={fieldInfoOpen}
-          onClose={() => { setFieldInfoOpen(false); setFieldSummary(null); }}
-          PaperProps={{ sx: { width: { xs: '100%', sm: 440 }, p: 0, overflow: 'hidden' } }}
-          sx={{ zIndex: 1200 }}
-        >
-          {fieldInfoLoading || !fieldSummary ? (
-            <Box sx={{ p: 6, display: 'grid', placeItems: 'center', gap: 2 }}><CircularProgress size={24} /><Typography sx={{ fontSize: 13, color: 'text.secondary' }}>Loading field data</Typography></Box>
-          ) : (
-            <FieldDataPanel fieldId={fieldSummary.field.id || fieldInfoId} summary={fieldSummary} onClose={() => { setFieldInfoOpen(false); setFieldSummary(null); }} />
-          )}
-        </Drawer>
       </MapWorkspace>
 
       {/* ── Add Layer Dialog ── */}
