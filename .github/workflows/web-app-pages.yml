@@ -1,23 +1,28 @@
 name: Web app (GitHub Pages)
 
-# Publishes the demo build (works offline, in-browser demo data) to the "gh-pages"
-# branch, so it opens at https://<owner>.github.io/<repo>/ and installs on an
-# iPhone from Safari: Share → Add to Home Screen.
-# One-time setting: Settings → Pages → Source "Deploy from a branch" → gh-pages / root.
+# Publishes the AgroCloud demo build (works offline, in-browser demo data) straight to
+# GitHub Pages as an Actions deployment, so it opens at https://<owner>.github.io/<repo>/
+# and installs on an iPhone from Safari: Share → Add to Home Screen.
+#
+# The site no longer comes from the "gh-pages" branch: whatever is pushed there
+# (by any other tool or system) cannot replace AgroCloud.
+# One-time setting: Settings → Pages → Build and deployment → Source: "GitHub Actions".
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+  pages: write
+  id-token: write
 
 concurrency:
   group: web-app-pages
   cancel-in-progress: true
 
 jobs:
-  pages:
+  build:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -35,13 +40,21 @@ jobs:
           DEMO_OPENWEATHER_API_KEY: ${{ secrets.DEMO_OPENWEATHER_API_KEY }}
           DEMO_SENTINELHUB_INSTANCE_ID: ${{ secrets.DEMO_SENTINELHUB_INSTANCE_ID }}
         run: bash scripts/build-demo.sh
-      - name: Publish to gh-pages
+      - name: Check it is AgroCloud
         run: |
-          cd build-demo
-          touch .nojekyll
-          git init -q -b gh-pages
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -qm "Web app from ${GITHUB_SHA::7}"
-          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" gh-pages
+          grep -q "<title>AgroCloud Management</title>" build-demo/index.html
+          ! grep -rqi "agrosyntra" build-demo/index.html
+          touch build-demo/.nojekyll
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: build-demo
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
