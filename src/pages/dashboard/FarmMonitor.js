@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box, Card, Chip, Grid, ToggleButton, ToggleButtonGroup,
-  Typography, Tooltip, IconButton, CircularProgress,
+  Typography, Tooltip, IconButton, CircularProgress, Popover, useMediaQuery,
 } from '@mui/material';
 import { keyframes } from '@mui/system';
 import {
@@ -10,6 +10,9 @@ import {
   OpacityOutlined as SprayIcon,
   HourglassBottomOutlined as PhiIcon,
   RefreshOutlined as RefreshIcon,
+  ChevronRightRounded as ChevronIcon,
+  UnfoldMoreRounded as UnfoldIcon,
+  CheckRounded as CheckIcon,
 } from '@mui/icons-material';
 import { StatusChip } from '../../components/dashboard/clearCharts';
 import { STATUS } from '../../theme/formIdentity';
@@ -117,66 +120,178 @@ function readingAge(dateStr, refDate) {
   return `Read ${days} d ago`;
 }
 
-/** Dense field status table (Option C): one row per field, sorted worst first. */
-function FieldStatusTable({ fields, total, showAll, onShowAll, thresholdMap, dateTo, selectedId, onPick }) {
-  const rank = { out: 3, warn: 2, good: 1, none: 0 };
-  const rows = fields.map((field) => {
+const RANK = { out: 3, warn: 2, good: 1, none: 0 };
+const GROUPS = [
+  { key: 'out', label: 'Out of range' },
+  { key: 'warn', label: 'Watch' },
+  { key: 'good', label: 'In range' },
+  { key: 'none', label: 'No recent reading' },
+];
+const STATUS_DOT = { out: STATUS.out.color, warn: STATUS.warn.color, good: '#1f7a4d', none: '#9aa39c' };
+
+/** Each field with its EC/pH meters, overall status and alerts, worst first. */
+function rankFields(fields, thresholdMap, dateTo) {
+  return fields.map((field) => {
     const th = thresholdMap[field.current_crop_id] || {};
     const stale = isStale(field.latest_ecph?.date, dateTo);
     const ec = meter(field.latest_ecph?.ec_out, th.ec_out || th.ec, DEFAULT_BANDS.ec, stale);
     const ph = meter(field.latest_ecph?.ph_out, th.ph_out || th.ph, DEFAULT_BANDS.ph, stale);
-    const worst = rank[ec.status] >= rank[ph.status] ? ec.status : ph.status;
-    return { field, ec, ph, overall: stale ? 'none' : worst, stale };
-  }).sort((a, b) => rank[b.overall] - rank[a.overall] || String(a.field.name).localeCompare(String(b.field.name)));
+    const worst = RANK[ec.status] >= RANK[ph.status] ? ec.status : ph.status;
+    const alerts = [
+      field.active_phi_count > 0 && 'PHI',
+      field.latest_scouting?.id && field.latest_scouting?.status !== 'resolved' && (field.latest_scouting.pest || 'Pest'),
+      field.spray_today && 'Sprayed',
+    ].filter(Boolean).join(' · ');
+    return { field, ec, ph, overall: stale ? 'none' : worst, stale, alerts, crop: [field.crop_name, field.field_type_name].filter(Boolean).join(' · ') };
+  }).sort((a, b) => RANK[b.overall] - RANK[a.overall] || String(a.field.name).localeCompare(String(b.field.name)));
+}
+
+/** One-line reason for a group, e.g. "EC high on 3 · pH high on 5 · 1 with pest". */
+function groupSummary(rows, withReadings) {
+  const parts = [];
+  if (withReadings) {
+    const side = (m, dir) => m.status !== 'good' && m.status !== 'none' && (dir === 'hi' ? m.value > (m.lo + m.hi) / 2 : m.value <= (m.lo + m.hi) / 2);
+    [['EC', 'ec'], ['pH', 'ph']].forEach(([name, k]) => {
+      const hi = rows.filter((r) => side(r[k], 'hi')).length;
+      const lo = rows.filter((r) => side(r[k], 'lo')).length;
+      if (hi) parts.push(`${name} high on ${hi}`);
+      if (lo) parts.push(`${name} low on ${lo}`);
+    });
+  }
+  const pests = rows.filter((r) => r.field.latest_scouting?.id && r.field.latest_scouting?.status !== 'resolved').length;
+  const phi = rows.filter((r) => r.field.active_phi_count > 0).length;
+  if (pests) parts.push(`${pests} with pest`);
+  if (phi) parts.push(`${phi} in PHI`);
+  return parts.join(' · ');
+}
+
+const COLS = 'minmax(88px,120px) minmax(0,1fr) 80px 80px minmax(120px,180px) 130px';
+
+/** Desktop: one droplist per status. Out of range is open; the rest stay closed until needed. */
+function FieldStatusGroups({ rows, dateTo, selectedId, onPick }) {
+  const firstKey = (GROUPS.find((g) => rows.some((r) => r.overall === g.key)) || GROUPS[0]).key;
+  const [open, setOpen] = useState(() => ({ [firstKey]: true }));
   const num = (m, d) => (Number.isFinite(m.value) ? m.value.toFixed(d) : '–');
   const tone = (m) => (m.status === 'out' ? STATUS.out.color : m.status === 'warn' ? STATUS.warn.color : 'text.primary');
-  const cell = { py: 2.25, px: 3, fontSize: 13, borderBottom: '1px solid', borderColor: 'divider', whiteSpace: 'nowrap' };
   return (
-    <Box>
-      <Box sx={{ overflowX: 'auto', border: '1px solid', borderColor: 'divider', borderRadius: '12px' }}>
-        <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', minWidth: 640 }}>
-          <Box component="thead">
-            <Box component="tr" sx={{ bgcolor: 'background.muted' }}>
-              {['Field', 'Crop · type', 'EC out', 'pH out', 'Alerts', 'Read', 'Status'].map((h, i) => (
-                <Box component="th" key={h} sx={{ ...cell, fontSize: 12, fontWeight: 600, color: 'text.secondary', textAlign: i === 2 || i === 3 ? 'right' : 'left' }}>{h}</Box>
-              ))}
-            </Box>
-          </Box>
-          <Box component="tbody">
-            {rows.map(({ field, ec, ph, overall, stale }) => {
-              const sel = selectedId === field.id;
-              const alerts = [
-                field.active_phi_count > 0 && 'PHI',
-                field.latest_scouting?.id && field.latest_scouting?.status !== 'resolved' && (field.latest_scouting.pest || 'Pest'),
-                field.spray_today && 'Sprayed',
-              ].filter(Boolean).join(' · ');
-              return (
-                <Box component="tr" key={field.id} onClick={() => onPick(field)} tabIndex={0} aria-selected={sel}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPick(field); } }}
-                  sx={{ cursor: 'pointer', bgcolor: sel ? 'rgba(22,67,46,0.07)' : 'transparent', '&:hover': { bgcolor: sel ? 'rgba(22,67,46,0.09)' : 'action.hover' }, '&:last-of-type td': { borderBottom: 0 } }}>
-                  <Box component="td" sx={{ ...cell, fontFamily: MONO, fontWeight: 600, boxShadow: sel ? 'inset 3px 0 0 #16432e' : 'none' }}>{field.name}</Box>
-                  <Box component="td" sx={{ ...cell, color: 'text.secondary' }}>{[field.crop_name, field.field_type_name].filter(Boolean).join(' · ') || '—'}</Box>
-                  <Box component="td" sx={{ ...cell, textAlign: 'right', fontFamily: MONO, fontWeight: ec.status === 'out' ? 600 : 400, color: tone(ec) }}>{num(ec, 2)}</Box>
-                  <Box component="td" sx={{ ...cell, textAlign: 'right', fontFamily: MONO, fontWeight: ph.status === 'out' ? 600 : 400, color: tone(ph) }}>{num(ph, 1)}</Box>
-                  <Box component="td" sx={{ ...cell, color: alerts ? 'text.primary' : 'text.disabled' }}>{alerts || '—'}</Box>
-                  <Box component="td" sx={{ ...cell, color: 'text.secondary' }}>{readingAge(field.latest_ecph?.date, dateTo)}</Box>
-                  <Box component="td" sx={cell}><StatusChip status={overall}>{stale ? (field.latest_ecph?.date ? 'Stale' : 'No data') : STATUS_WORD[overall]}</StatusChip></Box>
+    <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: '12px', overflow: 'hidden' }}>
+      {GROUPS.map((g) => {
+        const list = rows.filter((r) => r.overall === g.key);
+        if (!list.length) return null;
+        const isOpen = !!open[g.key];
+        const summary = groupSummary(list, g.key === 'out' || g.key === 'warn');
+        const chips = list.slice(0, 3).map((r) => r.field.name);
+        return (
+          <Box key={g.key} sx={{ '& + &': { borderTop: '1px solid', borderColor: 'divider' } }}>
+            <Box component="button" type="button" aria-expanded={isOpen} onClick={() => setOpen((o) => ({ ...o, [g.key]: !isOpen }))}
+              sx={{ width: '100%', minHeight: 52, display: 'flex', alignItems: 'center', gap: 3, px: 4, border: 0, bgcolor: 'background.paper', font: 'inherit', color: 'inherit', cursor: 'pointer', textAlign: 'start', '&:hover': { bgcolor: 'action.hover' }, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: -2 } }}>
+              <ChevronIcon sx={{ fontSize: 18, color: 'text.secondary', transition: 'transform 150ms ease', transform: isOpen ? 'rotate(90deg)' : 'none' }} />
+              <StatusChip status={g.key}>{g.label}</StatusChip>
+              <Typography component="span" sx={{ fontSize: 13, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{list.length} {list.length === 1 ? 'field' : 'fields'}</Typography>
+              {summary ? <Typography component="span" noWrap sx={{ fontSize: 13, color: 'text.secondary', minWidth: 0 }}>{summary}</Typography> : null}
+              {!isOpen ? (
+                <Box component="span" sx={{ ml: 'auto', display: { xs: 'none', md: 'flex' }, gap: 1.5, flexShrink: 0 }}>
+                  {chips.map((c) => <Box key={c} component="span" sx={{ fontFamily: MONO, fontSize: 11.5, px: 1.75, py: 0.75, borderRadius: '6px', bgcolor: 'background.muted', color: 'text.secondary' }}>{c}</Box>)}
+                  {list.length > 3 ? <Box component="span" sx={{ fontFamily: MONO, fontSize: 11.5, px: 1.75, py: 0.75, borderRadius: '6px', bgcolor: 'background.muted', color: 'text.secondary' }}>+{list.length - 3}</Box> : null}
                 </Box>
-              );
-            })}
+              ) : null}
+            </Box>
+            {isOpen ? (
+              <Box role="table" aria-label={g.label} sx={{ animation: `${rise} 160ms ease both`, overflowX: 'auto' }}>
+                <Box role="row" sx={{ display: 'grid', gridTemplateColumns: COLS, columnGap: 4, px: 4, pl: 11, py: 2, bgcolor: 'background.muted', borderTop: '1px solid', borderColor: 'divider', fontSize: 12, color: 'text.secondary', minWidth: 720 }}>
+                  {['Field', 'Crop · type', 'EC out', 'pH out', 'Alerts', 'Read'].map((h, i) => <Box role="columnheader" key={h} sx={{ textAlign: i === 2 || i === 3 ? 'right' : 'left' }}>{h}</Box>)}
+                </Box>
+                {list.map((r) => {
+                  const sel = selectedId === r.field.id;
+                  return (
+                    <Box role="row" key={r.field.id} tabIndex={0} aria-selected={sel} onClick={() => onPick(r.field)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPick(r.field); } }}
+                      sx={{ display: 'grid', gridTemplateColumns: COLS, columnGap: 4, alignItems: 'center', minHeight: 40, px: 4, pl: 11, borderTop: '1px solid', borderColor: 'divider', fontSize: 13, cursor: 'pointer', minWidth: 720,
+                        bgcolor: sel ? 'rgba(22,67,46,0.07)' : 'transparent', boxShadow: sel ? 'inset 3px 0 0 #16432e' : 'none',
+                        '&:hover': { bgcolor: sel ? 'rgba(22,67,46,0.09)' : 'action.hover' }, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: -2 } }}>
+                      <Box role="cell" sx={{ fontFamily: MONO, fontWeight: 600 }}>{r.field.name}</Box>
+                      <Box role="cell" sx={{ color: 'text.secondary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.crop || '—'}</Box>
+                      <Box role="cell" sx={{ textAlign: 'right', fontFamily: MONO, fontWeight: r.ec.status === 'out' ? 600 : 400, color: tone(r.ec) }}>{num(r.ec, 2)}</Box>
+                      <Box role="cell" sx={{ textAlign: 'right', fontFamily: MONO, fontWeight: r.ph.status === 'out' ? 600 : 400, color: tone(r.ph) }}>{num(r.ph, 1)}</Box>
+                      <Box role="cell" sx={{ color: r.alerts ? 'text.primary' : 'text.disabled' }}>{r.alerts || '—'}</Box>
+                      <Box role="cell" sx={{ color: 'text.secondary' }}>{readingAge(r.field.latest_ecph?.date, dateTo)}</Box>
+                    </Box>
+                  );
+                })}
+              </Box>
+            ) : null}
           </Box>
-        </Box>
-      </Box>
-      {total > 12 && (
-        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
-          <Box component="button" type="button" onClick={onShowAll}
-            sx={{ border: 0, bgcolor: 'transparent', color: 'primary.main', font: 'inherit', fontSize: 13, fontWeight: 600, cursor: 'pointer', px: 3, py: 1.5, borderRadius: 1, '&:hover': { bgcolor: 'action.hover' } }}>
-            {showAll ? 'Show fewer' : `Show all ${total}`}
-          </Box>
-        </Box>
-      )}
+        );
+      })}
     </Box>
   );
+}
+
+/** Phone: pick one field from a grouped droplist and see its card. */
+function FieldPicker({ rows, dateTo, selectedId, onPick }) {
+  const [anchor, setAnchor] = useState(null);
+  const [localId, setLocalId] = useState(null);
+  const current = rows.find((r) => r.field.id === (selectedId || localId)) || rows[0];
+  if (!current) return null;
+  const dot = (s, size = 8) => <Box component="span" sx={{ width: size, height: size, borderRadius: '50%', bgcolor: STATUS_DOT[s], flexShrink: 0 }} />;
+  const label = GROUPS.reduce((m, g) => ({ ...m, [g.key]: g.label }), {});
+  return (
+    <Box>
+      <Box component="button" type="button" aria-haspopup="listbox" aria-expanded={Boolean(anchor)} onClick={(e) => setAnchor(e.currentTarget)}
+        sx={{ width: '100%', minHeight: 48, display: 'flex', alignItems: 'center', gap: 2.5, px: 3.5, border: 0, borderRadius: '10px', bgcolor: 'background.paper', boxShadow: '0 0 0 1px rgba(22,40,30,0.12)', font: 'inherit', color: 'inherit', cursor: 'pointer', textAlign: 'start' }}>
+        {dot(current.overall)}
+        <Box component="span" sx={{ fontFamily: MONO, fontWeight: 600, fontSize: 13 }}>{current.field.name}</Box>
+        <Typography component="span" noWrap sx={{ fontSize: 13, color: 'text.secondary', minWidth: 0, flex: 1 }}>{current.crop}</Typography>
+        <UnfoldIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
+      </Box>
+      <Popover open={Boolean(anchor)} anchorEl={anchor} onClose={() => setAnchor(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }} transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+        slotProps={{ paper: { sx: { mt: 1.5, width: anchor?.offsetWidth, maxHeight: 360, p: 1, borderRadius: '12px' } } }}>
+        <Box role="listbox" aria-label="Field">
+          {GROUPS.map((g) => {
+            const list = rows.filter((r) => r.overall === g.key);
+            if (!list.length) return null;
+            return (
+              <Box key={g.key} role="group" aria-label={g.label}>
+                <Typography sx={{ px: 2.5, pt: 2.5, pb: 1, fontSize: 11, color: 'text.secondary' }}>{g.label} · {list.length}</Typography>
+                {list.map((r) => {
+                  const on = r.field.id === current.field.id;
+                  return (
+                    <Box component="button" type="button" role="option" aria-selected={on} key={r.field.id}
+                      onClick={() => { setLocalId(r.field.id); setAnchor(null); onPick(r.field, { keep: true }); }}
+                      sx={{ width: '100%', minHeight: 44, display: 'flex', alignItems: 'center', gap: 2.5, px: 2.5, border: 0, borderRadius: '8px', bgcolor: on ? 'rgba(22,67,46,0.06)' : 'transparent', font: 'inherit', color: 'inherit', cursor: 'pointer', textAlign: 'start', '&:hover': { bgcolor: 'action.hover' } }}>
+                      {dot(r.overall, 7)}
+                      <Box component="span" sx={{ fontFamily: MONO, fontSize: 12.5, width: 64 }}>{r.field.name}</Box>
+                      <Typography component="span" noWrap sx={{ fontSize: 13, color: 'text.secondary', flex: 1, minWidth: 0 }}>{r.crop}</Typography>
+                      {on ? <CheckIcon sx={{ fontSize: 16, color: 'primary.main' }} /> : null}
+                    </Box>
+                  );
+                })}
+              </Box>
+            );
+          })}
+        </Box>
+      </Popover>
+      <Box sx={{ mt: 3, p: 4, borderRadius: '12px', border: '1px solid', borderColor: 'divider', display: 'grid', gap: 3 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <StatusChip status={current.overall}>{current.stale ? (current.field.latest_ecph?.date ? 'Stale' : 'No data') : label[current.overall]}</StatusChip>
+          <Typography sx={{ fontSize: 12, color: 'text.secondary', ml: 'auto' }}>{readingAge(current.field.latest_ecph?.date, dateTo)}</Typography>
+        </Box>
+        <MeterRow label="EC out" m={current.ec} decimals={2} />
+        <MeterRow label="pH out" m={current.ph} decimals={1} />
+        <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>Alerts: <Box component="span" sx={{ color: 'text.primary' }}>{current.alerts || 'none'}</Box></Typography>
+      </Box>
+    </Box>
+  );
+}
+
+/** Field status list: droplists by status on wide screens, a field picker on the phone. */
+function FieldStatusTable({ fields, thresholdMap, dateTo, selectedId, onPick }) {
+  const phone = useMediaQuery((t) => t.breakpoints.down('sm'));
+  const rows = useMemo(() => rankFields(fields, thresholdMap, dateTo), [fields, thresholdMap, dateTo]);
+  return phone
+    ? <FieldPicker rows={rows} dateTo={dateTo} selectedId={selectedId} onPick={onPick} />
+    : <FieldStatusGroups rows={rows} dateTo={dateTo} selectedId={selectedId} onPick={onPick} />;
 }
 
 export default function FarmMonitor({
@@ -198,7 +313,6 @@ export default function FarmMonitor({
   // Many fields read better as a table; few fields as cards. The choice is remembered.
   const [view, setView] = useState(() => { try { return localStorage.getItem('agro_fm_view') || 'auto'; } catch { return 'auto'; } });
   const pickView = (v) => { setView(v); try { localStorage.setItem('agro_fm_view', v); } catch { /* ignore */ } };
-  const [showAll, setShowAll] = useState(false);
 
   const fieldTypes = useMemo(() => {
     const types = new Set();
@@ -304,15 +418,12 @@ export default function FarmMonitor({
       <Box sx={{ p: { xs: 4, sm: 5 } }}>
         {(view === 'table' || (view === 'auto' && visibleFields.length > 8)) ? (
           <FieldStatusTable
-            fields={showAll ? visibleFields : visibleFields.slice(0, 12)}
-            total={visibleFields.length}
-            showAll={showAll}
-            onShowAll={() => setShowAll((x) => !x)}
+            fields={visibleFields}
             thresholdMap={thresholdMap}
             dateTo={dateTo}
             selectedId={selectedFieldId || fieldSummary?.id}
-            onPick={(field) => {
-              const deselect = (selectedFieldId || fieldSummary?.id) === field.id;
+            onPick={(field, opts) => {
+              const deselect = !opts?.keep && (selectedFieldId || fieldSummary?.id) === field.id;
               setFieldSummary(deselect ? null : field);
               if (onFieldSelect) onFieldSelect(deselect ? null : field);
             }}
