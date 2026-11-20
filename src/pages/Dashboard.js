@@ -1,20 +1,18 @@
-import { useState, useEffect, lazy, Suspense, useRef } from 'react';
+import { useState, useEffect, useMemo, lazy, Suspense, useRef } from 'react';
 import useSocket from '../hooks/useSocket';
 import {
   Box,
   Typography,
   Chip,
-  Tabs,
-  Tab,
   Paper,
   TextField,
   MenuItem,
   Button,
   Collapse,
-  Divider,
 } from '@mui/material';
 import { CloseOutlined as CloseIcon, MapOutlined as MapIcon } from '@mui/icons-material';
-import FieldMapPanel from './dashboard/FieldMapPanel';
+import FieldMapPanel, { EMPTY_SLICE, STATUS_WORDS, fieldFacets, facetOptions, sliceIdsOf } from './dashboard/FieldMapPanel';
+import { PeriodButton, BarSlicer, FormSegments } from './dashboard/BarControls';
 import { DashboardSkeleton } from '../components/LoadingSkeleton';
 import FarmMonitor from './dashboard/FarmMonitor';
 import useDashboardData from './dashboard/useDashboardData';
@@ -65,7 +63,6 @@ function Dashboard() {
   const [visitedTabs, setVisitedTabs] = useState([0]);
   useEffect(() => { setVisitedTabs((v) => (v.includes(activeTab) ? v : [...v, activeTab])); }, [activeTab]);
   const [selectedFieldObj, setSelectedFieldObj] = useState(null);
-  const [sliceIds, setSliceIds] = useState(null);
   const [formStats, setFormStats] = useState({}); // per-field totals each form dashboard reports, for the map
  // fields left by the map slicers (null = all)
   const [showMap, setShowMap] = useState(() => { try { return localStorage.getItem('agro_dash_map') !== '0'; } catch { return true; } });
@@ -112,6 +109,12 @@ function Dashboard() {
     startDate: seasonFrom,
     endDate: seasonTo,
   });
+
+  // Slicers live in the bar, so they filter every analysis with or without the map open.
+  const [slice, setSlice] = useState(EMPTY_SLICE);
+  const facets = useMemo(() => fieldFacets(fieldOverview, allFields, agronomicThresholds, seasonTo), [fieldOverview, allFields, agronomicThresholds, seasonTo]);
+  const sliceOpts = useMemo(() => facetOptions(facets), [facets]);
+  const sliceIds = useMemo(() => sliceIdsOf(facets, slice), [facets, slice]);
 
   const { subscribe, unsubscribe, on, off } = useSocket();
   useEffect(() => {
@@ -176,53 +179,18 @@ function Dashboard() {
         onRefreshWeather={refreshWeather}
       />
 
-      {/* One bar: dates, then the form tabs, then the chosen field and the map switch. */}
-      <Paper variant="outlined" sx={{ mb: 4, borderRadius: 3, overflow: 'hidden' }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: { xs: 'wrap', md: 'nowrap' }, columnGap: 3, rowGap: 2, px: 3, py: 2 }}>
-          <Box sx={{ display: 'flex', gap: 2, flexShrink: 0 }}>
-            <TextField size="small" type="date" label="From" InputLabelProps={{ shrink: true }}
-              value={seasonFrom || ''} onChange={(e) => setSeasonFrom(e.target.value)}
-              inputProps={{ min: seasonStart || undefined, max: seasonEnd || undefined }}
-              sx={{ width: 150 }}
-            />
-            <TextField size="small" type="date" label="To" InputLabelProps={{ shrink: true }}
-              value={seasonTo || ''} onChange={(e) => setSeasonTo(e.target.value)}
-              inputProps={{ min: seasonStart || undefined, max: seasonEnd || undefined }}
-              sx={{ width: 150 }}
-            />
+      {/* One line: period · form · slicers · map. Labels sit inside the controls. */}
+      <Paper variant="outlined" sx={{ mb: 4, borderRadius: 3 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: { xs: 'wrap', lg: 'nowrap' }, gap: 2, px: 2, py: 2.5 }}>
+          <PeriodButton from={seasonFrom} to={seasonTo} onFrom={setSeasonFrom} onTo={setSeasonTo} min={seasonStart} max={seasonEnd} />
+          <FormSegments tabs={DASHBOARD_TABS} value={activeTab} onChange={setActiveTab} identity={FORM_IDENTITY} />
+          <Box role="group" aria-label="Filters" sx={{ display: 'flex', alignItems: 'center', gap: 1.25, ml: { lg: 'auto' }, flexWrap: { xs: 'wrap', sm: 'nowrap' } }}>
+            <BarSlicer label="Zone" options={sliceOpts.zone} value={slice.zone} onChange={(v) => setSlice((x) => ({ ...x, zone: v }))} />
+            <BarSlicer label="Type" options={sliceOpts.type} value={slice.type} onChange={(v) => setSlice((x) => ({ ...x, type: v }))} />
+            <BarSlicer label="Crop" options={sliceOpts.crop} value={slice.crop} onChange={(v) => setSlice((x) => ({ ...x, crop: v }))} />
+            <BarSlicer label="Status" options={STATUS_WORDS} value={slice.status} onChange={(v) => setSlice((x) => ({ ...x, status: v }))} />
           </Box>
-          <Divider orientation="vertical" flexItem sx={{ display: { xs: 'none', md: 'block' } }} />
-          <Tabs
-            value={activeTab}
-            onChange={(_, v) => setActiveTab(v)}
-            variant="scrollable"
-            scrollButtons={false}
-            aria-label="Dashboard form"
-            sx={{
-              order: { xs: 3, md: 0 },
-              width: { xs: '100%', md: 'auto' },
-              minHeight: 40,
-              '& .MuiTabs-indicator': { bgcolor: activeForm.base, height: 3, borderRadius: '3px 3px 0 0' },
-            }}
-          >
-            {DASHBOARD_TABS.map((t) => {
-              const f = FORM_IDENTITY[t.key];
-              return (
-                <Tab
-                  key={t.key}
-                  label={(
-                    <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
-                      <Box component="span" sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: f.base }} />
-                      {t.label}
-                    </Box>
-                  )}
-                  sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.8125rem', minHeight: 40, minWidth: 0, px: 3, '&.Mui-selected': { color: f.dark } }}
-                />
-              );
-            })}
-          </Tabs>
-          <Box sx={{ flex: 1, display: { xs: 'none', md: 'block' } }} />
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, ml: { xs: 'auto', md: 0 }, flexShrink: 0 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, ml: 'auto', flexShrink: 0 }}>
             {selectedFieldObj ? (
               <Chip
                 label={selectedFieldObj.name}
@@ -231,9 +199,7 @@ function Dashboard() {
                 size="small"
                 sx={{ height: 28, fontWeight: 600, bgcolor: 'table.headerBg', color: 'table.headerText', '& .MuiChip-deleteIcon': { color: 'table.headerText' } }}
               />
-            ) : (
-              <Typography sx={{ fontSize: 12, color: 'text.secondary', whiteSpace: 'nowrap' }}>{sliceIds ? `${sliceIds.length} filtered fields` : 'All fields'}</Typography>
-            )}
+            ) : null}
             <Button
               size="small"
               variant={showMap ? 'contained' : 'outlined'}
@@ -243,7 +209,7 @@ function Dashboard() {
               aria-pressed={showMap}
               aria-controls="dashboard-map"
               disableElevation
-              sx={{ height: 32, borderRadius: 2, textTransform: 'none', fontWeight: 600, px: 3, whiteSpace: 'nowrap' }}
+              sx={{ height: 36, borderRadius: '9px', textTransform: 'none', fontWeight: 600, px: 2.5, minWidth: 0, whiteSpace: 'nowrap' }}
             >
               Map
             </Button>
@@ -258,7 +224,8 @@ function Dashboard() {
             allFields={allFields}
             selectedFieldId={filters.field}
             onSelect={(f) => handleFieldSelect(f, { scroll: false })}
-            onFilterChange={setSliceIds}
+            slice={slice}
+            onSliceChange={setSlice}
             agronomicThresholds={agronomicThresholds}
             dateTo={seasonTo}
             form={DASHBOARD_TABS[activeTab].key}

@@ -247,7 +247,46 @@ const alertIcon = (keys) => L.divIcon({
   iconSize: [0, 0],
 });
 
-export default function FieldMapPanel({ fieldOverview = [], allFields = [], selectedFieldId, onSelect, onFilterChange, agronomicThresholds, dateTo, form = 'ecph', formStats = null }) {
+export const EMPTY_SLICE = { zone: [], type: [], crop: [], status: [], code: [] };
+export const STATUS_WORDS = ['In range', 'Watch', 'Out', 'No data'];
+
+/** Zone, Farm_Code, type, crop and status of every field: the values the slicers filter on. */
+export function fieldFacets(fieldOverview, allFields, agronomicThresholds, dateTo) {
+  const info = Object.fromEntries((allFields || []).map((x) => [x.id, x]));
+  const th = {};
+  (agronomicThresholds || []).forEach((t) => { (th[t.cropId] = th[t.cropId] || {})[t.parameter] = t; });
+  return (fieldOverview || []).map((f) => {
+    const t = th[f.current_crop_id] || {};
+    const stale = isStale(f.latest_ecph?.date, dateTo);
+    const ec = meter(f.latest_ecph?.ec_out, t.ec_out || t.ec, DEFAULT_BANDS.ec, stale);
+    const ph = meter(f.latest_ecph?.ph_out, t.ph_out || t.ph, DEFAULT_BANDS.ph, stale);
+    const worst = RANK[ec.status] >= RANK[ph.status] ? ec.status : ph.status;
+    const i = info[f.id] || {};
+    return {
+      id: f.id,
+      zone: String(i.gisZoneId || i.gis_zone_id || f.zone_name || '').toUpperCase() || '—',
+      code: String(i.gisFarmCode || i.gis_farm_code || '') || '—',
+      type: f.field_type_name || '—',
+      crop: f.crop_name || '—',
+      status: WORD[stale ? 'none' : worst],
+    };
+  });
+}
+
+export function facetOptions(facets) {
+  const u = (k) => [...new Set(facets.map((r) => r[k]))].filter((x) => x && x !== '—').sort();
+  return { zone: u('zone'), type: u('type'), crop: u('crop'), code: u('code') };
+}
+
+/** The ids left after the slicers, or null when no slicer is set (= all fields). */
+export function sliceIdsOf(facets, f) {
+  if (!Object.values(f).some((v) => v.length)) return null;
+  return facets.filter((r) => (!f.zone.length || f.zone.includes(r.zone)) && (!f.type.length || f.type.includes(r.type))
+    && (!f.crop.length || f.crop.includes(r.crop)) && (!f.code.length || f.code.includes(r.code))
+    && (!f.status.length || f.status.includes(r.status))).map((r) => r.id);
+}
+
+export default function FieldMapPanel({ fieldOverview = [], allFields = [], selectedFieldId, onSelect, onFilterChange, agronomicThresholds, dateTo, form = 'ecph', formStats = null, slice = null, onSliceChange = null }) {
   const geo = useGeo();
   const measures = FORM_MEASURES[form] || MEASURES;
   const [measureBy, setMeasureBy] = useState(() => { try { return JSON.parse(localStorage.getItem('agro_dash_measure_v2') || '{}'); } catch { return {}; } });
@@ -257,8 +296,12 @@ export default function FieldMapPanel({ fieldOverview = [], allFields = [], sele
   const formColor = (FORM_IDENTITY[form] || FORM_IDENTITY.ecph).base;
   const [basemap, setBasemap] = useBasemap('dash.basemap', 'satellite');
   const [hover, setHover] = useState(null);
-  const [f, setF] = useState({ zone: [], type: [], crop: [], status: [], code: [] });
-  const setFilter = (k) => (v) => setF((x) => ({ ...x, [k]: v }));
+  // Slicers can be owned by the page (the dashboard bar) or by this panel.
+  const [ownF, setOwnF] = useState(EMPTY_SLICE);
+  const controlled = Boolean(slice && onSliceChange);
+  const f = controlled ? slice : ownF;
+  const setF = controlled ? onSliceChange : setOwnF;
+  const setFilter = (k) => (v) => setF({ ...f, [k]: v });
   const anyFilter = Object.values(f).some((v) => v.length);
   const [cfg, setCfg] = useState(() => {
     try {
@@ -371,8 +414,8 @@ export default function FieldMapPanel({ fieldOverview = [], allFields = [], sele
 
   // Report the sliced fields so the analyses below follow the same filters (cross-filter).
   const sliceKey = anyFilter ? rows.map((r) => r.field.id).join(',') : '';
-  useEffect(() => { if (onFilterChange) onFilterChange(sliceKey ? sliceKey.split(',') : (anyFilter ? [] : null)); }, [sliceKey, anyFilter]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => () => { if (onFilterChange) onFilterChange(null); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (onFilterChange && !controlled) onFilterChange(sliceKey ? sliceKey.split(',') : (anyFilter ? [] : null)); }, [sliceKey, anyFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => { if (onFilterChange && !controlled) onFilterChange(null); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const ranked = useMemo(() => [...rows].sort((a, b) => {
     if (measure === 'status') return RANK[b.status] - RANK[a.status] || a.field.name.localeCompare(b.field.name);
@@ -475,14 +518,18 @@ export default function FieldMapPanel({ fieldOverview = [], allFields = [], sele
       </Box>
 
       <Box role="group" aria-label="Filters" sx={{ display: 'flex', alignItems: 'center', gap: 2, px: 4, py: 2.5, borderBottom: 1, borderColor: 'divider', flexWrap: 'wrap', bgcolor: 'background.muted' }}>
-        <Slicer label="ZONE_ID" options={opts.zone} value={f.zone} onChange={setFilter('zone')} width={140} />
+        {!controlled ? <Slicer label="ZONE_ID" options={opts.zone} value={f.zone} onChange={setFilter('zone')} width={140} /> : null}
         <Slicer label="Farm_Code" options={opts.code} value={f.code} onChange={setFilter('code')} width={190} />
-        <Slicer label="Structure type" options={opts.type} value={f.type} onChange={setFilter('type')} />
-        <Slicer label="Crop" options={opts.crop} value={f.crop} onChange={setFilter('crop')} />
-        <Slicer label="Status" options={['In range', 'Watch', 'Out', 'No data']} value={f.status} onChange={setFilter('status')} width={150} />
+        {!controlled ? (
+          <>
+            <Slicer label="Structure type" options={opts.type} value={f.type} onChange={setFilter('type')} />
+            <Slicer label="Crop" options={opts.crop} value={f.crop} onChange={setFilter('crop')} />
+            <Slicer label="Status" options={STATUS_WORDS} value={f.status} onChange={setFilter('status')} width={150} />
+          </>
+        ) : <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>Zone, type, crop and status are in the bar above</Typography>}
         <Box sx={{ flex: 1 }} />
         <Typography sx={{ fontSize: 12, color: 'text.secondary', fontVariantNumeric: 'tabular-nums' }}>{rows.length} of {allRows.length} fields</Typography>
-        <Button size="small" startIcon={<ClearIcon />} disabled={!anyFilter} onClick={() => setF({ zone: [], type: [], crop: [], status: [], code: [] })} sx={{ textTransform: 'none' }}>Clear</Button>
+        <Button size="small" startIcon={<ClearIcon />} disabled={!anyFilter} onClick={() => setF(EMPTY_SLICE)} sx={{ textTransform: 'none' }}>Clear</Button>
       </Box>
 
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: 'minmax(0,1fr) minmax(0,1fr)' } }}>

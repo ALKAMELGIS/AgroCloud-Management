@@ -4,11 +4,15 @@
  */
 const D = { day: 'numeric', month: 'short', year: 'numeric' };
 
+// Fixed three-letter months: some browsers write "Sept", which breaks column alignment.
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const fmt = (d) => `${d.getDate()} ${MON[d.getMonth()]} ${d.getFullYear()}`;
+
 export function displayDate(value) {
   if (!value) return '–';
   const d = value instanceof Date ? value : new Date(String(value).length === 10 ? `${value}T00:00:00` : value);
   if (Number.isNaN(d.getTime())) return String(value);
-  return d.toLocaleDateString('en-GB', D);
+  return fmt(d);
 }
 
 export function displayDateTime(value) {
@@ -16,7 +20,7 @@ export function displayDateTime(value) {
   const d = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(d.getTime())) return String(value);
   const time = d.getHours() || d.getMinutes() ? `, ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` : '';
-  return `${d.toLocaleDateString('en-GB', D)}${time}`;
+  return `${fmt(d)}${time}`;
 }
 
 export function displayDay(value = new Date()) {
