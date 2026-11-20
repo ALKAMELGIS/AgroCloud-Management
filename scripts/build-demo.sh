@@ -12,6 +12,12 @@ trap restore EXIT
 sed -i 's/BrowserRouter/HashRouter/g' src/App.js
 sed -i 's/^serviceWorkerRegistration.register({/serviceWorkerRegistration.unregister(); (() => ({/; s/^});$/}))();/' src/index.js
 rm -rf build-demo
+# The demo is public: no REACT_APP_* value from a local .env file may be built into it
+# (CRA would embed them in the JavaScript). Set each one empty so .env cannot fill it.
+for f in .env .env.local .env.production .env.production.local; do
+  [ -f "$f" ] || continue
+  for k in $(sed 's/^\xEF\xBB\xBF//' "$f" | grep -oE '^[[:space:]]*REACT_APP_[A-Za-z0-9_]+' | tr -d ' \t'); do export "$k="; done
+done
 GENERATE_SOURCEMAP=false PUBLIC_URL=. BUILD_PATH=build-demo npx react-scripts build
 cd build-demo
 find . -name "service-worker*" -delete
@@ -55,4 +61,23 @@ PY
 # Copy of the structures layer for pages that may not read ArcGIS directly.
 cp ../demo/agro_structures.meta.json . 2>/dev/null || true
 cp ../demo/agro_structures.geojson . 2>/dev/null || true
+# Guard: stop if any value from a local .env file ended up in the build.
+cd "$ROOT"
+python3 - <<'PY'
+import glob, sys
+vals = []
+for f in ['.env', '.env.local', '.env.production', '.env.production.local']:
+    try:
+        for line in open(f, encoding='utf-8-sig'):
+            line = line.strip()
+            if '=' in line and not line.startswith('#'):
+                v = line.split('=', 1)[1].strip().strip('"').strip("'")
+                if len(v) >= 12: vals.append(v)
+    except FileNotFoundError:
+        pass
+hits = [p for p in glob.glob('build-demo/**/*', recursive=True) if p.endswith(('.js', '.html', '.json'))
+        and any(v in open(p, encoding='utf-8', errors='ignore').read() for v in vals)]
+if hits:
+    sys.exit('build-demo: a value from a local .env file is in ' + ', '.join(hits))
+PY
 echo "build-demo ready"
