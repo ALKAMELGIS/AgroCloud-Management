@@ -435,3 +435,9 @@ html[data-theme='dark'] .MuiTableContainer-root::-webkit-scrollbar-track,
 html[data-theme='dark'] .sheet-scroll::-webkit-scrollbar-track { background: #1a211d; }
 html[data-theme='dark'] .MuiTableContainer-root::-webkit-scrollbar-thumb,
 html[data-theme='dark'] .sheet-scroll::-webkit-scrollbar-thumb { background: #5b665f; border-color: #1a211d; }
+
+/* Map shapes: no browser focus box around a clicked field or structure (selection is shown by the map itself). */
+.leaflet-container .leaflet-interactive:focus,
+.leaflet-container path:focus,
+.leaflet-container .leaflet-marker-icon:focus,
+.maplibregl-canvas:focus { outline: none; }
