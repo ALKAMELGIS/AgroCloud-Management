@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Tooltip as LTooltip, useMap } from 'react-leaflet';
 import StableGeoJSON from '../../components/map/StableGeoJSON';
 import L from 'leaflet';
@@ -7,7 +7,10 @@ import {
 } from '@mui/material';
 import {
   LayersOutlined as LayersIcon, FilterAltOffOutlined as ClearIcon, MoreHorizRounded as MoreIcon, ZoomInMapRounded as ZoomLayerIcon,
+  FormatListBulletedRounded as LegendIcon, ViewInArOutlined as Cube3DIcon, CloseRounded as CloseIcon,
 } from '@mui/icons-material';
+import { BUILDING_RE, BUILDING_HEIGHT } from '../../components/map/buildings';
+
 import { apiRequest } from '../../utils/api';
 import { useGeo } from '../../components/geo/FieldSelect';
 import { boundsOf } from '../../components/geo/geoUtils';
@@ -17,6 +20,8 @@ import { MapLifecycle } from '../../utils/leafletSafe';
 import { flyAndFlash } from '../../components/map/mapFlash';
 import { STATUS, FORM_IDENTITY } from '../../theme/formIdentity';
 import { meter, isStale, DEFAULT_BANDS } from './FarmMonitor';
+
+const Map3D = lazy(() => import('../../components/map/Map3D'));
 
 /*
  * Field map beside the data, like a map visual in a BI report: every field is
@@ -110,6 +115,52 @@ function typesFromMeta(meta) {
   (r?.uniqueValueInfos || []).forEach((u) => { out[String(u.value)] = { label: u.label, color: rgba(u.symbol?.color) || '#7fd3ff' }; });
   (meta?.types || []).forEach((t) => { if (!out[String(t.id)]) out[String(t.id)] = { label: t.name, color: '#7fd3ff' }; });
   return out;
+}
+
+/** Map control: one 36px square button, white, quiet shadow; pressed state in the brand green. */
+function MapCtl({ on, onClick, label, children, badge }) {
+  return (
+    <Tooltip title={label} placement="left" arrow>
+      <ButtonBase onClick={onClick} aria-pressed={on} aria-label={label}
+        sx={{ position: 'relative', width: 36, height: 36, borderRadius: '9px', color: on ? '#ffffff' : '#14211a', bgcolor: on ? '#16432e' : 'rgba(255,255,255,0.97)',
+          boxShadow: '0 1px 2px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.06)', transition: 'background-color 150ms ease',
+          '&:hover': { bgcolor: on ? '#123a28' : '#f4f5f1' }, '&.Mui-focusVisible': { outline: '2px solid #1d5c3c', outlineOffset: 2 } }}>
+        {children}
+        {badge ? <Box component="span" sx={{ position: 'absolute', top: -4, right: -4, minWidth: 16, height: 16, px: 0.5, borderRadius: '8px', bgcolor: '#c2412d', color: '#fff', fontSize: 10, fontWeight: 600, display: 'grid', placeItems: 'center', boxShadow: '0 0 0 2px #fff' }}>{badge}</Box> : null}
+      </ButtonBase>
+    </Tooltip>
+  );
+}
+
+/** A floating map panel (Layers, Legend): title, close, scrolling body. */
+function MapPanelCard({ title, onClose, children, width = 300 }) {
+  return (
+    <Box role="dialog" aria-label={title} sx={{ width, maxHeight: 360, display: 'flex', flexDirection: 'column', bgcolor: 'background.paper', borderRadius: '12px', boxShadow: '0 12px 32px rgba(0,0,0,0.22), 0 0 0 1px rgba(0,0,0,0.05)', overflow: 'hidden' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', px: 3.5, py: 2.5, borderBottom: 1, borderColor: 'divider' }}>
+        <Typography sx={{ fontSize: 13, fontWeight: 600, flex: 1 }}>{title}</Typography>
+        <IconButton size="small" onClick={onClose} aria-label={`Close ${title}`} sx={{ mr: -1 }}><CloseIcon sx={{ fontSize: 18 }} /></IconButton>
+      </Box>
+      <Box sx={{ overflowY: 'auto', px: 3.5, py: 2.5 }}>{children}</Box>
+    </Box>
+  );
+}
+
+function LegendGroup({ title, children }) {
+  return (
+    <Box sx={{ '& + &': { mt: 3, pt: 3, borderTop: 1, borderColor: 'divider' } }}>
+      <Typography sx={{ fontSize: 11.5, color: 'text.secondary', mb: 1.5 }}>{title}</Typography>
+      <Box sx={{ display: 'grid', gap: 1.25 }}>{children}</Box>
+    </Box>
+  );
+}
+function LegendItem({ swatch, label, count }) {
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, fontSize: 12.5, minHeight: 22 }}>
+      <Box sx={{ width: 20, display: 'grid', placeItems: 'center', flexShrink: 0 }}>{swatch}</Box>
+      <Box component="span" sx={{ flex: 1, minWidth: 0 }}>{label}</Box>
+      {count != null ? <Box component="span" sx={{ fontFamily: MONO, color: 'text.secondary', fontSize: 12 }}>{count}</Box> : null}
+    </Box>
+  );
 }
 
 function MapGrab({ mapRef }) {
@@ -314,7 +365,11 @@ export default function FieldMapPanel({ fieldOverview = [], allFields = [], sele
   const toggleLayer = (k) => setCfg((c) => ({ ...c, show: { ...c.show, [k]: !c.show[k] } }));
   const setOpacity = (k) => (v) => setCfg((c) => ({ ...c, opacity: { ...c.opacity, [k]: v } }));
   const setLabel = (k) => (patch) => setCfg((c) => ({ ...c, label: { ...c.label, [k]: { ...c.label[k], ...patch } } }));
-  const [layersOpen, setLayersOpen] = useState(false);
+  const [panel, setPanel] = useState(null); // 'layers' | 'legend' | null
+  const layersOpen = panel === 'layers';
+  const togglePanel = (k) => setPanel((p) => (p === k ? null : k));
+  const [is3d, setIs3d] = useState(() => { try { return localStorage.getItem('agro_dash_3d') === '1'; } catch { return false; } });
+  useEffect(() => { try { localStorage.setItem('agro_dash_3d', is3d ? '1' : '0'); } catch { /* ignore */ } }, [is3d]);
   const [settingsFor, setSettingsFor] = useState(null);
   const mapRef = useRef(null);
   // Agro_Structures: the layer and its type classes load at once (slicer options); features when shown.
@@ -477,6 +532,22 @@ export default function FieldMapPanel({ fieldOverview = [], allFields = [], sele
   const sl = cfg.label.structures;
   const fieldLabelText = (r) => ({ name_value: `${r.field.name} · ${valueText(r)}`, name: r.field.name, code: r.code, crop: r.crop, value: valueText(r) }[fl.content] || r.field.name);
   const structLabelText = (pr) => ({ code: pr.Farm_Code, name: pr.Farm_Name || pr.Farm_Code, key: `${pr.ZONE_ID || ''}-${pr.Farm_Code || ''}`, type: stType(pr).label }[sl.content] || pr.Farm_Code || '');
+  // 3D: fields of a protected type and matching structures become 7 m buildings.
+  const fieldCodes = new Set(rows.map((r) => String(r.code)));
+  const fields3d = {
+    type: 'FeatureCollection',
+    features: shaped.map((r) => ({ type: 'Feature', geometry: r.geometry, properties: {
+      id: r.field.id, name: r.field.name, fill: fillOf(statusOf(r)), building: BUILDING_RE.test(r.type || ''), selected: r.field.id === selectedFieldId,
+    } })),
+  };
+  const structs3d = cfg.show.structures && structFc ? {
+    type: 'FeatureCollection',
+    features: structFc.features.filter((x) => !fieldCodes.has(String(x.properties?.Farm_Code))).map((x) => {
+      const t = stType(x.properties);
+      return { type: 'Feature', geometry: x.geometry, properties: { label: t.label, color: t.color, building: BUILDING_RE.test(t.label || '') } };
+    }),
+  } : null;
+  const buildingCount = fields3d.features.filter((x) => x.properties.building).length + (structs3d ? structs3d.features.filter((x) => x.properties.building).length : 0);
   const zoomTo = (fcx) => {
     const map = mapRef.current;
     if (!map || !fcx?.features?.length) return;
@@ -535,7 +606,12 @@ export default function FieldMapPanel({ fieldOverview = [], allFields = [], sele
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: 'minmax(0,1fr) minmax(0,1fr)' } }}>
         {/* Map: half of the width */}
         <Box sx={{ position: 'relative', height: { xs: 340, md: 460 }, borderRight: { lg: 1 }, borderBottom: { xs: 1, lg: 0 }, borderColor: 'divider', bgcolor: '#dfe3dd' }}>
-          {allShaped.length ? (
+          {allShaped.length && is3d ? (
+            <Suspense fallback={<Typography sx={{ p: 4, fontSize: 13, color: 'text.secondary' }}>Loading 3D…</Typography>}>
+              <Map3D fields={fields3d} structures={structs3d} basemapUrl={bm.url} opacity={Math.max(0.5, cfg.opacity.fields)}
+                onPick={(id) => { const r = byId[id]; if (r) pick(r); }} />
+            </Suspense>
+          ) : allShaped.length ? (
             <MapContainer bounds={bounds} boundsOptions={{ padding: [32, 32], maxZoom: 18 }} attributionControl={false} style={{ height: '100%', width: '100%' }}>
               <MapLifecycle />
               <TileLayer key={basemap} url={bm.url} maxNativeZoom={bm.maxNativeZoom || 19} maxZoom={21} />
@@ -612,55 +688,72 @@ export default function FieldMapPanel({ fieldOverview = [], allFields = [], sele
           )}
           {allShaped.length > 0 && <BasemapSwitcher value={basemap} onChange={setBasemap} side="right" />}
           {allShaped.length > 0 && (
-            <Box onMouseDown={(e) => e.stopPropagation()} onWheel={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}
-              sx={{ position: 'absolute', top: 12, right: 56, zIndex: 1001, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1.5 }}>
-              <ButtonBase onClick={() => setLayersOpen((o) => !o)} aria-expanded={layersOpen} aria-label="Map layers" title="Map layers"
-                sx={{ height: 34, px: 2.5, gap: 1.5, borderRadius: 1, fontSize: 12.5, fontWeight: 600, bgcolor: layersOpen ? 'primary.main' : 'background.paper', color: layersOpen ? 'primary.contrastText' : 'text.primary', border: '1px solid rgba(0,0,0,0.2)', boxShadow: '0 1px 5px rgba(0,0,0,0.3)' }}>
-                <LayersIcon sx={{ fontSize: 18 }} />Layers
-              </ButtonBase>
-              {layersOpen && (
-                <Box sx={{ width: 300, maxHeight: 340, overflowY: 'auto', bgcolor: 'background.paper', borderRadius: 2, boxShadow: '0 6px 24px rgba(0,0,0,0.28)', py: 1, px: 2 }}>
-                  <LayerRow name="Fields (status fill)" count={fc.features.length} on={cfg.show.fields} onToggle={() => toggleLayer('fields')}
-                    open={settingsFor === 'fields'} onOpen={() => setSettingsFor((x) => (x === 'fields' ? null : 'fields'))}
-                    onZoom={() => zoomTo(fc)} opacity={cfg.opacity.fields} onOpacity={setOpacity('fields')}
-                    label={fl} onLabel={setLabel('fields')} contentOptions={FIELD_LABEL_CONTENT} />
-                  <LayerRow name="Alerts (PHI · pest · spray)" on={cfg.show.alerts} onToggle={() => toggleLayer('alerts')} />
-                  {structLayer && (
-                    <LayerRow name={structLayer.name || 'Agro_Structures'} count={cfg.show.structures ? (structFc ? structFc.features.length : '…') : null}
-                      on={cfg.show.structures} onToggle={() => toggleLayer('structures')}
-                      open={settingsFor === 'structures'} onOpen={() => setSettingsFor((x) => (x === 'structures' ? null : 'structures'))}
-                      onZoom={structFc ? () => zoomTo(structFc) : null} opacity={cfg.opacity.structures} onOpacity={setOpacity('structures')}
-                      label={sl} onLabel={setLabel('structures')} contentOptions={STRUCT_LABEL_CONTENT} />
+            <Box onMouseDown={(e) => e.stopPropagation()} onWheel={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}
+              sx={{ position: 'absolute', top: 56, right: 12, zIndex: 999, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              <MapCtl label="Layers" on={layersOpen} onClick={() => togglePanel('layers')}><LayersIcon sx={{ fontSize: 19 }} /></MapCtl>
+              <MapCtl label="Legend" on={panel === 'legend'} onClick={() => togglePanel('legend')}><LegendIcon sx={{ fontSize: 19 }} /></MapCtl>
+              <MapCtl label={is3d ? 'Back to 2D' : `3D buildings (${BUILDING_HEIGHT} m)`} on={is3d} onClick={() => setIs3d((x) => !x)}>
+                <Box component="span" sx={{ display: 'grid', placeItems: 'center', lineHeight: 1 }}><Cube3DIcon sx={{ fontSize: 17 }} /><Box component="span" sx={{ fontSize: 8.5, fontWeight: 700, mt: '1px' }}>3D</Box></Box>
+              </MapCtl>
+              {panel ? (
+                <Box sx={{ position: 'absolute', top: 0, right: 46 }}>
+                  {panel === 'layers' ? (
+                    <MapPanelCard title="Layers" onClose={() => setPanel(null)}>
+                      <LayerRow name="Fields (status fill)" count={fc.features.length} on={cfg.show.fields} onToggle={() => toggleLayer('fields')}
+                        open={settingsFor === 'fields'} onOpen={() => setSettingsFor((x) => (x === 'fields' ? null : 'fields'))}
+                        onZoom={is3d ? null : () => zoomTo(fc)} opacity={cfg.opacity.fields} onOpacity={setOpacity('fields')}
+                        label={fl} onLabel={setLabel('fields')} contentOptions={FIELD_LABEL_CONTENT} />
+                      <LayerRow name="Alerts (PHI · pest · spray)" on={cfg.show.alerts} onToggle={() => toggleLayer('alerts')} />
+                      {structLayer && (
+                        <LayerRow name={structLayer.name || 'Agro_Structures'} count={cfg.show.structures ? (structFc ? structFc.features.length : '…') : null}
+                          on={cfg.show.structures} onToggle={() => toggleLayer('structures')}
+                          open={settingsFor === 'structures'} onOpen={() => setSettingsFor((x) => (x === 'structures' ? null : 'structures'))}
+                          onZoom={structFc && !is3d ? () => zoomTo(structFc) : null} opacity={cfg.opacity.structures} onOpacity={setOpacity('structures')}
+                          label={sl} onLabel={setLabel('structures')} contentOptions={STRUCT_LABEL_CONTENT} />
+                      )}
+                    </MapPanelCard>
+                  ) : (
+                    <MapPanelCard title="Legend" onClose={() => setPanel(null)} width={260}>
+                      {cfg.show.fields ? (
+                        <LegendGroup title={`Fields · ${isSeq ? `${m.label}${m.unit ? ` (${m.unit})` : ''}` : m.label}`}>
+                          {legendKeys.map((k) => (
+                            <LegendItem key={k} label={<Box component="span" sx={{ fontFamily: isSeq && k !== 'none' ? MONO : undefined }}>{wordOf(k)}</Box>} count={counts[k]}
+                              swatch={<Box sx={{ width: 14, height: 14, borderRadius: '4px', bgcolor: fillOf(k), boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.12)' }} />} />
+                          ))}
+                        </LegendGroup>
+                      ) : null}
+                      {cfg.show.alerts ? (
+                        <LegendGroup title="Alerts">
+                          {['phi', 'pest', 'spray'].map((k) => <LegendItem key={k} label={ALERTS[k].label} swatch={<AlertGlyph k={k} size={18} />} count={shaped.filter((r) => r[k]).length} />)}
+                        </LegendGroup>
+                      ) : null}
+                      {cfg.show.structures && structFc ? (
+                        <LegendGroup title={`${structLayer?.name || 'Agro_Structures'} · Structure type`}>
+                          {[...new Set(structFc.features.map((x) => stType(x.properties).label))].filter(Boolean).sort().map((lb) => {
+                            const t = Object.values(structLayer?.types || {}).find((x) => x.label === lb);
+                            const n = structFc.features.filter((x) => stType(x.properties).label === lb).length;
+                            return <LegendItem key={lb} label={lb} count={n} swatch={<Box sx={{ width: 14, height: 14, borderRadius: '4px', border: `2px solid ${t?.color || '#7fd3ff'}`, bgcolor: `${t?.color || '#7fd3ff'}33` }} />} />;
+                          })}
+                        </LegendGroup>
+                      ) : null}
+                      {is3d ? (
+                        <LegendGroup title="3D">
+                          <LegendItem label={`Nethouse, Greenhouse, Glasshouse, Cravo · ${BUILDING_HEIGHT} m`} count={buildingCount}
+                            swatch={<Cube3DIcon sx={{ fontSize: 18, color: 'text.secondary' }} />} />
+                        </LegendGroup>
+                      ) : null}
+                      {!cfg.show.fields && !cfg.show.alerts && !cfg.show.structures ? <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>No layer is on. Turn one on in Layers.</Typography> : null}
+                    </MapPanelCard>
                   )}
                 </Box>
-              )}
+              ) : null}
             </Box>
           )}
-          {/* Legend */}
-          <Box sx={{ position: 'absolute', left: 12, bottom: 12, zIndex: 1000, display: 'flex', gap: 3, px: 3, py: 1.5, borderRadius: 2, bgcolor: 'rgba(255,255,255,0.94)', boxShadow: 1, flexWrap: 'wrap' }}>
-            {isSeq && <Box sx={{ fontSize: 12, fontWeight: 600, mr: -1 }}>{m.label}{m.unit ? ` (${m.unit})` : ''}</Box>}
-            {legendKeys.map((s) => (
-              <Box key={s} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, fontSize: 12 }}>
-                <Box sx={{ width: 12, height: 12, borderRadius: 0.75, bgcolor: fillOf(s), border: '1px solid rgba(0,0,0,0.15)' }} />
-                <Box component="span" sx={{ fontFamily: isSeq && s !== 'none' ? MONO : undefined }}>{wordOf(s)}</Box> <Box component="span" sx={{ fontFamily: MONO, color: 'text.secondary' }}>{counts[s]}</Box>
-              </Box>
-            ))}
-            {cfg.show.structures && structFc && [...new Set(structFc.features.map((x) => stType(x.properties).label))].slice(0, 6).map((lb) => {
-              const t = Object.values(structLayer?.types || {}).find((x) => x.label === lb);
-              return (
-                <Box key={`st-${lb}`} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, fontSize: 12 }}>
-                  <Box sx={{ width: 12, height: 12, borderRadius: 0.75, border: `2px solid ${t?.color || '#7fd3ff'}` }} />{lb}
-                </Box>
-              );
-            })}
-            {cfg.show.alerts && (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, fontSize: 12, color: 'text.secondary' }}>
-                {['phi', 'pest', 'spray'].map((k) => (
-                  <Box key={k} component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, mr: 1.5 }}><AlertGlyph k={k} size={16} />{ALERTS[k].short}</Box>
-                ))}
-              </Box>
-            )}
-          </Box>
+          {is3d ? (
+            <Box sx={{ position: 'absolute', left: 12, bottom: 12, zIndex: 2, px: 2.5, py: 1.25, borderRadius: '8px', bgcolor: 'rgba(20,33,26,0.78)', color: '#fff', fontSize: 12 }}>
+              3D · protected structures at {BUILDING_HEIGHT} m · right-drag to tilt and turn
+            </Box>
+          ) : null}
         </Box>
 
         {/* Ranked fields: the other half */}
