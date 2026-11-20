@@ -249,6 +249,25 @@
       AIMSG[cidA].push({id:'u'+Date.now(),role:'user',content:t,artifacts:[],sources:[]}); AIMSG[cidA].push(m);
       return ok({conversationId:cidA,message:m});
     }
+    // Demo-only: every form with records on one field (GIS map → View field data).
+    var ffm=method==='GET'&&path.match(/^\/fields\/([^/]+)\/forms$/);
+    if(ffm){
+      var fid=ffm[1], ff=fields.filter(function(f){return f.id===fid;})[0]||{name:fid}, fi=Math.max(0,fields.indexOf(ff));
+      var hr=function(k){var h=2166136261,x=fid+k;for(var i=0;i<x.length;i++){h^=x.charCodeAt(i);h=Math.imul(h,16777619);}return ((h>>>0)%10000)/10000;};
+      var day=function(n){return new Date(Date.now()-n*86400000).toISOString().slice(0,10);};
+      var mk=function(key,title,route,count,every,rec){var rs=[];for(var i=0;i<Math.min(count,12);i++){rs.push({record_id:key+'-'+fid+'-'+i,record_date:day(i*every),values:rec(i)});}
+        return {form_id:'demo-'+key,form_key:key,title_en:title,ui_route:route,record_count:count,last_record_date:day(0),records:rs};};
+      var crop=CROPS[fi%CROPS.length];
+      var out=[
+        mk('ecph.entry','EC/pH Entry','/ecph-entry',63,1,function(i){return {ec_in:+(2.0+hr('ei'+i)*0.15).toFixed(2),ec_out:+(2.2+hr('eo'+i)*0.5).toFixed(2),ph_in:+(5.9+hr('pi'+i)*0.2).toFixed(1),ph_out:+(6.0+hr('po'+i)*0.6).toFixed(1),drain_percent:Math.round(18+hr('d'+i)*10)};}),
+        mk('harvest.entry','Harvest Entry','/harvest/entry',27,1,function(i){return {crop:crop,total_quantity:Math.round(180+hr('h'+i)*420),grade:i%3?'A':'B',boxes:Math.round(12+hr('b'+i)*30)};}),
+        mk('irrigation.entry','Irrigation Entry','/irrigation/entry',30,1,function(i){return {water_m3:+(30+hr('w'+i)*20).toFixed(1),cycles:Math.round(6+hr('c'+i)*6),duration_min:Math.round(8+hr('m'+i)*6)};}),
+        mk('fertigation.entry','Fertigation Entry','/fertigation/entry',18,2,function(i){return {product:['Calcium nitrate','MKP','Potassium sulphate'][i%3],quantity_kg:+(4+hr('f'+i)*6).toFixed(1),ec_target:2.2};}),
+        mk('ipm.scouting_report','Scouting Reports','/ipm/scouting-reports',fi%4===3?6:3,5,function(i){return {pest:['Whitefly','Thrips','Aphids'][i%3],infestation_percent:Math.round(2+hr('s'+i)*14),severity:i?'low':'medium'};}),
+      ];
+      if(fi%4===1) out.push(mk('ipm.pesticide_spray','Pesticide — Spray','/ipm/pesticide-applications',4,6,function(i){return {product_name:'Movento 150 OD',dosage:'0.75 ml/L',phi_days:3,cost:Math.round(80+hr('p'+i)*60)};}));
+      return ok({field_id:fid,zone_id:'MH',farm_code:ff.gisFarmCode||ff.name,forms:out});
+    }
     // Demo-only field summary for the GIS map panel, from the same sample readings.
     var fsm=method==='GET'&&path.match(/^\/fields\/([^/]+)\/summary$/);
     if(fsm){

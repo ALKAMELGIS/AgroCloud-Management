@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useIsArabic } from '../i18n/shellLabels';
+import FieldDataPanel from '../components/gis/FieldDataPanel';
 import FeatureInfoPanel from '../components/gis/FeatureInfoPanel';
 import { makeArcgisStyler } from '../utils/arcgisRenderer';
 import {
@@ -7,7 +8,7 @@ import {
   ListItemIcon, ListItemSecondaryAction, Switch, Button, TextField, Dialog,
   DialogTitle, DialogContent, DialogActions, FormControl, InputLabel, Select,
   MenuItem, Chip, CircularProgress, Alert, Snackbar, Tooltip,
-  Card, CardContent, Slider, Tabs, Tab, LinearProgress, Autocomplete,
+  Slider, Tabs, Tab, LinearProgress, Autocomplete,
   useMediaQuery,
 } from '@mui/material';
 import {
@@ -18,9 +19,7 @@ import {
   CloudDownloadOutlined as CloudIcon, MapOutlined as MapIcon,
   PaletteOutlined as PaletteIcon, CheckOutlined as CheckIcon,
   InfoOutlined as InfoIcon, AutoFixHighOutlined as AutoLinkIcon,
-  GrassOutlined as CropIcon, WaterOutlined as WaterIcon, ScienceOutlined as ScienceIcon,
-  BugReportOutlined as BugIcon, WarningOutlined as WarningIcon,
-  AgricultureOutlined as HarvestIcon, ShieldOutlined as ShieldIcon,
+  WarningOutlined as WarningIcon,
 } from '@mui/icons-material';
 import { MapContainer, TileLayer, GeoJSON, Popup, Marker, ZoomControl } from 'react-leaflet';
 import { MapLifecycle, SafeFitLatLngBounds } from '../utils/leafletSafe';
@@ -71,15 +70,6 @@ async function api(path, opts = {}) {
   return data.data;
 }
 
-function formatPhiDateTime(value) {
-  if (!value) return '';
-  const d = new Date(value);
-  const date = d.toLocaleDateString();
-  if (d.getHours() || d.getMinutes()) {
-    return `${date}, ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-  }
-  return date;
-}
 
 const DEFAULT_CENTER = [25.3, 51.5];
 const DEFAULT_ZOOM = 8;
@@ -124,7 +114,7 @@ function TabPanel({ children, value, index }) {
 }
 
 export default function GISMap() {
-  const { isMobile, scrollRegionHeight, contentBleed, topBarHeight, padPx, bottomChrome } = useAppLayout();
+  const { isMobile, contentBleed, topBarHeight, padPx, bottomChrome } = useAppLayout();
   const isLargeScreen = useMediaQuery('(min-width:1536px)');
   const { t } = useTranslation();
   // CEO and operation manager manage GIS layers; everyone else (incl. farm manager) views only.
@@ -197,6 +187,7 @@ export default function GISMap() {
 
   const [fieldInfoOpen, setFieldInfoOpen] = useState(false);
   const [fieldSummary, setFieldSummary] = useState(null);
+  const [fieldInfoId, setFieldInfoId] = useState(null);
   const [fieldInfoLoading, setFieldInfoLoading] = useState(false);
   const [autoLinking, setAutoLinking] = useState(null);
   const [phiStatus, setPhiStatus] = useState({});
@@ -595,6 +586,7 @@ export default function GISMap() {
   // ── Load field summary ──
 
   const loadFieldSummary = async (fieldId) => {
+    setFieldInfoId(fieldId);
     setFieldInfoOpen(true);
     setFieldInfoLoading(true);
     setFieldSummary(null);
@@ -990,196 +982,19 @@ export default function GISMap() {
           />
         )}
 
-        {/* Field Summary Drawer */}
+        {/* Field data: key figures and every form linked to the field (ZONE_ID + Farm_Code) */}
         <Drawer
           anchor="right"
           open={fieldInfoOpen}
           onClose={() => { setFieldInfoOpen(false); setFieldSummary(null); }}
-          PaperProps={{ sx: { width: { xs: '100%', sm: 420 }, p: 0 } }}
+          PaperProps={{ sx: { width: { xs: '100%', sm: 440 }, p: 0, overflow: 'hidden' } }}
           sx={{ zIndex: 1200 }}
         >
-          <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', bgcolor: 'primary.main', color: 'primary.contrastText' }}>
-            <Typography variant="h6">Field Summary</Typography>
-            <IconButton size="small" onClick={() => { setFieldInfoOpen(false); setFieldSummary(null); }} sx={{ color: 'inherit' }} aria-label="Close">
-              <CloseIcon />
-            </IconButton>
-          </Box>
-          {fieldInfoLoading ? (
-            <Box sx={{ p: 4, textAlign: 'center' }}><CircularProgress /><Typography sx={{ mt: 1 }}>Loading field data...</Typography></Box>
-          ) : fieldSummary ? (
-            <Box sx={{ p: 2, overflow: 'auto', maxHeight: scrollRegionHeight(80) }}>
-              {/* Field header */}
-              <Card variant="outlined" sx={{ mb: 2 }}>
-                <CardContent sx={{ pb: '12px !important' }}>
-                  <Typography variant="h6">{fieldSummary.field.name}</Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {fieldSummary.field.siteName} &gt; {fieldSummary.field.farmAreaName}
-                  </Typography>
-                  <Box sx={{ display: 'flex', gap: 1, mt: 1, flexWrap: 'wrap' }}>
-                    {fieldSummary.field.cropName && (
-                      <Chip icon={<CropIcon />} label={fieldSummary.field.cropName} size="small" color="success" />
-                    )}
-                    {fieldSummary.field.varietyName && (
-                      <Chip label={fieldSummary.field.varietyName} size="small" variant="outlined" />
-                    )}
-                    {fieldSummary.field.area && (
-                      <Chip label={`${fieldSummary.field.area} ha`} size="small" variant="outlined" />
-                    )}
-                  </Box>
-                </CardContent>
-              </Card>
-
-              {/* Active PHI Alerts */}
-              {fieldSummary.activePhi.length > 0 && (
-                <Card variant="outlined" sx={{ mb: 2, borderColor: 'warning.main' }}>
-                  <CardContent sx={{ pb: '12px !important' }}>
-                    <Typography variant="subtitle2" sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: 'warning.dark', mb: 1 }}>
-                      <WarningIcon fontSize="small" /> Active PHI
-                    </Typography>
-                    {fieldSummary.activePhi.map((phi, i) => (
-                      <Box key={i} sx={{ mb: 0.5, p: 1, borderRadius: 1, bgcolor: 'action.selected', border: '1px solid', borderColor: 'warning.light' }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                          <Typography variant="body2" fontWeight={600}>{phi.productName}</Typography>
-                          {phi.segment && (
-                            <Chip label={phi.segment} size="small" variant="outlined" sx={{ height: 18, fontSize: '0.6875rem' }} />
-                          )}
-                        </Box>
-                        <Typography variant="caption" color="text.secondary">
-                          PHI: {phi.phiDays} days | Clear to harvest: {formatPhiDateTime(phi.phiEndDate)}
-                        </Typography>
-                        <Chip
-                          label={`${phi.daysRemaining} days remaining`}
-                          size="small"
-                          color={phi.daysRemaining <= 1 ? 'warning' : 'error'}
-                          sx={{ mt: 0.5 }}
-                        />
-                      </Box>
-                    ))}
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Stats row */}
-              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5, mb: 2 }}>
-                <Card variant="outlined">
-                  <CardContent sx={{ pb: '8px !important', pt: '12px !important' }}>
-                    <Typography variant="caption" color="text.secondary"><HarvestIcon sx={{ fontSize: 14, mr: 0.5, verticalAlign: 'text-bottom' }} />Harvest (30d)</Typography>
-                    <Typography variant="h6">{fieldSummary.harvest.totalKg.toLocaleString()} kg</Typography>
-                    <Typography variant="caption" color="text.secondary">{fieldSummary.harvest.count} entries</Typography>
-                  </CardContent>
-                </Card>
-                <Card variant="outlined">
-                  <CardContent sx={{ pb: '8px !important', pt: '12px !important' }}>
-                    <Typography variant="caption" color="text.secondary"><WaterIcon sx={{ fontSize: 14, mr: 0.5, verticalAlign: 'text-bottom' }} />Water (30d)</Typography>
-                    <Typography variant="h6">{Number(fieldSummary.water.totalM3).toFixed(1)} m&sup3;</Typography>
-                  </CardContent>
-                </Card>
-              </Box>
-
-              {/* EC / PH averages */}
-              <Card variant="outlined" sx={{ mb: 2 }}>
-                <CardContent sx={{ pb: '12px !important' }}>
-                  <Typography variant="subtitle2" sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
-                    <ScienceIcon fontSize="small" /> EC/PH Avg (7d)
-                  </Typography>
-                  <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
-                    <Box>
-                      <Typography variant="caption" color="text.secondary">EC In</Typography>
-                      <Typography variant="body1" fontWeight={600}>{fieldSummary.ecph.avgEcIn ?? '—'}</Typography>
-                    </Box>
-                    <Box>
-                      <Typography variant="caption" color="text.secondary">EC Out</Typography>
-                      <Typography variant="body1" fontWeight={600}>{fieldSummary.ecph.avgEcOut ?? '—'}</Typography>
-                    </Box>
-                    <Box>
-                      <Typography variant="caption" color="text.secondary">pH In</Typography>
-                      <Typography variant="body1" fontWeight={600}>{fieldSummary.ecph.avgPhIn ?? '—'}</Typography>
-                    </Box>
-                    <Box>
-                      <Typography variant="caption" color="text.secondary">pH Out</Typography>
-                      <Typography variant="body1" fontWeight={600}>{fieldSummary.ecph.avgPhOut ?? '—'}</Typography>
-                    </Box>
-                  </Box>
-                </CardContent>
-              </Card>
-
-              {/* Scouting reports */}
-              {fieldSummary.scouting.length > 0 && (
-                <Card variant="outlined" sx={{ mb: 2 }}>
-                  <CardContent sx={{ pb: '12px !important' }}>
-                    <Typography variant="subtitle2" sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
-                      <BugIcon fontSize="small" /> Recent Scouting
-                    </Typography>
-                    {fieldSummary.scouting.map((s, i) => (
-                      <Box key={i} sx={{ mb: 1, p: 1, borderRadius: 1, bgcolor: 'background.muted' }}>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <Typography variant="body2" fontWeight={600}>{s.pestName || s.customPestName || 'Unknown'}</Typography>
-                          <Chip
-                            label={s.severity || s.status}
-                            size="small"
-                            color={s.severity === 'high' || s.severity === 'critical' ? 'error' : s.severity === 'medium' ? 'warning' : 'default'}
-                          />
-                        </Box>
-                        <Typography variant="caption" color="text.secondary">
-                          {new Date(s.reportDate).toLocaleDateString()}
-                          {s.infestationPct != null ? ` | ${s.infestationPct}% infestation` : ''}
-                        </Typography>
-                      </Box>
-                    ))}
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Pesticide applications */}
-              {fieldSummary.pesticides.length > 0 && (
-                <Card variant="outlined" sx={{ mb: 2 }}>
-                  <CardContent sx={{ pb: '12px !important' }}>
-                    <Typography variant="subtitle2" sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
-                      <ShieldIcon fontSize="small" /> Recent Pesticide Applications
-                    </Typography>
-                    {fieldSummary.pesticides.map((p, i) => (
-                      <Box key={i} sx={{ mb: 1, p: 1, borderRadius: 1, bgcolor: 'background.muted' }}>
-                        <Typography variant="body2" fontWeight={600}>{p.productName}</Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {new Date(p.applicationDate).toLocaleDateString()}
-                          {p.dosage ? ` | ${p.dosage} ${p.dosageUnit || ''}` : ''}
-                          {p.targetPest ? ` | Target: ${p.targetPest}` : ''}
-                        </Typography>
-                        {p.phiEndDate && (
-                          <Box>
-                            <Typography variant="caption" color={p.phiRemaining > 0 ? 'warning.main' : 'success.main'}>
-                              PHI ends: {formatPhiDateTime(p.phiEndDate)}
-                              {p.phiRemaining > 0 ? ` (${p.phiRemaining}d remaining)` : ' (cleared)'}
-                            </Typography>
-                          </Box>
-                        )}
-                      </Box>
-                    ))}
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Bio-control releases */}
-              {fieldSummary.bioReleases.length > 0 && (
-                <Card variant="outlined" sx={{ mb: 2 }}>
-                  <CardContent sx={{ pb: '12px !important' }}>
-                    <Typography variant="subtitle2" sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
-                      <BugIcon fontSize="small" color="success" /> Bio-Control Releases
-                    </Typography>
-                    {fieldSummary.bioReleases.map((b, i) => (
-                      <Box key={i} sx={{ mb: 0.5, p: 1, borderRadius: 1, bgcolor: 'background.muted' }}>
-                        <Typography variant="body2" fontWeight={600}>{b.productName}</Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {new Date(b.releaseDate).toLocaleDateString()} | Qty: {b.quantity}
-                          {b.targetPest ? ` | Target: ${b.targetPest}` : ''}
-                        </Typography>
-                      </Box>
-                    ))}
-                  </CardContent>
-                </Card>
-              )}
-            </Box>
-          ) : null}
+          {fieldInfoLoading || !fieldSummary ? (
+            <Box sx={{ p: 6, display: 'grid', placeItems: 'center', gap: 2 }}><CircularProgress size={24} /><Typography sx={{ fontSize: 13, color: 'text.secondary' }}>Loading field data</Typography></Box>
+          ) : (
+            <FieldDataPanel fieldId={fieldSummary.field.id || fieldInfoId} summary={fieldSummary} onClose={() => { setFieldInfoOpen(false); setFieldSummary(null); }} />
+          )}
         </Drawer>
       </MapWorkspace>
 

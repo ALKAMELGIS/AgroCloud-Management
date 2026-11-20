@@ -9,6 +9,7 @@ import { requireOrgId } from '../middleware/tenant';
 import { NotFoundError } from '../../utils/errors';
 import { buildPaginationMeta, normalizePagination } from '../../utils/pagination';
 import { getFieldSummary, getPhiStatusBatch } from '../../services/fieldSummary.service';
+import { formsForFields } from '../../services/formRegistry.service';
 import { logAuditEvent } from '../../services/auditLog.service';
 import { dbPool } from '../../db/client';
 import { AppError } from '../../utils/errors';
@@ -370,6 +371,29 @@ fieldsRouter.get(
       if (!canAccess) throw new NotFoundError('Field not found');
       const summary = await getFieldSummary(req.params.id);
       res.json({ success: true, data: summary });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/** Every form with records on this field (linked by ZONE_ID + Farm_Code), newest records first. */
+fieldsRouter.get(
+  '/:id/forms',
+  authorize('ceo', 'operation_manager', 'farm_manager', 'agronomist', 'pest_agronomist'),
+  validate({ params: idSchema, query: z.object({ records: z.coerce.number().int().min(0).max(100).optional() }) }),
+  async (req: AuthRequest, res, next) => {
+    try {
+      const user = req.user!;
+      const orgId = requireOrgId(req);
+      const canAccess = await assignmentRepo.canUserAccessField(user.userId, user.role, req.params.id, orgId);
+      if (!canAccess) throw new NotFoundError('Field not found');
+      const keys = await dbPool.query(
+        'SELECT gis_zone_id AS zone_id, gis_farm_code AS farm_code FROM fields WHERE id = $1 AND organization_id = $2',
+        [req.params.id, orgId],
+      );
+      const forms = await formsForFields([req.params.id], orgId, { recordsPerForm: Number((req.query as any).records ?? 20) });
+      res.json({ success: true, data: { field_id: req.params.id, ...(keys.rows[0] || {}), forms } });
     } catch (error) {
       next(error);
     }

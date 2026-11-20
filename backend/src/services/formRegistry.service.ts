@@ -314,12 +314,12 @@ export async function formsForFields(fieldIds: string[], orgId: string, opts: { 
   if (!fieldIds.length) return [];
   const per = Math.min(Math.max(Number(opts.recordsPerForm) || 20, 0), 200);
   const { rows } = await dbPool.query(
-    `SELECT fr.form_id, fr.form_key, fr.form_path, fr.title_en, fr.title_ar, fr.category,
+    `SELECT fr.form_id, fr.form_key, fr.form_path, fr.title_en, fr.title_ar, fr.category, fr.ui_route,
             COUNT(r.record_id)::int AS record_count, MIN(r.record_date) AS first_record_date,
             MAX(r.record_date) AS last_record_date, MAX(r.updated_at) AS last_updated_at
        FROM bi.form_records r JOIN form_registry fr ON fr.form_id = r.form_id
       WHERE r.field_id = ANY($1::uuid[]) AND r.organization_id = $2
-      GROUP BY fr.form_id, fr.form_key, fr.form_path, fr.title_en, fr.title_ar, fr.category
+      GROUP BY fr.form_id, fr.form_key, fr.form_path, fr.title_en, fr.title_ar, fr.category, fr.ui_route
       ORDER BY fr.category, fr.form_path`,
     [fieldIds, orgId],
   );
