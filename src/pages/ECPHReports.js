@@ -22,7 +22,7 @@ import useOpsExcelExport from '../hooks/useOpsExcelExport';
 import { OPS_EXPORT } from '../utils/companyExcelExport';
 import { buildEcphExcelSheets } from '../utils/ecphExcelExport';
 import ExecutiveReportPanel from '../components/reports/ExecutiveReportPanel';
-import { getDefaultDateRange } from '../utils/executiveReportUtils';
+import { getDefaultDateRange, scopeFields } from '../utils/executiveReportUtils';
 import { buildEcphExecutiveReport } from '../utils/executiveReports/ecphExecutive';
 import PageTitle from '../components/PageTitle';
 import ExportButton from '../components/ExportButton';
@@ -193,8 +193,8 @@ function ECPHReports() {
   };
 
   const executiveReport = useMemo(
-    () => buildEcphExecutiveReport(ecphEntries, fieldInfoMap, dateFrom, dateTo),
-    [ecphEntries, fieldInfoMap, dateFrom, dateTo],
+    () => buildEcphExecutiveReport(ecphEntries, scopeFields(fieldInfoMap, activeSiteId), dateFrom, dateTo),
+    [ecphEntries, fieldInfoMap, dateFrom, dateTo, activeSiteId],
   );
 
   const generateDailyReport = async () => {

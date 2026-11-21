@@ -20,7 +20,7 @@ import useOpsExcelExport from '../hooks/useOpsExcelExport';
 import { OPS_EXPORT } from '../utils/companyExcelExport';
 import { buildHarvestExcelSheets } from '../utils/harvestExcelExport';
 import ExecutiveReportPanel from '../components/reports/ExecutiveReportPanel';
-import { getDefaultDateRange } from '../utils/executiveReportUtils';
+import { getDefaultDateRange, scopeFields } from '../utils/executiveReportUtils';
 import { buildHarvestExecutiveReport } from '../utils/executiveReports/harvestExecutive';
 import PageTitle from '../components/PageTitle';
 import ExportButton from '../components/ExportButton';
@@ -54,6 +54,7 @@ function HarvestReports() {
               fieldMap[field.id] = {
                 name: field.name,
                 currentCrop: field.currentCrop,
+                siteId: site.id,
               };
             });
           });
@@ -76,8 +77,8 @@ function HarvestReports() {
   };
 
   const executiveReport = useMemo(
-    () => buildHarvestExecutiveReport(harvestEntries, fieldInfoMap, dateFrom, dateTo),
-    [harvestEntries, fieldInfoMap, dateFrom, dateTo],
+    () => buildHarvestExecutiveReport(harvestEntries, scopeFields(fieldInfoMap, activeSiteId), dateFrom, dateTo),
+    [harvestEntries, fieldInfoMap, dateFrom, dateTo, activeSiteId],
   );
 
   const exportHarvestExcel = async (entries, filename, emptyMessage) => {

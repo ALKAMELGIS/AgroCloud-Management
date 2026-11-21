@@ -41,6 +41,8 @@ function aggregate(entries, fieldInfoMap) {
 
   return {
     totalKg,
+    gradeTotals,
+    fieldIds: new Set(entries.map((e) => e.fieldId)),
     entryCount: entries.length,
     harvestDays,
     fieldsHarvested,
@@ -137,19 +139,58 @@ function buildInsights(current, allFieldCount) {
   return insights;
 }
 
+const kg = (n) => Math.round(n).toLocaleString('en-US');
+
+/**
+ * Highlights: one card per finding, each with a headline number and the list
+ * behind it (opened by clicking the card).
+ */
+function buildHighlights(current, fieldInfoMap) {
+  const out = [];
+  if (current.entryCount === 0) return out;
+  if (current.gradeAPct != null) {
+    const g = current.gradeTotals;
+    out.push({
+      id: 'grade', icon: 'grade', tone: current.gradeAPct >= 70 ? 'good' : current.gradeAPct >= 50 ? 'watch' : 'alert',
+      label: 'Grade A share', value: `${current.gradeAPct.toFixed(0)}%`,
+      note: current.gradeAPct >= 70 ? 'Strong quality mix' : current.gradeAPct >= 50 ? 'Watch grading and crop stress' : 'Low: review crop stress or grading',
+      detail: { title: 'Graded volume', items: [['Grade A', g.A], ['Grade B', g.B], ['Grade C', g.C], ['Not graded', g.other]].filter(([, v]) => v > 0).map(([l, v]) => ({ label: l, value: v, unit: 'kg' })) },
+    });
+  }
+  const varieties = Object.entries(current.byVariety).sort((a, b) => b[1] - a[1]);
+  if (varieties.length) {
+    const [name, v] = varieties[0];
+    out.push({
+      id: 'variety', icon: 'crop', tone: 'info', label: 'Leading crop', value: name,
+      note: `${kg(v)} kg · ${current.totalKg > 0 ? Math.round((v / current.totalKg) * 100) : 0}% of the harvest`,
+      detail: { title: 'Harvest by crop and variety', items: varieties.slice(0, 8).map(([l, val]) => ({ label: l, value: val, unit: 'kg' })) },
+    });
+  }
+  const scope = Object.entries(fieldInfoMap);
+  if (scope.length) {
+    const idle = scope.filter(([id]) => !current.fieldIds.has(id)).map(([, f]) => f.name).sort();
+    out.push({
+      id: 'idle', icon: 'idle', tone: idle.length ? 'watch' : 'good', label: 'Fields without harvest', value: String(idle.length),
+      note: `${current.fieldsHarvested} of ${scope.length} fields harvested`,
+      detail: { title: idle.length ? 'No harvest in this period' : 'Every field was harvested', items: idle.map((n) => ({ label: n })) },
+    });
+  }
+  return out;
+}
+
 function buildSummary(current, prevAgg) {
   if (current.entryCount === 0) {
     return 'No harvest activity was recorded for the selected period.';
   }
 
   const parts = [
-    `Total harvest was ${current.totalKg.toLocaleString(undefined, { maximumFractionDigits: 0 })} kg across ${current.harvestDays} harvest day(s), averaging ${current.avgKgPerDay != null ? current.avgKgPerDay.toFixed(0) : '—'} kg/day.`,
+    `${kg(current.totalKg)} kg were harvested on ${current.harvestDays} ${current.harvestDays === 1 ? 'day' : 'days'} from ${current.fieldsHarvested} ${current.fieldsHarvested === 1 ? 'field' : 'fields'}, about ${current.avgKgPerDay != null ? kg(current.avgKgPerDay) : '—'} kg a harvest day.`,
   ];
 
   if (prevAgg.entryCount > 0) {
     const delta = pctChange(current.totalKg, prevAgg.totalKg);
     if (delta != null && Math.abs(delta) >= 3) {
-      parts.push(`Volume ${delta >= 0 ? 'increased' : 'decreased'} by ${Math.abs(delta).toFixed(0)}% compared to the previous period.`);
+      parts.push(`That is ${Math.abs(delta).toFixed(0)}% ${delta >= 0 ? 'more' : 'less'} than the previous period of the same length.`);
     }
   }
 
@@ -166,38 +207,30 @@ export function buildHarvestExecutiveReport(entries, fieldInfoMap, dateFrom, dat
 
   const kpis = [
     {
+      icon: 'harvest',
       title: 'Total Harvest',
       value: `${current.totalKg.toLocaleString(undefined, { maximumFractionDigits: 0 })} kg`,
       delta: formatDelta(pctChange(current.totalKg, prevAgg.totalKg)),
       color: '#1f7a4d',
     },
     {
+      icon: 'calendar',
       title: 'Harvest Days',
       value: String(current.harvestDays),
       subtitle: `${current.entryCount} entries`,
       color: '#333',
     },
     {
+      icon: 'field',
       title: 'Fields Harvested',
       value: String(current.fieldsHarvested),
       color: '#3b82f6',
     },
     {
+      icon: 'average',
       title: 'Avg kg / Day',
-      value: current.avgKgPerDay != null ? current.avgKgPerDay.toFixed(0) : '—',
+      value: current.avgKgPerDay != null ? `${kg(current.avgKgPerDay)} kg` : '—',
       color: '#2f6aa8',
-    },
-    {
-      title: 'Grade A Share',
-      value: current.gradeAPct != null ? `${current.gradeAPct.toFixed(0)}%` : '—',
-      subtitle: 'of graded volume',
-      color: current.gradeAPct != null && current.gradeAPct >= 70 ? '#1f7a4d' : '#f59e0b',
-    },
-    {
-      title: 'Varieties',
-      value: String(Object.keys(current.byVariety).length),
-      subtitle: `${current.varietyLines} lines`,
-      color: '#64748b',
     },
   ];
 
@@ -205,6 +238,7 @@ export function buildHarvestExecutiveReport(entries, fieldInfoMap, dateFrom, dat
     kpis,
     summary: buildSummary(current, prevAgg),
     insights: buildInsights(current, allFieldCount),
+    highlights: buildHighlights(current, fieldInfoMap),
     topFive: buildTopFive(current),
     hasData: current.entryCount > 0,
   };

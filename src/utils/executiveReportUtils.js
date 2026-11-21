@@ -93,3 +93,9 @@ export function phInRange(val) {
 export function drainInRange(val) {
   return val >= 15 && val <= 30;
 }
+
+/** Fields of the active site only (all fields when no site is chosen), so coverage counts this farm, not every farm. */
+export function scopeFields(fieldInfoMap, siteId) {
+  if (!siteId) return fieldInfoMap;
+  return Object.fromEntries(Object.entries(fieldInfoMap || {}).filter(([, f]) => !f.siteId || f.siteId === siteId));
+}

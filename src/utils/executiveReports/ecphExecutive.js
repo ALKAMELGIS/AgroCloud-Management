@@ -177,6 +177,44 @@ function buildInsights(current, rows, allFieldCount) {
   return insights;
 }
 
+function buildHighlights(current, rows, fieldInfoMap) {
+  const out = [];
+  if (!rows.length) return out;
+  const fieldAvg = Object.entries(current.byField).map(([f, d]) => ({ f, ec: avg(d.ecOut), drain: avg(d.drain) }));
+  if (current.inRangePct != null) {
+    out.push({
+      id: 'range', icon: 'target', tone: current.inRangePct >= 80 ? 'good' : current.inRangePct >= 60 ? 'watch' : 'alert',
+      label: 'Readings in target', value: `${current.inRangePct.toFixed(0)}%`, note: 'EC out 1.5–3.0 and pH out 5.5–6.5',
+      detail: { title: 'Average EC out by field, highest first', items: fieldAvg.filter((x) => x.ec != null).sort((a, b) => b.ec - a.ec).slice(0, 10).map((x) => ({ label: x.f, value: x.ec, unit: 'EC', decimals: 2 })) },
+    });
+  }
+  const high = fieldAvg.filter((x) => x.ec != null && x.ec > 3.0).sort((a, b) => b.ec - a.ec);
+  out.push({
+    id: 'highEc', icon: 'alert', tone: high.length ? 'alert' : 'good', label: 'Fields with high EC out', value: String(high.length),
+    note: high.length ? 'Average above 3.0: check leaching and recipe' : 'No field above 3.0',
+    detail: { title: high.length ? 'Average EC out above 3.0' : 'All fields at or below 3.0', items: high.map((x) => ({ label: x.f, value: x.ec, unit: 'EC', decimals: 2 })) },
+  });
+  if (current.avgDrain != null) {
+    const ok = drainInRange(current.avgDrain);
+    out.push({
+      id: 'drain', icon: 'drain', tone: ok ? 'good' : 'watch', label: 'Average drain', value: `${current.avgDrain.toFixed(1)}%`,
+      note: ok ? 'Within the 15–30% band' : current.avgDrain < 15 ? 'Below 15%: salts can build up' : 'Above 30%: shorten or space irrigation',
+      detail: { title: 'Average drain by field', items: fieldAvg.filter((x) => x.drain != null).sort((a, b) => b.drain - a.drain).slice(0, 10).map((x) => ({ label: x.f, value: x.drain, unit: '%', decimals: 1 })) },
+    });
+  }
+  const scope = Object.entries(fieldInfoMap);
+  if (scope.length) {
+    const logged = new Set(rows.map((r) => r.fieldId));
+    const idle = scope.filter(([id]) => !logged.has(id)).map(([, f]) => f.name).sort();
+    out.push({
+      id: 'idle', icon: 'idle', tone: idle.length ? 'watch' : 'good', label: 'Fields without readings', value: String(idle.length),
+      note: `${scope.length - idle.length} of ${scope.length} fields read`,
+      detail: { title: idle.length ? 'No EC/pH reading in this period' : 'Every field was read', items: idle.map((n) => ({ label: n })) },
+    });
+  }
+  return out;
+}
+
 function buildSummary(current, dateFrom, dateTo, prevAgg) {
   if (current.readingCount === 0) {
     return 'No EC/pH readings were recorded for the selected period.';
@@ -214,35 +252,28 @@ export function buildEcphExecutiveReport(entries, fieldInfoMap, dateFrom, dateTo
 
   const kpis = [
     {
+      icon: 'ecph',
       title: 'Readings',
       value: String(current.readingCount),
       subtitle: `${current.fieldsLogged} fields`,
       color: '#333',
     },
     {
+      icon: 'ec',
       title: 'Avg EC Out',
       value: current.avgEcOut != null ? current.avgEcOut.toFixed(2) : '—',
       delta: formatDelta(pctChange(current.avgEcOut, prevAgg.avgEcOut)),
       color: current.avgEcOut != null && !ecInRange(current.avgEcOut) ? '#e65100' : '#1f7a4d',
     },
     {
+      icon: 'ph',
       title: 'Avg pH Out',
       value: current.avgPhOut != null ? current.avgPhOut.toFixed(2) : '—',
       delta: formatDelta(pctChange(current.avgPhOut, prevAgg.avgPhOut)),
       color: '#3b82f6',
     },
     {
-      title: 'Avg Drain %',
-      value: current.avgDrain != null ? `${current.avgDrain.toFixed(1)}%` : '—',
-      color: current.avgDrain != null && !drainInRange(current.avgDrain) ? '#e65100' : '#2f6aa8',
-    },
-    {
-      title: 'In Target Range',
-      value: current.inRangePct != null ? `${current.inRangePct.toFixed(0)}%` : '—',
-      subtitle: 'EC & pH readings',
-      color: current.inRangePct != null && current.inRangePct >= 80 ? '#1f7a4d' : '#f59e0b',
-    },
-    {
+      icon: 'water',
       title: 'Total Water',
       value: current.totalWater > 0 ? `${current.totalWater.toFixed(1)} m³` : '—',
       color: '#64748b',
@@ -253,6 +284,7 @@ export function buildEcphExecutiveReport(entries, fieldInfoMap, dateFrom, dateTo
     kpis,
     summary: buildSummary(current, dateFrom, dateTo, prevAgg),
     insights: buildInsights(current, rows, allFieldCount),
+    highlights: buildHighlights(current, rows, fieldInfoMap),
     topFive: buildTopFive(current.byField),
     hasData: rows.length > 0,
   };

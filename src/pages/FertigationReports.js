@@ -23,7 +23,7 @@ import { OPS_EXPORT } from '../utils/companyExcelExport';
 import { waterQtyPerValve } from '../utils/fertigationWaterQty';
 import { buildFertigationExcelSheets } from '../utils/fertigationExcelExport';
 import ExecutiveReportPanel from '../components/reports/ExecutiveReportPanel';
-import { getDefaultDateRange } from '../utils/executiveReportUtils';
+import { getDefaultDateRange, scopeFields } from '../utils/executiveReportUtils';
 import { buildFertigationExecutiveReport } from '../utils/executiveReports/fertigationExecutive';
 import PageTitle from '../components/PageTitle';
 import ExportButton from '../components/ExportButton';
@@ -193,8 +193,8 @@ function FertigationReports() {
   };
 
   const executiveReport = useMemo(
-    () => buildFertigationExecutiveReport(fertigationEntries, fieldInfoMap, dateFrom, dateTo),
-    [fertigationEntries, fieldInfoMap, dateFrom, dateTo],
+    () => buildFertigationExecutiveReport(fertigationEntries, scopeFields(fieldInfoMap, activeSiteId), dateFrom, dateTo),
+    [fertigationEntries, fieldInfoMap, dateFrom, dateTo, activeSiteId],
   );
 
   const generateDailyReport = async () => {

@@ -167,6 +167,36 @@ function buildInsights(current, allFieldCount) {
   return insights;
 }
 
+function buildHighlights(current, entries, fieldInfoMap) {
+  const out = [];
+  if (current.entryCount === 0) return out;
+  const fert = Object.entries(current.fertTotals).sort((a, b) => b[1] - a[1]);
+  if (fert.length) {
+    const [name, v] = fert[0];
+    out.push({
+      id: 'fert', icon: 'fert', tone: 'info', label: 'Leading fertilizer', value: name,
+      note: `${Math.round(v).toLocaleString('en-US')} kg · ${current.totalFertilizer > 0 ? Math.round((v / current.totalFertilizer) * 100) : 0}% of all fertilizer`,
+      detail: { title: 'Fertilizer used', items: fert.slice(0, 10).map(([l, val]) => ({ label: l, value: val, unit: 'kg' })) },
+    });
+  }
+  out.push({
+    id: 'days', icon: 'calendar', tone: current.daysWithData >= 5 ? 'good' : 'watch', label: 'Days logged', value: String(current.daysWithData),
+    note: current.daysWithData >= 5 ? 'Fertigation recorded regularly' : 'Few days logged: check the record',
+    detail: { title: 'Recipes used', items: Object.entries(current.recipeCounts).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([l, val]) => ({ label: l, value: val, unit: 'entries' })) },
+  });
+  const scope = Object.entries(fieldInfoMap);
+  if (scope.length) {
+    const active = new Set(entries.map((e) => e.fieldId));
+    const idle = scope.filter(([id]) => !active.has(id)).map(([, f]) => f.name).sort();
+    out.push({
+      id: 'idle', icon: 'idle', tone: idle.length ? 'watch' : 'good', label: 'Fields without fertigation', value: String(idle.length),
+      note: `${scope.length - idle.length} of ${scope.length} fields fed`,
+      detail: { title: idle.length ? 'No fertigation in this period' : 'Every field was fed', items: idle.map((n) => ({ label: n })) },
+    });
+  }
+  return out;
+}
+
 function buildSummary(current, prevAgg) {
   if (current.entryCount === 0) {
     return 'No fertigation activity was recorded for the selected period.';
@@ -196,39 +226,32 @@ export function buildFertigationExecutiveReport(entries, fieldInfoMap, dateFrom,
 
   const kpis = [
     {
+      icon: 'fertEntry',
       title: 'Applications',
       value: String(current.entryCount),
       subtitle: `${current.fieldsActive} fields`,
       color: '#333',
     },
     {
+      icon: 'water',
       title: 'Total Water',
       value: `${current.totalWater.toFixed(1)} m³`,
       delta: formatDelta(pctChange(current.totalWater, prevAgg.totalWater)),
       color: '#1976d2',
     },
     {
+      icon: 'fert',
       title: 'Total Fertilizer',
       value: `${current.totalFertilizer.toFixed(0)} kg`,
       delta: formatDelta(pctChange(current.totalFertilizer, prevAgg.totalFertilizer)),
       color: '#1f7a4d',
     },
     {
+      icon: 'average',
       title: 'Avg Daily Water',
       value: current.avgDailyWater != null ? `${current.avgDailyWater.toFixed(1)} m³` : '—',
       subtitle: 'on logged days',
       color: '#2f6aa8',
-    },
-    {
-      title: 'Active Days',
-      value: String(current.daysWithData),
-      subtitle: 'with fertigation',
-      color: '#f59e0b',
-    },
-    {
-      title: 'Field Coverage',
-      value: allFieldCount > 0 ? `${current.fieldsActive}/${allFieldCount}` : String(current.fieldsActive),
-      color: current.fieldsActive >= allFieldCount * 0.8 ? '#1f7a4d' : '#e65100',
     },
   ];
 
@@ -236,6 +259,7 @@ export function buildFertigationExecutiveReport(entries, fieldInfoMap, dateFrom,
     kpis,
     summary: buildSummary(current, prevAgg),
     insights: buildInsights(current, allFieldCount),
+    highlights: buildHighlights(current, filtered, fieldInfoMap),
     topFive: buildTopFive(current),
     hasData: current.entryCount > 0,
   };
