@@ -80,6 +80,9 @@ const MENU = [
     { key: 'webhooks', label: 'Webhooks', icon: ICON_PATHS.webhook, route: '/admin/webhooks' },
     { key: 'john-deere', label: 'John Deere', icon: ICON_PATHS.deere, route: '/admin/integrations/john-deere' },
   ] },
+  { group: 'Account', items: [
+    { key: 'plan', label: 'Plan & usage', icon: ICON_PATHS.cost, route: '/admin/organization', native: true },
+  ] },
   { group: 'System', items: [
     { key: 'audit', label: 'Audit log', icon: ICON_PATHS.audit, route: '/admin/audit' },
     { key: 'health', label: 'System health', icon: ICON_PATHS.health, route: '/admin/health' },
@@ -235,6 +238,120 @@ function GeneralPane() {
   );
 }
 
+const MODULE_NAMES = { core: 'Daily operations', gis: 'GIS', operations: 'Operations & costing', remote_sensing: 'Remote sensing', ai: 'AI assistant', api: 'API & webhooks' };
+const KIND_NAMES = { sites: 'Sites', fields: 'Fields', users: 'Active users' };
+
+function Meter({ kind, used, limit }) {
+  const pct = limit ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+  const tone = limit && used >= limit ? '#b42318' : limit && pct >= 80 ? '#b7791f' : '#1d6b45';
+  return (
+    <Box sx={{ px: 5, py: 4, '& + &': { borderTop: '1px solid rgba(22,40,30,0.05)' } }}>
+      <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 2 }}>
+        <Typography sx={{ fontSize: 13.5, fontWeight: 500, flex: 1 }}>{KIND_NAMES[kind]}</Typography>
+        <Typography sx={{ fontSize: 13.5, fontVariantNumeric: 'tabular-nums' }}>
+          <b style={{ fontWeight: 600 }}>{used.toLocaleString('en-US')}</b>
+          <Box component="span" sx={{ color: 'text.secondary' }}>{limit ? ` of ${limit.toLocaleString('en-US')}` : ' · no limit'}</Box>
+        </Typography>
+      </Box>
+      {limit ? (
+        <Box sx={{ mt: 2, height: 6, borderRadius: 3, bgcolor: 'rgba(22,40,30,0.07)', overflow: 'hidden' }} role="meter" aria-valuemin={0} aria-valuemax={limit} aria-valuenow={used} aria-label={KIND_NAMES[kind]}>
+          <Box sx={{ width: `${pct}%`, height: '100%', bgcolor: tone, borderRadius: 3 }} />
+        </Box>
+      ) : null}
+    </Box>
+  );
+}
+
+function PlanPane() {
+  const { user } = useAuth();
+  const notify = useNotification();
+  const [p, setP] = useState(null);
+  const [failed, setFailed] = useState(false);
+  const [email, setEmail] = useState('');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    apiRequest('/organization/plan').then((d) => { setP(d); setEmail(d?.billingEmail || ''); }).catch(() => setFailed(true));
+  }, []);
+  const saveEmail = async () => {
+    setBusy(true);
+    try {
+      const d = await apiRequest('/organization/plan/billing', { method: 'PUT', body: JSON.stringify({ billingEmail: email.trim() || null }) });
+      setP(d); notify.success('Billing contact saved');
+    } catch (e) { notify.error(e.message || 'Could not save'); } finally { setBusy(false); }
+  };
+  if (failed) {
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+        <PaneHead group="Account" title="Plan & usage" />
+        <Typography sx={{ fontSize: 13.5, color: 'text.secondary' }}>The plan is not available yet: the server needs the latest update (migration 181)</Typography>
+      </Box>
+    );
+  }
+  if (!p) return <Skeleton variant="rounded" height={420} sx={{ borderRadius: '16px' }} />;
+  const near = ['sites', 'fields', 'users'].filter((k) => p.limits[k] && p.usage[k] >= p.limits[k] * 0.8);
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+      <PaneHead group="Account" title="Plan & usage" desc="Your edition, what it includes and how much of it is in use" />
+      <Box component="section" sx={{ ...CARD, p: 5, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4 }}>
+        <Box sx={{ width: 44, height: 44, borderRadius: '12px', display: 'grid', placeItems: 'center', bgcolor: 'primary.main', color: '#fff', flexShrink: 0 }}>
+          <ModuleIcon d={ICON_PATHS.grade} size={22} />
+        </Box>
+        <Box sx={{ flex: '1 1 240px', minWidth: 0 }}>
+          <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>Current plan</Typography>
+          <Typography sx={{ fontSize: 20, fontWeight: 600, letterSpacing: '-0.01em' }}>{p.label}</Typography>
+        </Box>
+        <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{p.renewsAt ? `Renews on ${p.renewsAt}` : 'No renewal date set'}</Typography>
+      </Box>
+      {near.length ? (
+        <Typography sx={{ fontSize: 13, color: '#8a5a12' }}>
+          {near.map((k) => KIND_NAMES[k]).join(' and ')} {near.some((k) => p.usage[k] >= p.limits[k]) ? 'at or over the limit: nothing more can be added' : 'close to the limit'}; your AgroCloud account manager can change the plan
+        </Typography>
+      ) : null}
+      <Card title="Usage" desc="Counted now; adding beyond a limit is refused with a clear message">
+        {['sites', 'fields', 'users'].map((k) => <Meter key={k} kind={k} used={p.usage[k]} limit={p.limits[k]} />)}
+      </Card>
+      <Card title="Included modules" desc="Modules outside the plan can be added on">
+        <Box sx={{ px: 5, py: 4, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 3 }}>
+          {Object.keys(MODULE_NAMES).map((m) => {
+            const on = p.modules.includes(m);
+            return (
+              <Box key={m} sx={{ display: 'flex', alignItems: 'center', gap: 2, height: 32, color: on ? 'text.primary' : 'text.disabled' }}>
+                <ModuleIcon d={on ? 'M5 12l4 4 10-10' : 'M6 12h12'} size={16} stroke={2} />
+                <Typography sx={{ fontSize: 13.5, fontWeight: on ? 500 : 400 }}>{MODULE_NAMES[m]}</Typography>
+              </Box>
+            );
+          })}
+        </Box>
+      </Card>
+      <Card title="Editions" desc="To change the plan, contact your AgroCloud account manager">
+        <Box sx={{ overflowX: 'auto' }}>
+          <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, '& th, & td': { px: 5, py: 3, textAlign: 'start', borderBottom: '1px solid rgba(22,40,30,0.05)', whiteSpace: 'nowrap' }, '& th': { fontWeight: 500, color: 'text.secondary', fontSize: 12 } }}>
+            <thead><tr><th>Edition</th><th>Sites</th><th>Fields</th><th>Users</th><th>Modules</th></tr></thead>
+            <tbody>
+              {p.editions.map((e) => (
+                <Box component="tr" key={e.key} sx={e.key === p.plan ? { bgcolor: 'rgba(22,67,46,0.05)' } : undefined}>
+                  <td style={{ fontWeight: 600 }}>{e.label}{e.key === p.plan ? ' · yours' : ''}</td>
+                  {['sites', 'fields', 'users'].map((k) => <td key={k} style={{ fontVariantNumeric: 'tabular-nums' }}>{e.limits[k] ?? 'No limit'}</td>)}
+                  <td style={{ whiteSpace: 'normal', minWidth: 220 }}>{e.modules.map((m) => MODULE_NAMES[m] || m).join(', ')}</td>
+                </Box>
+              ))}
+            </tbody>
+          </Box>
+        </Box>
+      </Card>
+      <Card title="Billing contact" desc="Invoices and renewal notices go to this address">
+        <Row label="Email" help="Only the CEO can change it">
+          <Box sx={{ display: 'flex', gap: 2 }}>
+            <TextField fullWidth size="small" type="email" value={email} onChange={(e) => setEmail(e.target.value)} disabled={user?.role !== 'ceo'}
+              placeholder="finance@yourfarm.com" slotProps={{ htmlInput: { 'aria-label': 'Billing email' } }} />
+            <Button variant="contained" disableElevation disabled={user?.role !== 'ceo' || busy || (email.trim() || null) === (p.billingEmail || null)} onClick={saveEmail}>Save</Button>
+          </Box>
+        </Row>
+      </Card>
+    </Box>
+  );
+}
+
 function MasterPane({ lists, onOpen }) {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
@@ -334,7 +451,7 @@ export default function Settings() {
             <ModuleIcon d="M15 6l-6 6 6 6" size={16} />Master data
           </ButtonBase>
         ) : null}
-        {key === 'general' ? <GeneralPane /> : key === 'master' ? <MasterPane lists={lists} onOpen={open} /> : (
+        {key === 'general' ? <GeneralPane /> : key === 'plan' ? <PlanPane /> : key === 'master' ? <MasterPane lists={lists} onOpen={open} /> : (
           <Suspense fallback={<Skeleton variant="rounded" height={420} sx={{ borderRadius: '16px' }} />}>
             {Page ? <Page /> : null}
           </Suspense>

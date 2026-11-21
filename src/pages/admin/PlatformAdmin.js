@@ -52,6 +52,22 @@ export default function PlatformAdmin() {
   });
   const [creating, setCreating] = useState(false);
   const [recentInvites, setRecentInvites] = useState([]);
+  const [planBusy, setPlanBusy] = useState(null);
+
+  // Editions from migration 181; limits are enforced by the database.
+  const EDITIONS = [['starter', 'Starter'], ['professional', 'Professional'], ['enterprise', 'Enterprise'], ['government', 'Government & research']];
+  const changePlan = async (org, plan) => {
+    setPlanBusy(org.id);
+    try {
+      await apiRequest(`/admin/organizations/${org.id}/plan`, { method: 'PUT', body: JSON.stringify({ plan }) });
+      notify.success(`${org.name} is now on ${EDITIONS.find((e) => e[0] === plan)?.[1] || plan}`);
+      await refreshOrganizations?.();
+    } catch (err) {
+      notify.error(err.message || 'Could not change the plan');
+    } finally {
+      setPlanBusy(null);
+    }
+  };
 
   useEffect(() => {
     if (user && !user.isSuperAdmin) {
@@ -222,12 +238,13 @@ export default function PlatformAdmin() {
                       <TableCell>Slug</TableCell>
                       <TableCell>Created</TableCell>
                       <TableCell>Status</TableCell>
+                      <TableCell>Plan</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
                     {organizations.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={4} align="center" sx={{ py: 3, color: 'text.secondary' }}>
+                        <TableCell colSpan={5} align="center" sx={{ py: 3, color: 'text.secondary' }}>
                           No organizations yet
                         </TableCell>
                       </TableRow>
@@ -240,6 +257,12 @@ export default function PlatformAdmin() {
                             {org.created_at ? new Date(org.created_at).toLocaleDateString() : '—'}
                           </TableCell>
                           <TableCell>{org.is_active ? 'Active' : 'Inactive'}</TableCell>
+                          <TableCell sx={{ minWidth: 200 }}>
+                            <TextField select size="small" fullWidth value={org.plan || 'enterprise'} disabled={planBusy === org.id}
+                              onChange={(e) => changePlan(org, e.target.value)} slotProps={{ htmlInput: { 'aria-label': `Plan of ${org.name}` } }}>
+                              {EDITIONS.map(([k, l]) => <MenuItem key={k} value={k}>{l}</MenuItem>)}
+                            </TextField>
+                          </TableCell>
                         </TableRow>
                       ))
                     )}

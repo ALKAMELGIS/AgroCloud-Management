@@ -12,6 +12,8 @@ export interface OrganizationRow {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  /** Edition key (migration 181); absent before that migration runs. */
+  plan?: string;
 }
 
 function mapOrg(row: Record<string, unknown>): OrganizationRow {
@@ -23,6 +25,7 @@ function mapOrg(row: Record<string, unknown>): OrganizationRow {
     is_active: row.is_active as boolean,
     created_at: row.created_at as string,
     updated_at: row.updated_at as string,
+    ...(row.plan ? { plan: row.plan as string } : {}),
   };
 }
 

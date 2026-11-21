@@ -3,6 +3,7 @@ import { AppError } from '../../utils/errors';
 import { logger } from '../../utils/logger';
 import { captureException } from '../../utils/sentry';
 import { incrementErrorCount } from '../v1/health.routes';
+import { planLimitMessage } from '../../services/plan.service';
 
 export function errorHandler(
   err: unknown,
@@ -18,6 +19,14 @@ export function errorHandler(
   }
 
   const pgErr = err as { code?: string; detail?: string; constraint?: string; table?: string; column?: string };
+  // Plan limit raised by the agro_plan_limit() trigger (migration 181).
+  if ((pgErr as { code?: string; message?: string })?.code === 'P0001') {
+    const lim = planLimitMessage((err as { message?: string }).message || '');
+    if (lim) {
+      res.status(403).json({ success: false, error: { code: 'PLAN_LIMIT', message: lim.message, details: { kind: lim.kind, limit: lim.limit } } });
+      return;
+    }
+  }
   if (pgErr?.code === '23505') {
     const conflict = new AppError('Duplicate value', 'CONFLICT', 409, {
       detail: pgErr.detail,

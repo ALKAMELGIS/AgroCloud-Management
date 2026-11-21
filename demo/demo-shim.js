@@ -381,6 +381,14 @@
     if(path==='/field-types') return ok([{id:'ft1',name:'Greenhouse'},{id:'ft2',name:'Nethouse'},{id:'ft3',name:'PIVOT'}]);
     if(path==='/seasons') return ok(SEASONS);
     if(path==='/assignments/my-access') return ok({isFullAccess:true,siteIds:null});
+    /* Plan & usage (demo): Enterprise, like every organization that existed before plans; usage counted from the demo farm. */
+    if(path==='/organization/plan'||path==='/organization/plan/billing'){
+      var pst; try{ pst=JSON.parse(localStorage.getItem('agro_demo_plan_v1')||'null'); }catch(e){ pst=null; } pst=pst||{billingEmail:null};
+      if(path==='/organization/plan/billing'&&method==='PUT'&&reqBody){ pst.billingEmail=reqBody.billingEmail||null; try{ localStorage.setItem('agro_demo_plan_v1',JSON.stringify(pst)); }catch(e){} }
+      var ED=[['starter','Starter',1,25,10,['core']],['professional','Professional',3,150,50,['core','gis','operations']],['enterprise','Enterprise',null,null,null,['core','gis','operations','remote_sensing','ai','api']],['government','Government & research',null,null,null,['core','gis','operations','remote_sensing','ai','api']]]
+        .map(function(e){ return {key:e[0],label:e[1],limits:{sites:e[2],fields:e[3],users:e[4]},modules:e[5]}; });
+      return ok({plan:'enterprise',label:'Enterprise',limits:ED[2].limits,usage:{sites:sites.length,fields:fields.length,users:12},modules:ED[2].modules,renewsAt:'2027-01-01',billingEmail:pst.billingEmail,editions:ED});
+    }
     if(path==='/organization'){ var orgSt; try{ orgSt=JSON.parse(localStorage.getItem('agro_demo_org_v1')||'null'); }catch(e){ orgSt=null; } orgSt=orgSt||{id:'org1',name:'Al Maha Farm',settings:{default_site:'c7s1'}};
       if(method==='PUT'&&reqBody){ if(reqBody.name) orgSt.name=String(reqBody.name).slice(0,120); if(reqBody.settings&&typeof reqBody.settings==='object') orgSt.settings=Object.assign({},orgSt.settings,reqBody.settings); try{ localStorage.setItem('agro_demo_org_v1',JSON.stringify(orgSt)); }catch(e){} }
       return ok(orgSt); }

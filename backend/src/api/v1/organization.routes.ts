@@ -1,6 +1,7 @@
 import { Router, Response, NextFunction } from 'express';
 import { auth, authorize, AuthRequest } from '../middleware/auth';
 import { requireOrgId } from '../middleware/tenant';
+import { getOrganizationPlan, setBillingEmail } from '../../services/plan.service';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { AppError, NotFoundError } from '../../utils/errors';
 import { uploadSingle } from '../middleware/upload';
@@ -102,6 +103,20 @@ organizationRouter.put('/', authorize('ceo'), asyncHandler(async (req: AuthReque
   const { name, settings } = req.body;
   const org = await updateOrganization(orgId, { name, settings });
   res.json({ success: true, data: org });
+}));
+
+/** GET /organization/plan - edition, limits, usage and modules of the caller's organization */
+organizationRouter.get('/plan', asyncHandler(async (req: AuthRequest, res: Response) => {
+  res.json({ success: true, data: await getOrganizationPlan(requireOrgId(req)) });
+}));
+
+/** PUT /organization/plan/billing - billing contact (CEO only); changing the edition is a platform-admin action */
+organizationRouter.put('/plan/billing', authorize('ceo'), asyncHandler(async (req: AuthRequest, res: Response) => {
+  const raw = req.body?.billingEmail;
+  const email = raw == null || String(raw).trim() === '' ? null : String(raw).trim().toLowerCase();
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new AppError('Enter a valid email', 'VALIDATION_ERROR', 400);
+  await setBillingEmail(requireOrgId(req), email);
+  res.json({ success: true, data: await getOrganizationPlan(requireOrgId(req)) });
 }));
 
 /** GET /organization/members - org members only */

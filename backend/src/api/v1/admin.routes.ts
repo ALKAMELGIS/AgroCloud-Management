@@ -12,6 +12,7 @@ import {
   seedMinimalOrgStructure,
 } from '../../services/organization.service';
 import { config } from '../../config';
+import { setOrganizationPlan, getOrganizationPlan } from '../../services/plan.service';
 
 export const adminRouter = Router();
 
@@ -181,5 +182,32 @@ adminRouter.post(
         error: { code: 'BACKUP_FAILED', message: err.message || 'Backup failed' },
       });
     }
+  }),
+);
+
+const planSchema = z.object({
+  plan: z.string().min(2).max(20),
+  overrides: z.record(z.string(), z.unknown()).optional(),
+  renewsAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+});
+
+/** GET /admin/organizations/:id/plan — an organization's plan and usage (super-admin only) */
+adminRouter.get(
+  '/organizations/:id/plan',
+  requireSuperAdmin,
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    res.json({ success: true, data: await getOrganizationPlan(String(req.params.id)) });
+  }),
+);
+
+/** PUT /admin/organizations/:id/plan — move an organization to an edition (super-admin only) */
+adminRouter.put(
+  '/organizations/:id/plan',
+  requireSuperAdmin,
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const body = planSchema.parse(req.body);
+    const data = await setOrganizationPlan(String(req.params.id), body);
+    logger.info({ orgId: req.params.id, plan: body.plan, by: req.user?.email }, 'Organization plan changed');
+    res.json({ success: true, data });
   }),
 );
