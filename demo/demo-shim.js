@@ -7,9 +7,11 @@
     var U={id:'u1',name:'Demo Manager',email:'demo@agrocloud.test',role:'ceo',organizationId:'org1'};
     // Owner account of the demo (all permissions). Demo only: the real system's owner is made with backend/scripts/create-owner.js.
     var OWNER={id:'u0',name:'Owner',email:'admin@agrocloud.com',role:'ceo',isOwner:true,organizationId:'org1'};
+    /* Demo operations manager: the role that imports old Excel sheets (ops@agrocloud.test / demo1234). */
+    var OPS={id:'u2',name:'Demo Operations',email:'ops@agrocloud.test',role:'operation_manager',organizationId:'org1'};
     window.__AGRO_DEMO__ = true;
     var who=null; try{ who=localStorage.getItem('agro_demo_user'); }catch(e){}
-    if(who==='owner') U=OWNER;
+    if(who==='owner') U=OWNER; else if(who==='ops') U=OPS;
     // First visit opens the landing page; after "Open the demo" or a sign-in the session is kept.
     if(who && (!localStorage.getItem('almaha_user') || localStorage.getItem('almaha_access_token')==='demo-token')){
       localStorage.setItem('almaha_user',JSON.stringify(U));
@@ -167,11 +169,12 @@
       var cred={}; try{ cred=typeof reqBody==='string'?JSON.parse(reqBody):(reqBody||{}); }catch(e){}
       var em=String(cred.email||'').trim().toLowerCase();
       var isOwner = path==='/auth/login' && em==='admin@agrocloud.com' && String(cred.password||'')==='Admin12345';
-      var okLogin = isOwner || (path==='/auth/pin-login' ? String(cred.pin||'')==='1234'
+      var isOps = path==='/auth/login' && em==='ops@agrocloud.test' && String(cred.password||'')==='demo1234';
+      var okLogin = isOwner || isOps || (path==='/auth/pin-login' ? String(cred.pin||'')==='1234'
         : em==='demo@agrocloud.test' && String(cred.password||'')==='demo1234');
       if(!okLogin) return {success:false,error:{message:'Wrong email or password'}};
-      U = isOwner ? OWNER : {id:'u1',name:'Demo Manager',email:'demo@agrocloud.test',role:'ceo',organizationId:'org1'};
-      try{ localStorage.setItem('agro_demo_user', isOwner?'owner':'demo'); }catch(e){}
+      U = isOwner ? OWNER : isOps ? OPS : {id:'u1',name:'Demo Manager',email:'demo@agrocloud.test',role:'ceo',organizationId:'org1'};
+      try{ localStorage.setItem('agro_demo_user', isOwner?'owner':isOps?'ops':'demo'); }catch(e){}
       return {success:true,data:{user:U,accessToken:'demo-token',refreshToken:'demo-refresh'}};
     }
     if(path==='/auth/logout'){ try{ localStorage.removeItem('agro_demo_user'); }catch(e){} return {success:true}; }
@@ -345,6 +348,34 @@
     if(path==='/countries') return ok(countries);
     if(path==='/sites') return ok(q.country_id?sites.filter(function(s){return s.countryId===q.country_id;}):sites);
     if(path==='/farm-areas') return ok(q.site_id?areas.filter(function(a){return a.siteId===q.site_id;}):areas);
+    /* Import from Excel (demo): same targets and checks as the server; rows are checked, not stored. */
+    if(path==='/imports/targets'){
+      var AL={field_name:['field','location','nh location','house','farm code','plot','الحقل','الموقع','البيت'],date:['day','entry date','harvest date','التاريخ','تاريخ'],time:['hour','الوقت'],total_quantity:['quantity','qty','kg','weight','yield','الكمية','الوزن','الانتاج'],notes:['note','remarks','ملاحظات'],crop_name:['crop','variety','المحصول','الصنف'],valve_number:['valve','valve no'],week_number:['week','الاسبوع'],total_fertilizer:['fertilizer','fertiliser','السماد'],daily_water:['water']};
+      var T=function(key,label,desc,fl){ return {key:key,label:label,description:desc,fields:fl.map(function(f){ return {key:f[0],label:f[1],required:!!f[2],type:f[3]||'text',aliases:AL[f[0]]||[]}; }),uniqueBy:['field_id','date'],fieldIdResolution:'byNameColumn'}; };
+      return ok([
+        T('harvests','Harvest entries','One row = one harvest of one field on one day. The crop comes from Crop Rotation when the sheet has none.',[['field_name','Field name',1],['date','Date',1,'date'],['total_quantity','Total quantity (kg)',1,'number'],['notes','Notes'],['crop_name','Crop + Variety']]),
+        T('ecph_full','EC & pH with valve readings','One row per valve; rows of the same field, day and time make one reading.',[['field_name','Field name (NH LOCATION)',1],['date','Date',1,'date'],['valve_number','Valve number',1,'int'],['time','Time',0,'time'],['ec_in','EC In',0,'number'],['ec_out','EC Out',0,'number'],['ph_in','pH In',0,'number'],['ph_out','pH Out',0,'number']]),
+        T('fertigation','Fertigation entries','Day-level totals per field.',[['field_name','Field name',1],['date','Date',1,'date'],['week_number','Week number',0,'int'],['daily_water','Daily water (L)',0,'number'],['total_fertilizer','Total fertilizer (kg)',0,'number'],['crop_name','Crop + Variety']])
+      ]);
+    }
+    if(path==='/imports/execute-json'&&reqBody){
+      var rws=reqBody.rows||[], mp=reqBody.mapping||{}, names={}; fields.forEach(function(f){ names[String(f.name).toLowerCase().replace(/[\s\-_]+/g,'')]=f.id; });
+      var good=0, errs=[], seenK={}, dup=0;
+      var real=function(y,m,d){ if(y<100) y+=2000; var t=new Date(Date.UTC(y,m-1,d)); return y>=1990&&y<=2100&&t.getUTCMonth()===m-1&&t.getUTCDate()===d; };
+      var okDate=function(v){ v=String(v||'').trim(); var m=v.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/); if(m) return real(+m[1],+m[2],+m[3]);
+        m=v.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})$/); if(m) return (+m[2]>12&&+m[1]<=12)?real(+m[3],+m[1],+m[2]):real(+m[3],+m[2],+m[1]);
+        return /^\d{1,2}[\s-][A-Za-z]{3,9}[\s-]\d{2,4}$/.test(v)||/^\d{5}$/.test(v); };
+      rws.forEach(function(r,i){
+        var ref=r.__ref||('row '+(i+2)), fn=String(r[mp.field_name]||'').trim();
+        if(!fn){ errs.push({row:ref,reason:'Missing required field_name (source column "'+(mp.field_name||'?')+'")'}); return; }
+        var fid=names[fn.toLowerCase().replace(/[\s\-_]+/g,'')];
+        if(!fid){ errs.push({row:ref,reason:'Unknown field name "'+fn+'". Create the field first or fix the spelling.'}); return; }
+        if(!okDate(r[mp.date])){ errs.push({row:ref,reason:'Cannot read the date "'+String(r[mp.date]||'').trim()+'" in column "'+mp.date+'"'}); return; }
+        var k=fid+'|'+r[mp.date]+'|'+(reqBody.target==='ecph_full'?(r[mp.time]||'')+'|'+(r[mp.valve_number]||''):'');
+        if(seenK[k]){ dup++; return; } seenK[k]=1; good++;
+      });
+      return ok({dryRun:reqBody.dryRun!==false,target:reqBody.target,demo:true,stats:{total:rws.length,toInsert:good,skipped:dup,errorCount:errs.length,errors:errs.slice(0,300),preview:[],cropResolution:{fromHistory:good,fromColumn:0,unresolved:0},unmappedHeaders:[]}});
+    }
     if(path==='/fields'){ var fk=geoKeys(), fst=geoStore(); return ok(fields.map(function(f){ var e=fst[f.id]||{}; return Object.assign({},f,{keyId:fk[f.id],subtypeCode:e.subtype||null,gisZoneId:f.gis_zone_id||null,gisFarmCode:f.gis_farm_code||null,gisGlobalId:f.gis_external_id||null,hasShape:!!e.geometry}); })); }
     if(path==='/crops') return ok(CROPS.map(function(c,i){return {id:'crop'+i,name:c};}));
     if(path==='/field-types') return ok([{id:'ft1',name:'Greenhouse'},{id:'ft2',name:'Nethouse'},{id:'ft3',name:'PIVOT'}]);

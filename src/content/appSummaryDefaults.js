@@ -93,7 +93,7 @@ export const APP_SUMMARY_DEFAULTS = {
         { module: 'Agronomic Reference', description: 'EC/pH and crop thresholds', replaces: 'Reference documents', path: '/agronomic-reference' },
         { module: 'User Management', description: 'Roles and access', replaces: 'Informal access', path: '/admin/users' },
         { module: 'Audit Log', description: 'Who changed what and when', replaces: 'No audit trail', path: '/admin/audit' },
-        { module: 'Historical Import', description: 'Import legacy Excel data', replaces: 'Manual re-entry', path: '/admin/import' },
+        { module: 'Import from Excel', description: 'Import years of old Excel sheets for the same forms', replaces: 'Manual re-entry', path: '/admin/import' },
       ],
     },
   ],

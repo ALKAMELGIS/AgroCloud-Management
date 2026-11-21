@@ -54,6 +54,7 @@ import { useActiveSiteStructures } from '../../hooks/useActiveSiteStructures';
 import InfoNote from '../../components/InfoNote';
 import PageTitle from '../../components/PageTitle';
 import FormPathButton from '../../components/feeds/FormDataPath';
+import ImportExcelButton from '../../components/ImportExcelButton';
 
 // Week number calculation helper
 const getWeekNumber = (date) => {
@@ -381,6 +382,7 @@ function FertigationEntry() {
               Fertigation Entry
             </PageTitle>
             <FormPathButton form="fertigation" label="Fertigation Entry" />
+            <ImportExcelButton target="fertigation" />
           </Box>
           {isNethouseOrGh && entryTab === 'entry' && (
           <ToggleButtonGroup

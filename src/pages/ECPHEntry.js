@@ -40,6 +40,7 @@ import { PAGE_KEYS } from '../utils/roleAccess';
 import PageTitle from '../components/PageTitle';
 import FormPathButton from '../components/feeds/FormDataPath';
 import { FormSection, FormGrid, FormActions, FormSteps, FormStep, HintLabel, calcFieldSx, span } from '../components/form/FormLayout';
+import ImportExcelButton from '../components/ImportExcelButton';
 
 const SELECT_SX = { '& .MuiSelect-select': { whiteSpace: 'nowrap' } };
 
@@ -342,6 +343,7 @@ function ECPHEntry() {
               EC/PH Entry
             </PageTitle>
             <FormPathButton form="ecph" label="EC/PH Entry" />
+            <ImportExcelButton target="ecph_full" />
           </Box>
           {entryTab === 'entry' && <ToggleButtonGroup
             value={viewMode}

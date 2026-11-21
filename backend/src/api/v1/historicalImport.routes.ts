@@ -6,6 +6,8 @@ import { dbPool } from '../../db/client';
 import { parseCsvAsObjects } from '../../utils/csv';
 import { logAuditEvent } from '../../services/auditLog.service';
 import { resolveHarvestPlanting } from '../../utils/harvestPlantingLink';
+import { requireOrgId } from '../middleware/tenant';
+import { normalizeDate, normalizeTime } from '../../utils/importValues';
 
 type CropVarietyRow = { crop_id: string; crop_name: string; variety_id: string | null; variety_name: string | null };
 
@@ -87,6 +89,8 @@ type FieldSpec = {
   required: boolean;
   type: 'date' | 'time' | 'text' | 'number' | 'int';
   description?: string;
+  /** Other header names old sheets use for this column (matched without case, spaces or punctuation). */
+  aliases?: string[];
 };
 
 type TargetSpec = {
@@ -192,6 +196,34 @@ const TARGETS: Record<string, TargetSpec> = {
   },
 };
 
+// Header names seen in older farm sheets, English and Arabic.
+const ALIASES: Record<string, string[]> = {
+  field_name: ['field', 'location', 'nh location', 'house', 'nethouse', 'greenhouse', 'block', 'farm code', 'farm_code', 'plot', 'الحقل', 'الموقع', 'البيت', 'رقم البيت'],
+  date: ['day', 'entry date', 'harvest date', 'التاريخ', 'تاريخ'],
+  time: ['hour', 'الوقت', 'الساعة'],
+  total_quantity: ['quantity', 'qty', 'kg', 'weight', 'harvest', 'harvest kg', 'total kg', 'yield', 'الكمية', 'الوزن', 'الانتاج', 'الإنتاج'],
+  notes: ['note', 'remarks', 'comment', 'comments', 'ملاحظات'],
+  crop_name: ['crop', 'variety', 'crop variety', 'المحصول', 'الصنف'],
+  ec_in: ['ec drip', 'drip ec', 'ec input'],
+  ec_out: ['ec drain', 'drain ec', 'ec output'],
+  ph_in: ['ph drip', 'drip ph', 'ph input'],
+  ph_out: ['ph drain', 'drain ph', 'ph output'],
+  valve_number: ['valve', 'valve no', 'valve #', 'صمام'],
+  percent_drain: ['drain %', 'drain percent', 'drain'],
+  week_number: ['week', 'wk', 'الاسبوع', 'الأسبوع'],
+  flow_rate: ['flow', 'flow l/h'],
+  frequency: ['cycles', 'cycles per day', 'freq'],
+  daily_water: ['water', 'water l', 'daily water l'],
+  total_fertilizer: ['fertilizer', 'fertiliser', 'fert kg', 'total fert', 'السماد'],
+};
+for (const t of Object.values(TARGETS)) {
+  for (const f of t.fields) if (!f.aliases && ALIASES[f.key]) f.aliases = ALIASES[f.key];
+}
+
+/** Row label for messages: "Sheet 2023 · row 14" when the browser sent one, else the CSV line. */
+const rowRef = (row: Record<string, string>, idx: number): string | number => (row.__ref ? String(row.__ref) : idx + 2);
+const MAX_ERRORS = 300;
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 20 * 1024 * 1024 },
@@ -215,9 +247,11 @@ function resolveFieldId(
   return undefined;
 }
 
-async function loadFieldMap(): Promise<Map<string, string>> {
+async function loadFieldMap(orgId: string): Promise<Map<string, string>> {
+  // Only this organization's fields: a name in an old sheet must never land on another tenant's field.
   const result = await dbPool.query(
-    `SELECT id, lower(name) AS lname FROM fields WHERE deleted_at IS NULL`,
+    `SELECT id, lower(name) AS lname FROM fields WHERE deleted_at IS NULL AND organization_id = $1`,
+    [orgId],
   );
   return new Map<string, string>(result.rows.map((r: any) => [r.lname, r.id]));
 }
@@ -237,12 +271,15 @@ function coerceValue(raw: string, type: FieldSpec['type']): unknown {
       return Number.isFinite(n) ? n : null;
     }
     case 'date':
+      return normalizeDate(v);
     case 'time':
+      return normalizeTime(v);
     case 'text':
     default:
       return v;
   }
 }
+
 
 function coerceRow(
   row: Record<string, string>,
@@ -254,6 +291,11 @@ function coerceRow(
     const src = mapping[f.key];
     const raw = src ? (row[src] ?? '') : '';
     const val = coerceValue(raw, f.type);
+    if (val === undefined) {
+      if (f.required) return { coerced, error: `Cannot read the ${f.type} "${String(raw).trim()}" in column "${src}"` };
+      coerced[f.key] = null;
+      continue;
+    }
     if (f.required && (val === null || val === '')) {
       return { coerced, error: `Missing required ${f.key} (source column "${src || '?'}")` };
     }
@@ -297,7 +339,25 @@ async function executeSimpleImport(
   dryRun: boolean,
 ): Promise<{ inserted: number; skipped: number }> {
   if (dryRun) {
-    return { inserted: coercedRows.length, skipped: 0 };
+    // Count rows already in the system (same field and day; EC/pH also same time) so the preview is honest.
+    const table = targetKey === 'harvests' ? 'harvests' : targetKey === 'fertigation' ? 'fertigation_entries' : targetKey === 'ecph' ? 'ecph_entries' : null;
+    if (!table || !coercedRows.length) return { inserted: coercedRows.length, skipped: 0 };
+    const ids = [...new Set(coercedRows.map((r) => r.fieldId))];
+    const dates = coercedRows.map((r) => String(r.values.date ?? '')).filter(Boolean).sort();
+    const withTime = targetKey === 'ecph';
+    const have = await dbPool.query(
+      `SELECT field_id, to_char(date, 'YYYY-MM-DD') AS d${withTime ? ", COALESCE(time::text, '') AS t" : ''}
+         FROM ${table} WHERE field_id = ANY($1::uuid[]) AND date BETWEEN $2 AND $3`,
+      [ids, dates[0], dates[dates.length - 1]],
+    );
+    const key = (f: string, d: string, t: string) => `${f}|${d}|${withTime ? t.slice(0, 5) : ''}`;
+    const seen = new Set<string>(have.rows.map((r: any) => key(r.field_id, r.d, r.t || '')));
+    let skipped = 0;
+    for (const r of coercedRows) {
+      const k = key(r.fieldId, String(r.values.date ?? '').slice(0, 10), String(r.values.time ?? ''));
+      if (seen.has(k)) skipped += 1; else seen.add(k);
+    }
+    return { inserted: coercedRows.length - skipped, skipped };
   }
 
   const client = await dbPool.connect();
@@ -480,8 +540,9 @@ async function runImport(
   userId: string,
   ip: string | undefined,
   userAgent: string | undefined,
+  orgId: string,
 ) {
-  const fieldIdByName = await loadFieldMap();
+  const fieldIdByName = await loadFieldMap(orgId);
   const cropHistoryEntries = await loadCropHistory();
   const cropVarietyRows = await loadCropsAndVarieties();
 
@@ -496,9 +557,11 @@ async function runImport(
     toInsert: 0,
     skipped: 0,
     valvesInserted: undefined as number | undefined,
-    errors: [] as Array<{ row: number; reason: string }>,
+    errors: [] as Array<{ row: number | string; reason: string }>,
+    errorCount: 0,
+    duplicates: 0,
     preview: [] as Array<Record<string, unknown>>,
-    unmappedHeaders: headers.filter((h) => !Object.values(mapping).includes(h)),
+    unmappedHeaders: headers.filter((h) => !h.startsWith('__') && !Object.values(mapping).includes(h)),
     cropResolution: {
       fromHistory: 0,
       fromColumn: 0,
@@ -513,15 +576,17 @@ async function runImport(
     const { coerced, error } = coerceRow(row, target, mapping);
 
     if (error) {
-      stats.errors.push({ row: rIdx + 2, reason: error });
+      stats.errorCount += 1;
+      if (stats.errors.length < MAX_ERRORS) stats.errors.push({ row: rowRef(row, rIdx), reason: error });
       continue;
     }
 
     const fname = String(coerced.field_name ?? '').trim();
     const fieldId = resolveFieldId(fname, fieldIdByName);
     if (!fieldId) {
-      stats.errors.push({
-        row: rIdx + 2,
+      stats.errorCount += 1;
+      if (stats.errors.length < MAX_ERRORS) stats.errors.push({
+        row: rowRef(row, rIdx),
         reason: `Unknown field name "${coerced.field_name}". Create the field first or fix the spelling.`,
       });
       continue;
@@ -572,6 +637,7 @@ async function runImport(
     stats.toInsert = result.inserted;
     stats.skipped = result.skipped;
   }
+  stats.duplicates = stats.skipped;
 
   if (!dryRun) {
     await logAuditEvent({
@@ -585,7 +651,7 @@ async function runImport(
         totalRows: rows.length,
         inserted: stats.toInsert,
         skippedDuplicates: stats.skipped,
-        errors: stats.errors.length,
+        errors: stats.errorCount,
         mapping,
       },
       ipAddress: ip,
@@ -702,7 +768,7 @@ historicalImportRouter.post(
     const result = await runImport(
       rows, headers, target, mapping, dryRun,
       req.file.originalname, req.user!.userId,
-      req.ip, req.headers['user-agent'],
+      req.ip, req.headers['user-agent'], requireOrgId(req),
     );
 
     res.json({ success: true, data: result });
@@ -753,7 +819,7 @@ historicalImportRouter.post(
     const result = await runImport(
       stringRows, headers, target, mapping, dryRun,
       req.body.fileName || 'uploaded.xlsx', req.user!.userId,
-      req.ip, req.headers['user-agent'],
+      req.ip, req.headers['user-agent'], requireOrgId(req),
     );
 
     res.json({ success: true, data: result });
@@ -769,7 +835,7 @@ historicalImportRouter.post(
       return res.status(400).json({ success: false, error: { message: 'rows required' } });
     }
 
-    const fieldIdByName = await loadFieldMap();
+    const fieldIdByName = await loadFieldMap(requireOrgId(req));
     const cropHistoryEntries = await loadCropHistory();
     const cropVarietyRows = await loadCropsAndVarieties();
 

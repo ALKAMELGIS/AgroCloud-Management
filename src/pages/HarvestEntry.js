@@ -65,6 +65,7 @@ import { PAGE_KEYS } from '../utils/roleAccess';
 import { excelTableSx, freezeColumnsSx } from '../components/table/ExcelTable';
 import { DeleteSelectedButton, RowSelectCell, SelectAllCheckbox, deleteIdsSequentially } from '../components/table/BulkSelect';
 import { useRowSelection } from '../hooks/useRowSelection';
+import ImportExcelButton from '../components/ImportExcelButton';
 
 const GRID_BORDER = '1px solid var(--sheet-border, #BDBDBD)';
 const HEADER_FILL = 'var(--sheet-header)';
@@ -1658,7 +1659,7 @@ function HarvestEntry() {
           onDateFromChange={handleDateFromChange}
           onDateToChange={handleDateToChange}
           onExport={handleExport}
-          extraActions={<FormPathButton form="harvest" label="Harvest Entry" />}
+          extraActions={<><FormPathButton form="harvest" label="Harvest Entry" /><ImportExcelButton target="harvests" /></>}
         />
         {currentTab?.component === 'daily' ? (
           <DailyWorksheetTab siteId={activeSiteId} key={`dw-${refreshKey}`} />

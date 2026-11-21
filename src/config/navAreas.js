@@ -48,7 +48,7 @@ const DATA_ENTRY_SECTION = {
     { text: 'Farm Areas & Crops', path: '/manage/farm-areas', requiresRole: ['agronomist', 'worker'] },
     { text: 'Field Types & Names', path: '/manage/field-types', requiresRole: ['worker'] },
     { text: 'Valves Config', path: '/manage/valves', requiresRole: ['worker'] },
-    { text: 'Historical Import', path: '/admin/import', requiresRole: ['agronomist', 'worker'] },
+    { text: 'Import from Excel', path: '/admin/import', requiresRole: ['agronomist', 'worker'] },
     { text: 'Pump Room', path: '/pump-room' },
     { text: 'Recipes', path: '/manage/recipes', requiresRole: ['worker', 'agronomist'] },
     { text: 'Inventory', path: '/inventory', requiresRole: ['worker'] },
@@ -162,7 +162,7 @@ const ADMIN_SECTION = {
     { text: 'Recovery', path: '/admin/recovery', requiresRole: ['operation_manager'] },
     { text: 'Data Backup', path: '/admin/backup' },
     // Only the operation manager here (CEO and farm manager do not import); worker and agronomist use Data Entry.
-    { text: 'Historical Import', path: '/admin/import', requiresRole: ['operation_manager'] },
+    { text: 'Import from Excel', path: '/admin/import', requiresRole: ['operation_manager'] },
     { text: 'System Health', path: '/admin/health' },
     { text: 'API Keys', path: '/admin/api-keys', requiresRole: INTEGRATION_ADMIN_ROLES },
     { text: 'Webhooks', path: '/admin/webhooks', requiresRole: INTEGRATION_ADMIN_ROLES },

@@ -65,7 +65,7 @@ const MENU = [
   ] },
   { group: 'Data', items: [
     { key: 'master', label: 'Master data', icon: ICON_PATHS.master, native: true, children: MASTER.map((m) => m[0]) },
-    { key: 'import', label: 'Historical import', icon: ICON_PATHS.import, route: '/admin/import' },
+    { key: 'import', label: 'Import from Excel', icon: ICON_PATHS.import, route: '/admin/import' },
     { key: 'backup', label: 'Data backup', icon: ICON_PATHS.backup, route: '/admin/backup' },
     { key: 'recovery', label: 'Recovery', icon: ICON_PATHS.recovery, route: '/admin/recovery' },
   ] },

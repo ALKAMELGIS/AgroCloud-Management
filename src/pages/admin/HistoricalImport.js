@@ -1,635 +1,312 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { confirmAction } from '../../components/ConfirmDialog';
-import * as XLSX from 'xlsx';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
-  Box, Paper, Typography, Button, Alert, Card, CardContent, CardHeader, Divider,
-  FormControl, InputLabel, Select, MenuItem, Table, TableBody, TableCell,
-  TableContainer, TableHead, TableRow, Chip, Stack, LinearProgress, Tooltip,
-  Collapse,
+  Alert, Box, Button, ButtonBase, Checkbox, LinearProgress, MenuItem, Table, TableBody, TableCell,
+  TableContainer, TableHead, TableRow, TextField, Typography,
 } from '@mui/material';
-import {
-  UploadFileOutlined as UploadIcon,
-  PlayArrow as DryRunIcon,
-  PublishOutlined as ExecuteIcon,
-  RefreshOutlined as RefreshIcon,
-  ExpandMoreOutlined as ExpandMoreIcon,
-  ExpandLessOutlined as ExpandLessIcon,
-  CheckCircleOutlined as CheckIcon,
-  WarningOutlined as WarningIcon,
-  AgricultureOutlined as CropIcon,
-} from '@mui/icons-material';
+import { confirmAction } from '../../components/ConfirmDialog';
 import { API_BASE, getAuthHeaders } from '../../config/api';
-import InfoNote from '../../components/InfoNote';
-import PageTitle from '../../components/PageTitle';
+import { ModuleIcon } from '../../config/moduleIcons';
+import {
+  readWorkbook, similarSheets, autoMap, fillDown, chunkRows, mergeResults, dateSpan, downloadTemplate,
+} from '../../utils/excelImport';
 
-function isExcelFile(name) {
-  return /\.(xlsx|xls)$/i.test(name || '');
+/*
+ * Import from Excel: years of old sheets for the same forms go into the system in
+ * four steps. Every sheet of the workbook is read, columns are matched by name
+ * (English or Arabic), a check shows new rows, rows already in the system and
+ * rows that cannot be read (with sheet and row), and only then is anything written.
+ */
+
+const HAIR = '1px solid rgba(22,40,30,0.07)';
+const CARD = { bgcolor: 'background.paper', border: HAIR, borderRadius: '16px' };
+const MONO = '"IBM Plex Mono", monospace';
+const BATCH = 1500;
+const FORM_ICON = { harvests: '/harvest/entry', ecph: '/ecph-entry', ecph_full: '/ecph-entry', fertigation: '/fertigation/entry' };
+const ECPH_FILL = ['date', 'time', 'field_name', 'qty_of_water', 'cycle', 'total_water_qty', 'total_water_drip', 'weather_condition', 'irrigation_status'];
+
+async function post(path, body) {
+  const res = await fetch(`${API_BASE}${path}`, { method: 'POST', headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || !json.success) throw new Error(json.error?.message || `Request failed (${res.status})`);
+  return json.data;
 }
 
-function parseExcelToRows(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const wb = XLSX.read(e.target.result, { type: 'array', cellDates: true });
-        const sheet = wb.Sheets[wb.SheetNames[0]];
-        const rows = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false });
-        resolve(rows);
-      } catch (err) {
-        reject(err);
-      }
-    };
-    reader.onerror = () => reject(new Error('Failed to read file'));
-    reader.readAsArrayBuffer(file);
-  });
+function Step({ n, title, desc, done, children, action }) {
+  return (
+    <Box component="section" sx={{ ...CARD, overflow: 'hidden' }}>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 3, px: { xs: 4, sm: 5 }, py: 4, borderBottom: children ? HAIR : 0 }}>
+        <Box sx={{ width: 28, height: 28, borderRadius: '8px', display: 'grid', placeItems: 'center', flexShrink: 0, fontSize: 13, fontWeight: 600,
+          bgcolor: done ? 'primary.main' : 'rgba(22,67,46,0.08)', color: done ? '#fff' : 'primary.dark' }}>
+          {done ? <ModuleIcon d="M5 12l4 4 10-10" size={16} stroke={2} /> : n}
+        </Box>
+        <Box sx={{ flex: '1 1 200px', minWidth: 0 }}>
+          <Typography component="h2" sx={{ fontSize: 14.5, fontWeight: 600 }}>{title}</Typography>
+          {desc ? <Typography sx={{ fontSize: 12.5, color: 'text.secondary', mt: 0.5 }}>{desc}</Typography> : null}
+        </Box>
+        {action ? <Box sx={{ ml: 'auto', display: 'flex', justifyContent: 'flex-end' }}>{action}</Box> : null}
+      </Box>
+      {children ? <Box sx={{ p: { xs: 4, sm: 5 } }}>{children}</Box> : null}
+    </Box>
+  );
 }
 
-function computeDateRange(rows, mapping) {
-  const dateCol = mapping?.date;
-  if (!dateCol || !rows?.length) return null;
-  let min = null;
-  let max = null;
-  for (const row of rows) {
-    const d = row[dateCol];
-    if (!d) continue;
-    const str = String(d).trim();
-    if (!str) continue;
-    if (!min || str < min) min = str;
-    if (!max || str > max) max = str;
-  }
-  return min && max ? { min, max } : null;
+function Figure({ label, value, tone }) {
+  return (
+    <Box sx={{ px: 4, py: 3, borderRadius: '12px', border: HAIR, minWidth: 0 }}>
+      <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>{label}</Typography>
+      <Typography sx={{ mt: 1, fontSize: 22, fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: tone || 'text.primary' }}>{value}</Typography>
+    </Box>
+  );
 }
-
-const SOURCE_COLORS = { column: 'info', history: 'success', none: 'error' };
-const SOURCE_LABELS = { column: 'From Excel', history: 'From Rotation', none: 'Unresolved' };
 
 export default function HistoricalImport() {
-  const fileInputRef = useRef(null);
-
-  const [targets, setTargets] = useState([]);
-  const [selectedTarget, setSelectedTarget] = useState('');
-
-  const [file, setFile] = useState(null);
-  const [parsedRows, setParsedRows] = useState(null);
-  const [preview, setPreview] = useState(null);
-
+  const [params] = useSearchParams();
+  const fileRef = useRef(null);
+  const [targets, setTargets] = useState(null);
+  const [targetKey, setTargetKey] = useState(params.get('target') || '');
+  const [fileName, setFileName] = useState('');
+  const [sheets, setSheets] = useState([]);
+  const [picked, setPicked] = useState([]);
   const [mapping, setMapping] = useState({});
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState(0);
   const [error, setError] = useState('');
-  const [result, setResult] = useState(null);
-
-  const [cropPreview, setCropPreview] = useState(null);
-  const [cropPreviewLoading, setCropPreviewLoading] = useState(false);
-  const [cropPreviewExpanded, setCropPreviewExpanded] = useState(false);
+  const [check, setCheck] = useState(null);
+  const [done, setDone] = useState(null);
+  const [drag, setDrag] = useState(false);
 
   useEffect(() => {
     fetch(`${API_BASE}/imports/targets`, { headers: getAuthHeaders() })
       .then((r) => r.json())
-      .then((d) => { if (d.success) setTargets(d.data || []); })
-      .catch(() => {});
+      .then((d) => setTargets(d.success ? d.data || [] : []))
+      .catch(() => setTargets([]));
   }, []);
 
-  const target = useMemo(
-    () => targets.find((t) => t.key === selectedTarget) || null,
-    [targets, selectedTarget],
-  );
+  const target = useMemo(() => (targets || []).find((t) => t.key === targetKey) || null, [targets, targetKey]);
+  const rows = useMemo(() => sheets.filter((s) => picked.includes(s.name)).flatMap((s) => s.rows), [sheets, picked]);
+  const headers = useMemo(() => {
+    const seen = new Set();
+    sheets.filter((s) => picked.includes(s.name)).forEach((s) => s.headers.forEach((h) => seen.add(h)));
+    return [...seen];
+  }, [sheets, picked]);
+  const span = useMemo(() => dateSpan(rows, mapping.date), [rows, mapping.date]);
+  const missing = target ? target.fields.filter((f) => f.required && !mapping[f.key]) : [];
 
-  const resetAll = () => {
-    setFile(null);
-    setParsedRows(null);
-    setPreview(null);
-    setMapping({});
-    setResult(null);
-    setError('');
-    setCropPreview(null);
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
+  useEffect(() => { if (target && headers.length) setMapping(autoMap(target.fields, headers)); }, [target, headers]);
+  useEffect(() => { setCheck(null); setDone(null); }, [targetKey, picked, mapping]);
 
-  const autoMap = useCallback((headers) => {
-    if (!target) return;
-    const norm = (s) => String(s || '').toLowerCase().replace(/[\s_\-()]+/g, '');
-    const headerMap = new Map((headers || []).map((h) => [norm(h), h]));
-    const next = {};
-    for (const f of target.fields) {
-      const key = norm(f.key);
-      const match = [...headerMap.entries()].find(([k]) => k.includes(key) || key.includes(k));
-      if (match) next[f.key] = match[1];
-    }
-    setMapping(next);
-  }, [target]);
-
-  const pickFile = async (f) => {
+  const openFile = async (f) => {
     if (!f) return;
-    setFile(f);
-    setParsedRows(null);
-    setPreview(null);
-    setResult(null);
-    setError('');
-    setCropPreview(null);
-    setBusy(true);
+    setError(''); setBusy(true); setFileName(f.name); setSheets([]); setPicked([]);
     try {
-      if (isExcelFile(f.name)) {
-        const rows = await parseExcelToRows(f);
-        if (!rows.length) throw new Error('Excel file has no data rows');
-        const headers = Object.keys(rows[0]);
-        setParsedRows(rows);
-        const previewData = { headers, sampleRows: rows.slice(0, 10), totalRows: rows.length, fileName: f.name };
-        setPreview(previewData);
-        autoMap(headers);
-      } else {
-        const fd = new FormData();
-        fd.append('file', f);
-        const res = await fetch(`${API_BASE}/imports/preview`, {
-          method: 'POST',
-          headers: getAuthHeaders(),
-          body: fd,
-        });
-        const json = await res.json();
-        if (!json.success) throw new Error(json.error?.message || 'Preview failed');
-        setParsedRows(null);
-        setPreview(json.data);
-        autoMap(json.data.headers);
+      if (!/\.(xlsx|xlsm|xls|csv)$/i.test(f.name)) throw new Error('Choose an Excel file (.xlsx, .xls) or a CSV file');
+      const book = readWorkbook(await f.arrayBuffer());
+      if (!book.length) throw new Error('No sheet in this file has data rows');
+      setSheets(book);
+      setPicked(similarSheets(book));
+    } catch (e) {
+      setError(e.message || 'Could not read the file');
+      setFileName('');
+    } finally {
+      setBusy(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
+
+  const run = async (dryRun) => {
+    if (!target || !rows.length) return;
+    setBusy(true); setError(''); setProgress(0);
+    try {
+      const data = rows.map((r) => ({ ...r }));
+      if (target.key === 'ecph_full') fillDown(data, ECPH_FILL.map((k) => mapping[k]));
+      const keyOf = target.key === 'ecph_full' ? (r) => `${r[mapping.field_name]}|${r[mapping.date]}|${r[mapping.time] || ''}` : null;
+      const batches = chunkRows(data, BATCH, keyOf);
+      const parts = [];
+      for (let i = 0; i < batches.length; i += 1) {
+        // eslint-disable-next-line no-await-in-loop
+        parts.push(await post('/imports/execute-json', { rows: batches[i], target: target.key, mapping, dryRun, fileName }));
+        setProgress(Math.round(((i + 1) / batches.length) * 100));
       }
-    } catch (err) {
-      setError(err.message || 'Preview failed');
+      const merged = mergeResults(parts);
+      if (dryRun) setCheck(merged); else { setDone(merged); setCheck(null); }
+    } catch (e) {
+      setError(e.message || 'Import failed');
     } finally {
       setBusy(false);
     }
   };
 
-  const dateRange = useMemo(
-    () => computeDateRange(parsedRows || preview?.sampleRows, mapping),
-    [parsedRows, preview, mapping],
-  );
-
-  const loadCropPreview = async () => {
-    if (!parsedRows?.length && !preview) return;
-    if (!mapping.field_name || !mapping.date) return;
-    setCropPreviewLoading(true);
-    setCropPreview(null);
-    try {
-      const rows = parsedRows || preview?.sampleRows || [];
-      const res = await fetch(`${API_BASE}/imports/resolve-crops`, {
-        method: 'POST',
-        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rows, mapping }),
-      });
-      const json = await res.json();
-      if (json.success) {
-        setCropPreview(json.data);
-        setCropPreviewExpanded(true);
-      }
-    } catch {
-      // ignore
-    } finally {
-      setCropPreviewLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (mapping.field_name && mapping.date && (parsedRows?.length || preview?.sampleRows?.length)) {
-      loadCropPreview();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mapping.field_name, mapping.date, mapping.crop_name]);
-
-  const runImport = async (dryRun) => {
-    if (!file || !target) return;
-    const missing = target.fields.filter((f) => f.required && !mapping[f.key]);
-    if (missing.length > 0) {
-      setError(`Map these required fields first: ${missing.map((f) => f.label).join(', ')}`);
-      return;
-    }
-    setBusy(true);
-    setError('');
-    try {
-      let json;
-      if (parsedRows) {
-        const res = await fetch(`${API_BASE}/imports/execute-json`, {
-          method: 'POST',
-          headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            rows: parsedRows,
-            target: target.key,
-            mapping,
-            dryRun,
-            fileName: file.name,
-          }),
-        });
-        json = await res.json();
-      } else {
-        const fd = new FormData();
-        fd.append('file', file);
-        fd.append('target', target.key);
-        fd.append('mapping', JSON.stringify(mapping));
-        fd.append('dryRun', String(dryRun));
-        const res = await fetch(`${API_BASE}/imports/execute`, {
-          method: 'POST',
-          headers: getAuthHeaders(),
-          body: fd,
-        });
-        json = await res.json();
-      }
-      if (!json.success) throw new Error(json.error?.message || 'Import failed');
-      setResult(json.data);
-    } catch (err) {
-      setError(err.message || 'Import failed');
-    } finally {
-      setBusy(false);
-    }
-  };
+  const result = done || check;
+  const s = result?.stats;
 
   return (
-    <Box sx={{ maxWidth: 1760, mx: 'auto' }}>
-      <PageTitle help="Upload a CSV or Excel file (.xlsx) from your old records and map its columns onto harvests, EC/pH, or fertigation entries. Crops are automatically resolved from your Crop Rotation history. Dry-run first — nothing is written until you click Execute." sx={{ mb: 3 }}>
-        Historical data import
-      </PageTitle>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 5, maxWidth: 1080 }}>
+      <Box>
+        <Typography component="h1" sx={{ fontSize: { xs: 22, md: 24 }, fontWeight: 600, letterSpacing: '-0.02em' }}>Import from Excel</Typography>
+        <Typography sx={{ mt: 1.5, fontSize: 13.5, color: 'text.secondary', maxWidth: 680, lineHeight: 1.5 }}>
+          Bring old records of the same forms into the system: every sheet of a workbook, years at a time. Nothing is written until you confirm, and rows already in the system are skipped
+        </Typography>
+      </Box>
 
-      {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}
+      {error ? <Alert severity="error" onClose={() => setError('')}>{error}</Alert> : null}
 
-      {/* Step 1: target selection */}
-      <Card sx={{ mb: 2 }}>
-        <CardHeader title="1. Pick what you're importing" />
-        <CardContent>
-          <FormControl fullWidth size="small">
-            <InputLabel id="historicalimport-target-label-1">Target</InputLabel>
-            <Select labelId="historicalimport-target-label-1"
-              label="Target"
-              value={selectedTarget}
-              onChange={(e) => { setSelectedTarget(e.target.value); setMapping({}); setResult(null); setCropPreview(null); }}
-            >
-              {targets.map((t) => (
-                <MenuItem key={t.key} value={t.key}>{t.label}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          {target && (
-            <InfoNote mode="line" severity="info" sx={{ mt: 2 }}>
-              {target.description}
-            </InfoNote>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Step 2: file pick */}
-      <Card sx={{ mb: 2, opacity: selectedTarget ? 1 : 0.55 }}>
-        <CardHeader title="2. Pick a file" />
-        <CardContent>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
-            style={{ display: 'none' }}
-            onChange={(e) => pickFile(e.target.files?.[0])}
-          />
-          <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
-            <Button
-              variant="outlined"
-              startIcon={<UploadIcon />}
-              onClick={() => fileInputRef.current?.click()}
-              disabled={!selectedTarget || busy}
-            >
-              Choose CSV or Excel
-            </Button>
-            {file && (
-              <Typography variant="body2" color="text.secondary">
-                {file.name} ({(file.size / 1024).toFixed(1)} KB)
-                {isExcelFile(file.name) && (
-                  <Chip label="Excel" size="small" color="success" sx={{ ml: 1 }} />
-                )}
-              </Typography>
-            )}
-            {file && (
-              <Button size="small" startIcon={<RefreshIcon />} onClick={resetAll}>
-                Reset
-              </Button>
-            )}
-          </Stack>
-          {busy && <LinearProgress sx={{ mt: 2 }} />}
-          {preview && (
-            <Box sx={{ mt: 2 }}>
-              <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" sx={{ mb: 1 }}>
-                <Typography variant="body2">
-                  Found <strong>{preview.totalRows}</strong> row(s) and{' '}
-                  <strong>{preview.headers.length}</strong> column(s).
-                </Typography>
-                {dateRange && (
-                  <Chip
-                    label={`Date range: ${dateRange.min} — ${dateRange.max}`}
-                    size="small"
-                    color="primary"
-                    variant="outlined"
-                  />
-                )}
-              </Stack>
-              <TableContainer sx={{ maxHeight: 220 }}>
-                <Table size="small" stickyHeader>
-                  <TableHead>
-                    <TableRow>
-                      {preview.headers.map((h) => (
-                        <TableCell key={h} sx={{ fontWeight: 600 }}>{h}</TableCell>
-                      ))}
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {preview.sampleRows.map((row, i) => (
-                      <TableRow key={i}>
-                        {preview.headers.map((h) => (
-                          <TableCell key={h}>{row[h]}</TableCell>
-                        ))}
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            </Box>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Step 3: column mapping */}
-      {target && preview && (
-        <Card sx={{ mb: 2 }}>
-          <CardHeader title="3. Map each target field to a file column" />
-          <CardContent>
-            <Stack spacing={1.5}>
-              {target.fields.map((f) => (
-                <Box key={f.key} sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-                  <Box sx={{ minWidth: 220 }}>
-                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                      {f.label}
-                      {f.required && <Chip label="required" size="small" color="warning" sx={{ ml: 1 }} />}
-                    </Typography>
-                    {f.description && (
-                      <Typography variant="caption" color="text.secondary">{f.description}</Typography>
-                    )}
+      {/* 1. Form */}
+      <Step n={1} done={!!target} title="Which form" desc="The records in the file are entries of this form"
+        action={target ? (
+          <Button size="small" variant="outlined" onClick={() => downloadTemplate(target)} startIcon={<ModuleIcon d="M12 3v12M8 11l4 4 4-4M4 21h16" size={16} />}>Template</Button>
+        ) : null}>
+        {!targets ? <LinearProgress /> : targets.length === 0 ? (
+          <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>Import is open to the operation manager, agronomists and data-entry staff</Typography>
+        ) : (
+          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 3 }}>
+            {targets.map((t) => {
+              const on = t.key === targetKey;
+              return (
+                <ButtonBase key={t.key} onClick={() => setTargetKey(t.key)} aria-pressed={on}
+                  sx={{ p: 4, gap: 3, borderRadius: '12px', justifyContent: 'flex-start', alignItems: 'flex-start', textAlign: 'start',
+                    border: on ? '1.5px solid' : HAIR, borderColor: on ? 'primary.main' : undefined, bgcolor: on ? 'rgba(22,67,46,0.04)' : 'transparent',
+                    '&:hover': { borderColor: on ? 'primary.main' : 'rgba(22,40,30,0.16)' }, '&.Mui-focusVisible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 } }}>
+                  <Box sx={{ width: 36, height: 36, borderRadius: '10px', display: 'grid', placeItems: 'center', flexShrink: 0, color: 'primary.dark', bgcolor: 'rgba(22,67,46,0.07)' }}>
+                    <ModuleIcon path={FORM_ICON[t.key]} size={18} />
                   </Box>
-                  <FormControl size="small" sx={{ minWidth: 240 }}>
-                    <InputLabel id="historicalimport-f-required-column-column-label-2">{f.required ? 'Column' : 'Column (optional)'}</InputLabel>
-                    <Select labelId="historicalimport-f-required-column-column-label-2"
-                      label={f.required ? 'Column' : 'Column (optional)'}
-                      value={mapping[f.key] || ''}
-                      onChange={(e) => setMapping((prev) => ({ ...prev, [f.key]: e.target.value }))}
-                    >
-                      <MenuItem value=""><em>— not mapped —</em></MenuItem>
-                      {preview.headers.map((h) => (
-                        <MenuItem key={h} value={h}>{h}</MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                </Box>
-              ))}
-            </Stack>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Step 3.5: Crop Resolution Preview */}
-      {target && preview && mapping.field_name && mapping.date && (
-        <Card sx={{ mb: 2 }}>
-          <Box
-            onClick={() => setCropPreviewExpanded((p) => !p)}
-            sx={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              px: 2, py: 1.5, cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' },
-            }}
-          >
-            <Stack direction="row" spacing={1} alignItems="center">
-              <CropIcon color="primary" />
-              <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                Crop Resolution Preview
-              </Typography>
-              {cropPreviewLoading && <LinearProgress sx={{ width: 80, ml: 1 }} />}
-              {cropPreview && (
-                <Stack direction="row" spacing={0.5} sx={{ ml: 1 }}>
-                  {cropPreview.summary.fromColumn > 0 && (
-                    <Chip label={`${cropPreview.summary.fromColumn} from Excel`} size="small" color="info" />
-                  )}
-                  {cropPreview.summary.fromHistory > 0 && (
-                    <Chip label={`${cropPreview.summary.fromHistory} from rotation`} size="small" color="success" />
-                  )}
-                  {cropPreview.summary.unresolved > 0 && (
-                    <Chip label={`${cropPreview.summary.unresolved} unresolved`} size="small" color="error" />
-                  )}
-                </Stack>
-              )}
-            </Stack>
-            {cropPreviewExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography sx={{ fontSize: 13.5, fontWeight: 600 }}>{t.label}</Typography>
+                    <Typography sx={{ fontSize: 12, color: 'text.secondary', mt: 0.5 }}>{t.fields.filter((f) => f.required).map((f) => f.label).join(' · ')}</Typography>
+                  </Box>
+                </ButtonBase>
+              );
+            })}
           </Box>
-          <Collapse in={cropPreviewExpanded}>
-            <CardContent sx={{ pt: 0 }}>
-              {!cropPreview && !cropPreviewLoading && (
-                <InfoNote severity="info">
-                  Map the <strong>Field name</strong> and <strong>Date</strong> columns above to see how crops will be resolved.
-                </InfoNote>
-              )}
-              {cropPreview?.summary.unresolved > 0 && (
-                <Alert severity="warning" sx={{ mb: 2 }} icon={<WarningIcon />}>
-                  <strong>{cropPreview.summary.unresolved}</strong> row(s) could not be matched to a crop.
-                  {!mapping.crop_name && (
-                    <> You can map a <strong>Crop + Variety</strong> column above, or add entries to <strong>Crop Rotation</strong> history first.</>
-                  )}
-                </Alert>
-              )}
-              {cropPreview?.summary.unresolved === 0 && cropPreview.summary.total > 0 && (
-                <Alert severity="success" sx={{ mb: 2 }} icon={<CheckIcon />}>
-                  All {cropPreview.summary.total} rows resolved to a crop successfully.
-                </Alert>
-              )}
-              {cropPreview?.results?.length > 0 && (
-                <TableContainer sx={{ maxHeight: 300 }}>
-                  <Table size="small" stickyHeader>
-                    <TableHead>
-                      <TableRow>
-                        <TableCell sx={{ fontWeight: 700 }}>Row</TableCell>
-                        <TableCell sx={{ fontWeight: 700 }}>Field</TableCell>
-                        <TableCell sx={{ fontWeight: 700 }}>Date</TableCell>
-                        <TableCell sx={{ fontWeight: 700 }}>Crop</TableCell>
-                        <TableCell sx={{ fontWeight: 700 }}>Variety</TableCell>
-                        <TableCell sx={{ fontWeight: 700 }}>Source</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {cropPreview.results.slice(0, 50).map((r, i) => (
-                        <TableRow key={i} sx={{ bgcolor: r.source === 'none' ? 'action.selected' : 'transparent' }}>
-                          <TableCell>{r.row}</TableCell>
-                          <TableCell>{r.fieldName}</TableCell>
-                          <TableCell>{r.date}</TableCell>
-                          <TableCell sx={{ fontWeight: 600 }}>{r.cropName || '—'}</TableCell>
-                          <TableCell>{r.varietyName || '—'}</TableCell>
-                          <TableCell>
-                            <Chip
-                              label={SOURCE_LABELS[r.source]}
-                              size="small"
-                              color={SOURCE_COLORS[r.source]}
-                              variant={r.source === 'none' ? 'filled' : 'outlined'}
-                            />
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-              )}
-            </CardContent>
-          </Collapse>
-        </Card>
-      )}
+        )}
+        {target ? <Typography sx={{ mt: 4, fontSize: 12.5, color: 'text.secondary', lineHeight: 1.5 }}>{target.description}</Typography> : null}
+      </Step>
 
-      {/* Step 4: actions */}
-      {target && preview && (
-        <Paper sx={{ p: 2, mb: 2 }}>
-          <Stack direction="row" spacing={2} justifyContent="flex-end" flexWrap="wrap">
-            <Tooltip title="Preview what will happen without writing" describeChild>
-              <span>
-                <Button
-                  variant="outlined"
-                  startIcon={<DryRunIcon />}
-                  onClick={() => runImport(true)}
-                  disabled={busy}
-                >
-                  Dry run
-                </Button>
-              </span>
-            </Tooltip>
-            <Tooltip title="Write to the database" describeChild>
-              <span>
-                <Button
-                  variant="contained"
-                  color="primary"
-                  startIcon={<ExecuteIcon />}
-                  onClick={async () => {
-                    if (!(await confirmAction('Write these rows to the database? This cannot be easily undone.', { confirmLabel: 'Execute' }))) return;
-                    runImport(false);
-                  }}
-                  disabled={busy}
-                >
-                  Execute
-                </Button>
-              </span>
-            </Tooltip>
-          </Stack>
-        </Paper>
-      )}
+      {/* 2. File and sheets */}
+      <Step n={2} done={rows.length > 0} title="File and sheets" desc="Every sheet laid out like the main one is picked; untick a sheet to leave it out">
+        <input ref={fileRef} type="file" hidden accept=".xlsx,.xlsm,.xls,.csv" onChange={(e) => openFile(e.target.files?.[0])} />
+        <ButtonBase disabled={!target || busy} onClick={() => fileRef.current?.click()}
+          onDragOver={(e) => { e.preventDefault(); setDrag(true); }} onDragLeave={() => setDrag(false)}
+          onDrop={(e) => { e.preventDefault(); setDrag(false); if (target) openFile(e.dataTransfer.files?.[0]); }}
+          sx={{ width: '100%', minHeight: 96, px: 4, borderRadius: '12px', border: '1.5px dashed', borderColor: drag ? 'primary.main' : 'rgba(22,40,30,0.18)',
+            bgcolor: drag ? 'rgba(22,67,46,0.04)' : 'transparent', display: 'flex', gap: 3, opacity: target ? 1 : 0.5 }}>
+          <ModuleIcon d="M12 15V3M8 7l4-4 4 4M4 15v5h16v-5" size={22} />
+          <Box sx={{ textAlign: 'start' }}>
+            <Typography sx={{ fontSize: 13.5, fontWeight: 600 }}>{fileName || 'Drop the workbook here or choose a file'}</Typography>
+            <Typography sx={{ fontSize: 12, color: 'text.secondary', mt: 0.5 }}>{target ? 'Excel (.xlsx, .xls) or CSV, read in your browser' : 'Pick the form first'}</Typography>
+          </Box>
+        </ButtonBase>
+        {busy && !sheets.length ? <LinearProgress sx={{ mt: 4 }} /> : null}
+        {sheets.length ? (
+          <Box sx={{ mt: 4, display: 'flex', flexDirection: 'column', gap: 1 }}>
+            {sheets.map((sh) => {
+              const on = picked.includes(sh.name);
+              return (
+                <Box key={sh.name} component="label" sx={{ display: 'flex', alignItems: 'center', gap: 3, px: 2, height: 40, borderRadius: '8px', cursor: 'pointer', '&:hover': { bgcolor: 'rgba(22,40,30,0.035)' } }}>
+                  <Checkbox size="small" checked={on} onChange={() => setPicked((p) => (on ? p.filter((x) => x !== sh.name) : [...p, sh.name]))} sx={{ p: 0.5 }} />
+                  <Typography sx={{ fontSize: 13.5, fontWeight: 500, flex: 1, minWidth: 0 }} noWrap>{sh.name}</Typography>
+                  <Typography sx={{ font: `500 12px ${MONO}`, color: 'text.secondary' }}>{sh.rows.length.toLocaleString('en-US')} rows · {sh.headers.length} columns</Typography>
+                </Box>
+              );
+            })}
+            <Typography sx={{ mt: 2, fontSize: 12.5, color: 'text.secondary' }}>
+              {rows.length.toLocaleString('en-US')} rows from {picked.length} of {sheets.length} sheets{span ? ` · ${span.min} to ${span.max}` : ''}
+            </Typography>
+          </Box>
+        ) : null}
+      </Step>
 
-      {/* Result */}
-      {result && (
-        <Card sx={{ mb: 2 }}>
-          <CardHeader
-            title={result.dryRun ? 'Dry-run result' : 'Import complete'}
-            subheader={`Target: ${result.target}`}
-          />
-          <CardContent>
-            <Stack direction="row" spacing={2} flexWrap="wrap" sx={{ mb: 2 }}>
-              <Chip label={`Total rows: ${result.stats.total}`} />
-              <Chip
-                label={
-                  result.dryRun
-                    ? `Would insert: ${result.stats.toInsert}`
-                    : `Inserted: ${result.stats.toInsert}`
-                }
-                color="success"
-              />
-              {!result.dryRun && (
-                <Chip
-                  label={`Skipped (duplicate): ${result.stats.skipped}`}
-                  color={result.stats.skipped > 0 ? 'warning' : 'default'}
-                />
-              )}
-              {result.stats.valvesInserted !== undefined && (
-                <Chip label={`Valve readings: ${result.stats.valvesInserted}`} color="info" />
-              )}
-              <Chip
-                label={`Errors: ${result.stats.errors.length}`}
-                color={result.stats.errors.length > 0 ? 'error' : 'default'}
-              />
-            </Stack>
+      {/* 3. Columns */}
+      {target && rows.length ? (
+        <Step n={3} done={!missing.length} title="Columns" desc="Matched by name in English or Arabic; change any that are wrong">
+          <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+            {target.fields.map((f) => (
+              <Box key={f.key} sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: 6, rowGap: 2, py: 3, '& + &': { borderTop: '1px solid rgba(22,40,30,0.05)' } }}>
+                <Box sx={{ flex: '1 1 240px', minWidth: 0 }}>
+                  <Typography sx={{ fontSize: 13.5, fontWeight: 500 }}>
+                    {f.label}{f.required ? <Box component="span" sx={{ ml: 2, fontSize: 11.5, color: 'warning.dark' }}>required</Box> : null}
+                  </Typography>
+                  {f.description ? <Typography sx={{ fontSize: 12, color: 'text.secondary', mt: 0.5 }}>{f.description}</Typography> : null}
+                </Box>
+                <TextField select size="small" value={mapping[f.key] || ''} onChange={(e) => setMapping((m) => ({ ...m, [f.key]: e.target.value }))}
+                  sx={{ flex: '0 1 320px', minWidth: 200 }} slotProps={{ htmlInput: { 'aria-label': `Column for ${f.label}` } }}>
+                  <MenuItem value=""><Box component="span" sx={{ color: 'text.disabled' }}>Not in the file</Box></MenuItem>
+                  {headers.map((h) => <MenuItem key={h} value={h}>{h}</MenuItem>)}
+                </TextField>
+              </Box>
+            ))}
+          </Box>
+          {rows.length ? (
+            <TableContainer sx={{ mt: 4, maxHeight: 240, borderRadius: '12px', border: HAIR }}>
+              <Table size="small" stickyHeader>
+                <TableHead>
+                  <TableRow>
+                    {target.fields.filter((f) => mapping[f.key]).map((f) => <TableCell key={f.key} sx={{ fontSize: 12, fontWeight: 500, color: 'text.secondary', whiteSpace: 'nowrap' }}>{f.label}</TableCell>)}
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {rows.slice(0, 5).map((r) => (
+                    <TableRow key={r.__ref}>
+                      {target.fields.filter((f) => mapping[f.key]).map((f) => <TableCell key={f.key} sx={{ fontSize: 13, whiteSpace: 'nowrap' }}>{r[mapping[f.key]]}</TableCell>)}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          ) : null}
+        </Step>
+      ) : null}
 
-            {/* Crop resolution stats */}
-            {result.stats.cropResolution && (
-              <Alert
-                severity={result.stats.cropResolution.unresolved > 0 ? 'warning' : 'success'}
-                sx={{ mb: 2 }}
-                icon={<CropIcon />}
-              >
-                <strong>Crop resolution:</strong>{' '}
-                {result.stats.cropResolution.fromColumn > 0 && (
-                  <>{result.stats.cropResolution.fromColumn} from Excel column, </>
-                )}
-                {result.stats.cropResolution.fromHistory > 0 && (
-                  <>{result.stats.cropResolution.fromHistory} from rotation history, </>
-                )}
-                {result.stats.cropResolution.unresolved > 0 && (
-                  <strong>{result.stats.cropResolution.unresolved} unresolved (no crop assigned)</strong>
-                )}
-                {result.stats.cropResolution.unresolved === 0 && (
-                  <strong>all rows resolved</strong>
-                )}
-              </Alert>
-            )}
-
-            {result.stats.unmappedHeaders?.length > 0 && (
-              <InfoNote mode="line" severity="info" sx={{ mb: 2 }}>
-                These columns aren't used by this target and were ignored:{' '}
-                <strong>{result.stats.unmappedHeaders.join(', ')}</strong>
-              </InfoNote>
-            )}
-
-            {result.stats.errors.length > 0 && (
-              <>
-                <Typography variant="subtitle2" sx={{ mt: 1, mb: 1 }}>Row-level errors</Typography>
-                <TableContainer sx={{ maxHeight: 300 }}>
-                  <Table size="small" stickyHeader>
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>Row</TableCell>
-                        <TableCell>Reason</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {result.stats.errors.map((e, i) => (
-                        <TableRow key={i}>
-                          <TableCell>{e.row}</TableCell>
-                          <TableCell>{e.reason}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-              </>
-            )}
-
-            {result.stats.preview?.length > 0 && (
-              <>
-                <Divider sx={{ my: 2 }} />
-                <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                  Sample of resolved rows (first 5)
+      {/* 4. Check and import */}
+      {target && rows.length ? (
+        <Step n={4} done={!!done} title="Check, then import" desc="The check reads every row against the system without writing anything"
+          action={(
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <Button variant="outlined" disabled={busy || missing.length > 0} onClick={() => run(true)}>Check file</Button>
+              <Button variant="contained" disableElevation disabled={busy || !check || !check.stats.toInsert}
+                onClick={async () => {
+                  if (!(await confirmAction(`Import ${check.stats.toInsert.toLocaleString('en-US')} new rows into ${target.label}?`, { confirmLabel: 'Import' }))) return;
+                  run(false);
+                }}>
+                {check ? `Import ${check.stats.toInsert.toLocaleString('en-US')} rows` : 'Import'}
+              </Button>
+            </Box>
+          )}>
+          {missing.length ? <Typography sx={{ fontSize: 13, color: 'warning.dark' }}>Pick a column for {missing.map((f) => f.label).join(', ')}</Typography> : null}
+          {busy ? <Box><LinearProgress variant="determinate" value={progress} /><Typography sx={{ mt: 2, fontSize: 12, color: 'text.secondary' }}>{progress}%</Typography></Box> : null}
+          {!busy && !missing.length && !s ? <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>Run the check to see how many rows are new</Typography> : null}
+          {s ? (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {done ? <Alert severity="success">{done.demo ? `Demo: ${s.toInsert.toLocaleString('en-US')} rows passed every check. The demo does not store imported rows; the real system writes them` : `Imported ${s.toInsert.toLocaleString('en-US')} rows${s.valvesInserted ? ` and ${s.valvesInserted.toLocaleString('en-US')} valve readings` : ''}`}</Alert> : null}
+              <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 3 }}>
+                <Figure label="Rows read" value={s.total.toLocaleString('en-US')} />
+                <Figure label={done ? 'Imported' : 'New'} value={s.toInsert.toLocaleString('en-US')} tone="#1d6b45" />
+                <Figure label="Already in the system" value={s.skipped.toLocaleString('en-US')} />
+                <Figure label="Cannot be read" value={s.errorCount.toLocaleString('en-US')} tone={s.errorCount ? '#b42318' : undefined} />
+              </Box>
+              {s.cropResolution && (s.cropResolution.unresolved > 0) ? (
+                <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
+                  {s.cropResolution.unresolved.toLocaleString('en-US')} rows have no crop: map a crop column or add the field's Crop Rotation first
                 </Typography>
-                <TableContainer sx={{ maxHeight: 240 }}>
+              ) : null}
+              {s.errors.length ? (
+                <TableContainer sx={{ maxHeight: 280, borderRadius: '12px', border: HAIR }}>
                   <Table size="small" stickyHeader>
-                    <TableHead>
-                      <TableRow>
-                        {Object.keys(result.stats.preview[0]).map((k) => (
-                          <TableCell key={k} sx={{ fontWeight: 600 }}>{k}</TableCell>
-                        ))}
-                      </TableRow>
-                    </TableHead>
+                    <TableHead><TableRow><TableCell sx={{ width: 220, fontSize: 12, color: 'text.secondary' }}>Where</TableCell><TableCell sx={{ fontSize: 12, color: 'text.secondary' }}>Problem</TableCell></TableRow></TableHead>
                     <TableBody>
-                      {result.stats.preview.map((r, i) => (
-                        <TableRow key={i}>
-                          {Object.keys(result.stats.preview[0]).map((k) => (
-                            <TableCell key={k}>{String(r[k] ?? '')}</TableCell>
-                          ))}
-                        </TableRow>
+                      {s.errors.map((e, i) => (
+                        <TableRow key={`${e.row}-${i}`}><TableCell sx={{ font: `500 12px ${MONO}`, whiteSpace: 'nowrap' }}>{e.row}</TableCell><TableCell sx={{ fontSize: 13 }}>{e.reason}</TableCell></TableRow>
                       ))}
                     </TableBody>
                   </Table>
                 </TableContainer>
-              </>
-            )}
-          </CardContent>
-        </Card>
-      )}
+              ) : null}
+              {s.errorCount > s.errors.length ? <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>First {s.errors.length} problems shown</Typography> : null}
+            </Box>
+          ) : null}
+        </Step>
+      ) : null}
     </Box>
   );
 }
+

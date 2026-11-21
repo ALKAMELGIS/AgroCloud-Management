@@ -60,6 +60,7 @@ export const SHELL_AR = {
   'Field Types & Names': 'أنواع الحقول وأسماؤها',
   'Valves Config': 'إعداد المحابس',
   'Historical Import': 'استيراد البيانات السابقة',
+  'Import from Excel': 'استيراد من Excel',
   'Pump Room': 'غرفة المضخات',
   Recipes: 'الوصفات',
   Inventory: 'المخزون',
