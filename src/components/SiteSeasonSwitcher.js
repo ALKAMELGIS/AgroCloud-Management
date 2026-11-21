@@ -178,7 +178,7 @@ export default function SiteSeasonSwitcher() {
               No site assigned — contact your manager.
             </Typography>
           ) : null}
-          <Box role="listbox" aria-label="Site" ref={(el) => { if (el) requestAnimationFrame(() => el.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'center' })); }} sx={{ maxHeight: 280, overflowY: 'auto', mx: -2, scrollbarWidth: 'thin' }}>
+          <Box role="listbox" aria-label="Site" ref={(el) => { if (el) requestAnimationFrame(() => el.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'center' })); }} sx={{ maxHeight: 280, overflowY: 'auto', mx: -2 }}>
             {allowAllSites ? (
               <PickRow selected={!activeSiteId} onClick={() => pickSite('')}>All sites</PickRow>
             ) : null}

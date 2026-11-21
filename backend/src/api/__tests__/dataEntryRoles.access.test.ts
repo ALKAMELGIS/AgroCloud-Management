@@ -313,7 +313,17 @@ describe('/imports', () => {
       expect((await call('GET', '/imports/targets', user)).status).toBe(200);
     });
   }
-  for (const user of others([OM, WK, AG])) {
+  it('the pest agronomist imports only spray records and the product catalog', async () => {
+    const res = await call('GET', '/imports/targets', PA);
+    expect(res.status).toBe(200);
+    expect(res.json.data.map((t: { key: string }) => t.key).sort()).toEqual(['pesticide_applications', 'pesticide_products']);
+  });
+  it('the worker may import the product catalog but not spray records', async () => {
+    const keys = (await call('GET', '/imports/targets', WK)).json.data.map((t: { key: string }) => t.key);
+    expect(keys).toContain('pesticide_products');
+    expect(keys).not.toContain('pesticide_applications');
+  });
+  for (const user of others([OM, WK, AG, PA])) {
     it(`${user.role} is 403`, async () => {
       expect((await call('GET', '/imports/targets', user)).status).toBe(403);
     });

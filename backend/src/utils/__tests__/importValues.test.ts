@@ -28,3 +28,26 @@ describe('normalizeTime', () => {
   ])('%s -> %s', (raw, want) => expect(normalizeTime(raw)).toBe(want));
   test('rejects 25:00', () => expect(normalizeTime('25:00')).toBeUndefined());
 });
+
+import { normalizePercent, normalizeFlag, leadingDays, canonicalFieldName } from '../importValues';
+
+describe('other import values', () => {
+  test('percent', () => {
+    expect(normalizePercent('0.527778')).toBe(52.78);
+    expect(normalizePercent('52.8%')).toBe(52.8);
+    expect(normalizePercent('35')).toBe(35);
+    expect(normalizePercent('x')).toBeUndefined();
+  });
+  test('flags and days', () => {
+    expect(normalizeFlag('√')).toBe(true);
+    expect(normalizeFlag('N/A')).toBe(false);
+    expect(leadingDays('3 days')).toBe(3);
+    expect(leadingDays('when dry')).toBeUndefined();
+  });
+  test('field names', () => {
+    expect(canonicalFieldName('NH 01')).toBe(canonicalFieldName('NH-1'));
+    expect(canonicalFieldName('GH -02')).toBe(canonicalFieldName('GH-02'));
+    expect(canonicalFieldName('BL-7')).toBe(canonicalFieldName('BL -07'));
+    expect(canonicalFieldName('NH 13')).not.toBe(canonicalFieldName('NH 1'));
+  });
+});

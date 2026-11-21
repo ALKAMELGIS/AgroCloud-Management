@@ -229,7 +229,7 @@ function Sidebar({ open, mobileOpen, onMobileClose, activeNavArea }) {
       )}
 
 
-      <Box component="nav" aria-label="Main navigation" sx={{ flexGrow: 1, overflow: 'auto', overflowX: 'hidden', pt: 3, pb: 3, px: rail ? 2.5 : 3, overscrollBehavior: 'contain', scrollbarWidth: 'thin' }}>
+      <Box component="nav" aria-label="Main navigation" sx={{ flexGrow: 1, overflow: 'auto', overflowX: 'hidden', pt: 3, pb: 3, px: rail ? 2.5 : 3, overscrollBehavior: 'contain' }}>
         <Tooltip title={rail ? L('Search') : ''} placement="right">
           <ListItemButton
             onClick={openSearch}

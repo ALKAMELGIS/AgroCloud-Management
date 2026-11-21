@@ -45,3 +45,12 @@ dump.rdb
 /playwright-report
 dump.rdb
 ios-out/
+
+# Local build outputs, test runs and caches (never committed)
+/build-demo
+/build-live
+/build-ui
+/test-results
+dump.rdb
+# Screenshots belong in docs/screenshots
+/*.png

@@ -129,6 +129,13 @@ AgroCloud-Management/
 └── .github/workflows/      # CI/CD pipelines
 ```
 
+## Documentation
+
+- `docs/ROADMAP.md`: where the system stands and the plan to a fully professional product
+- `docs/DATABASE.md`: every table by area, with its links (regenerate with `scripts/db-map.py`)
+- `docs/ARCHITECTURE.md`, `docs/PRODUCTION_CHECKLIST.md`: how it is built and how to run it
+- `docs/setup/`: maps, weather, remote sensing, drawing tool; `docs/design/`: design system
+
 ## API Documentation
 
 When the backend is running, Swagger UI is available at:

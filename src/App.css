@@ -258,13 +258,25 @@ html.has-bottom-nav .ac-fixed-bottom {
 }
 
 /* --- Scrollbars -------------------------------------------------------- */
-/* Slim and quiet everywhere: a 6px rounded thumb on a transparent track that
-   darkens on hover. Boxes use overflow:auto, so bars only appear when the
-   content is larger than the box. */
+/* One slim scrollbar everywhere: a 4px rounded pill on a clear track that
+   grows to 6px and darkens under the pointer. Chrome, Edge and Safari use the
+   ::-webkit-scrollbar rules (the standard properties would switch them back to
+   the system bar, so they are only set where those rules do not exist). */
 
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-hover) transparent;
+:root {
+  --scroll-thumb: rgba(22, 40, 30, 0.2);
+  --scroll-thumb-hover: rgba(22, 40, 30, 0.38);
+  --scroll-track: transparent;
+}
+html[data-theme='dark'] {
+  --scroll-thumb: rgba(255, 255, 255, 0.18);
+  --scroll-thumb-hover: rgba(255, 255, 255, 0.34);
+}
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scroll-thumb) var(--scroll-track);
+  }
 }
 ::-webkit-scrollbar {
   width: 10px;
@@ -272,29 +284,34 @@ html.has-bottom-nav .ac-fixed-bottom {
 }
 ::-webkit-scrollbar-track,
 ::-webkit-scrollbar-corner {
-  background: transparent;
+  background: var(--scroll-track);
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--border-hover);
-  border-radius: 0;
-  border: 2px solid transparent;
-  background-clip: content-box;
-  min-height: 32px;
+  background-color: var(--scroll-thumb);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  min-height: 40px;
+  min-width: 40px;
 }
 ::-webkit-scrollbar-thumb:hover,
 ::-webkit-scrollbar-thumb:active {
-  background: var(--text-disabled);
-  border: 2px solid transparent;
-  background-clip: content-box;
+  background-color: var(--scroll-thumb-hover);
+  border-width: 2px;
+}
+::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
 }
 /* Touch screens scroll with the finger; keep the bar a hairline there. */
 @media (pointer: coarse) {
   ::-webkit-scrollbar {
-    width: 4px;
-    height: 4px;
+    width: 6px;
+    height: 6px;
   }
   ::-webkit-scrollbar-thumb {
-    border: 0;
+    border-width: 1px;
   }
 }
 /* Smooth jumps for links and "back to top"; tables and grids keep instant
@@ -389,52 +406,25 @@ main h1.page-title {
   main h1.page-title { font-size: 1.0625rem !important; }
 }
 
-/* Records plan (round 45): tables wider than their box show a real, always
-   visible scrollbar (12 px, grey thumb on a light track), not the hairline
-   overlay bar that macOS / phones hide until you scroll. */
-.MuiTableContainer-root,
-.sheet-scroll {
-  /* "auto" on both standard properties lets Chrome and Safari use the
-     ::-webkit-scrollbar rules below, which keep the bar on screen even where
-     the system hides scrollbars until scrolling (macOS, Android). */
-  scrollbar-width: auto;
-  scrollbar-color: auto;
-}
-@supports (-moz-appearance: none) {
-  .MuiTableContainer-root,
-  .sheet-scroll { scrollbar-color: #9aa39d #eff1ed; }
-}
-.MuiTableContainer-root::-webkit-scrollbar,
-.sheet-scroll::-webkit-scrollbar {
-  width: 12px;
-  height: 12px;
-}
+/* Tables and sheets wider than their box: the same slim pill, a shade darker
+   and on a faint track so the sideways bar is easy to find. */
 .MuiTableContainer-root::-webkit-scrollbar-track,
 .sheet-scroll::-webkit-scrollbar-track {
-  background: #eff1ed;
+  background: rgba(22, 40, 30, 0.035);
+  border-radius: 999px;
 }
 .MuiTableContainer-root::-webkit-scrollbar-thumb,
 .sheet-scroll::-webkit-scrollbar-thumb {
-  background: #9aa39d;
-  border: 3px solid #eff1ed;
-  background-clip: border-box;
-  min-width: 40px;
+  background-color: rgba(22, 40, 30, 0.28);
 }
 .MuiTableContainer-root::-webkit-scrollbar-thumb:hover,
 .sheet-scroll::-webkit-scrollbar-thumb:hover {
-  background: #6b746e;
+  background-color: rgba(22, 40, 30, 0.45);
 }
-@media (pointer: coarse) {
-  .MuiTableContainer-root::-webkit-scrollbar,
-  .sheet-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
-  .MuiTableContainer-root::-webkit-scrollbar-thumb,
-  .sheet-scroll::-webkit-scrollbar-thumb { border-width: 2px; }
-}
-
 html[data-theme='dark'] .MuiTableContainer-root::-webkit-scrollbar-track,
-html[data-theme='dark'] .sheet-scroll::-webkit-scrollbar-track { background: #1a211d; }
+html[data-theme='dark'] .sheet-scroll::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.04); }
 html[data-theme='dark'] .MuiTableContainer-root::-webkit-scrollbar-thumb,
-html[data-theme='dark'] .sheet-scroll::-webkit-scrollbar-thumb { background: #5b665f; border-color: #1a211d; }
+html[data-theme='dark'] .sheet-scroll::-webkit-scrollbar-thumb { background-color: rgba(255, 255, 255, 0.26); }
 
 /* Map shapes: no browser focus box around a clicked field or structure (selection is shown by the map itself). */
 .leaflet-container .leaflet-interactive:focus,

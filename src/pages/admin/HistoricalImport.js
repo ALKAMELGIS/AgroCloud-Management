@@ -8,7 +8,7 @@ import { confirmAction } from '../../components/ConfirmDialog';
 import { API_BASE, getAuthHeaders } from '../../config/api';
 import { ModuleIcon } from '../../config/moduleIcons';
 import {
-  readWorkbook, similarSheets, autoMap, fillDown, chunkRows, mergeResults, dateSpan, downloadTemplate,
+  readWorkbook, pickSheets, autoMap, fillDown, chunkRows, mergeResults, dateSpan, downloadTemplate, dropDuplicateRows, amountColumns,
 } from '../../utils/excelImport';
 
 /*
@@ -22,7 +22,7 @@ const HAIR = '1px solid rgba(22,40,30,0.07)';
 const CARD = { bgcolor: 'background.paper', border: HAIR, borderRadius: '16px' };
 const MONO = '"IBM Plex Mono", monospace';
 const BATCH = 1500;
-const FORM_ICON = { harvests: '/harvest/entry', ecph: '/ecph-entry', ecph_full: '/ecph-entry', fertigation: '/fertigation/entry' };
+const FORM_ICON = { harvests: '/harvest/entry', ecph: '/ecph-entry', ecph_full: '/ecph-entry', fertigation: '/fertigation/entry', pesticide_applications: '/ipm/pesticide-applications', pesticide_products: '/ipm/product-catalog' };
 const ECPH_FILL = ['date', 'time', 'field_name', 'qty_of_water', 'cycle', 'total_water_qty', 'total_water_drip', 'weather_condition', 'irrigation_status'];
 
 async function post(path, body) {
@@ -65,6 +65,9 @@ export default function HistoricalImport() {
   const fileRef = useRef(null);
   const [targets, setTargets] = useState(null);
   const [targetKey, setTargetKey] = useState(params.get('target') || '');
+  // A link to another form (from an entry page) switches the form even when this page is already open.
+  const linked = params.get('target');
+  useEffect(() => { if (linked) setTargetKey(linked); }, [linked]);
   const [fileName, setFileName] = useState('');
   const [sheets, setSheets] = useState([]);
   const [picked, setPicked] = useState([]);
@@ -75,6 +78,8 @@ export default function HistoricalImport() {
   const [check, setCheck] = useState(null);
   const [done, setDone] = useState(null);
   const [drag, setDrag] = useState(false);
+  const [options, setOptions] = useState({});
+  const [dropped, setDropped] = useState([]);
 
   useEffect(() => {
     fetch(`${API_BASE}/imports/targets`, { headers: getAuthHeaders() })
@@ -93,8 +98,16 @@ export default function HistoricalImport() {
   const span = useMemo(() => dateSpan(rows, mapping.date), [rows, mapping.date]);
   const missing = target ? target.fields.filter((f) => f.required && !mapping[f.key]) : [];
 
-  useEffect(() => { if (target && headers.length) setMapping(autoMap(target.fields, headers)); }, [target, headers]);
-  useEffect(() => { setCheck(null); setDone(null); }, [targetKey, picked, mapping]);
+  // The sheets that fit the chosen form (an "All" sheet alone when it already holds the others).
+  useEffect(() => { if (target && sheets.length) setPicked(pickSheets(sheets, target.fields)); }, [target, sheets]);
+  useEffect(() => {
+    if (!target || !headers.length) return;
+    const m = autoMap(target.fields, headers);
+    const cols = target.fields.find((f) => f.type === 'columns');
+    if (cols) m[cols.key] = amountColumns(rows, headers, new Set(Object.values(m)));
+    setMapping(m);
+  }, [target, headers]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setCheck(null); setDone(null); setDropped([]); }, [targetKey, picked, mapping, options]);
 
   const openFile = async (f) => {
     if (!f) return;
@@ -104,7 +117,7 @@ export default function HistoricalImport() {
       const book = readWorkbook(await f.arrayBuffer());
       if (!book.length) throw new Error('No sheet in this file has data rows');
       setSheets(book);
-      setPicked(similarSheets(book));
+      setPicked(pickSheets(book, target?.fields));
     } catch (e) {
       setError(e.message || 'Could not read the file');
       setFileName('');
@@ -120,12 +133,17 @@ export default function HistoricalImport() {
     try {
       const data = rows.map((r) => ({ ...r }));
       if (target.key === 'ecph_full') fillDown(data, ECPH_FILL.map((k) => mapping[k]));
+      // The same record on two sheets, or typed twice: sent once, and listed below.
+      const same = dropDuplicateRows(data, (target.sameRecord || []).map((k) => mapping[k]).filter(Boolean));
+      data.length = 0;
+      data.push(...same.rows);
+      setDropped(same.droppedRefs || []);
       const keyOf = target.key === 'ecph_full' ? (r) => `${r[mapping.field_name]}|${r[mapping.date]}|${r[mapping.time] || ''}` : null;
       const batches = chunkRows(data, BATCH, keyOf);
       const parts = [];
       for (let i = 0; i < batches.length; i += 1) {
         // eslint-disable-next-line no-await-in-loop
-        parts.push(await post('/imports/execute-json', { rows: batches[i], target: target.key, mapping, dryRun, fileName }));
+        parts.push(await post('/imports/execute-json', { rows: batches[i], target: target.key, mapping, dryRun, fileName, options }));
         setProgress(Math.round(((i + 1) / batches.length) * 100));
       }
       const merged = mergeResults(parts);
@@ -228,11 +246,23 @@ export default function HistoricalImport() {
                   </Typography>
                   {f.description ? <Typography sx={{ fontSize: 12, color: 'text.secondary', mt: 0.5 }}>{f.description}</Typography> : null}
                 </Box>
-                <TextField select size="small" value={mapping[f.key] || ''} onChange={(e) => setMapping((m) => ({ ...m, [f.key]: e.target.value }))}
-                  sx={{ flex: '0 1 320px', minWidth: 200 }} slotProps={{ htmlInput: { 'aria-label': `Column for ${f.label}` } }}>
-                  <MenuItem value=""><Box component="span" sx={{ color: 'text.disabled' }}>Not in the file</Box></MenuItem>
-                  {headers.map((h) => <MenuItem key={h} value={h}>{h}</MenuItem>)}
-                </TextField>
+                {f.type === 'columns' ? (
+                  <TextField select size="small" value={Array.isArray(mapping[f.key]) ? mapping[f.key] : []} onChange={(e) => setMapping((m) => ({ ...m, [f.key]: e.target.value }))}
+                    sx={{ flex: '0 1 320px', minWidth: 200 }}
+                    slotProps={{ htmlInput: { 'aria-label': `Columns for ${f.label}` }, select: { multiple: true, renderValue: (v) => (v.length ? `${v.length} columns` : 'None') } }}>
+                    {headers.filter((h) => !Object.entries(mapping).some(([k, v]) => k !== f.key && v === h)).map((h) => (
+                      <MenuItem key={h} value={h} dense>
+                        <Checkbox size="small" checked={(mapping[f.key] || []).includes(h)} sx={{ p: 0.5, mr: 1 }} />{h}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                ) : (
+                  <TextField select size="small" value={mapping[f.key] || ''} onChange={(e) => setMapping((m) => ({ ...m, [f.key]: e.target.value }))}
+                    sx={{ flex: '0 1 320px', minWidth: 200 }} slotProps={{ htmlInput: { 'aria-label': `Column for ${f.label}` } }}>
+                    <MenuItem value=""><Box component="span" sx={{ color: 'text.disabled' }}>Not in the file</Box></MenuItem>
+                    {headers.map((h) => <MenuItem key={h} value={h}>{h}</MenuItem>)}
+                  </TextField>
+                )}
               </Box>
             ))}
           </Box>
@@ -241,13 +271,13 @@ export default function HistoricalImport() {
               <Table size="small" stickyHeader>
                 <TableHead>
                   <TableRow>
-                    {target.fields.filter((f) => mapping[f.key]).map((f) => <TableCell key={f.key} sx={{ fontSize: 12, fontWeight: 500, color: 'text.secondary', whiteSpace: 'nowrap' }}>{f.label}</TableCell>)}
+                    {target.fields.filter((f) => typeof mapping[f.key] === 'string' && mapping[f.key]).map((f) => <TableCell key={f.key} sx={{ fontSize: 12, fontWeight: 500, color: 'text.secondary', whiteSpace: 'nowrap' }}>{f.label}</TableCell>)}
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {rows.slice(0, 5).map((r) => (
                     <TableRow key={r.__ref}>
-                      {target.fields.filter((f) => mapping[f.key]).map((f) => <TableCell key={f.key} sx={{ fontSize: 13, whiteSpace: 'nowrap' }}>{r[mapping[f.key]]}</TableCell>)}
+                      {target.fields.filter((f) => typeof mapping[f.key] === 'string' && mapping[f.key]).map((f) => <TableCell key={f.key} sx={{ fontSize: 13, whiteSpace: 'nowrap' }}>{r[mapping[f.key]]}</TableCell>)}
                     </TableRow>
                   ))}
                 </TableBody>
@@ -272,6 +302,15 @@ export default function HistoricalImport() {
               </Button>
             </Box>
           )}>
+          {(target.options || []).map((o) => (
+            <Box key={o.key} component="label" sx={{ display: 'flex', alignItems: 'flex-start', gap: 2, mb: 4, cursor: 'pointer' }}>
+              <Checkbox size="small" checked={!!options[o.key]} onChange={(e) => setOptions((x) => ({ ...x, [o.key]: e.target.checked }))} sx={{ p: 0.5 }} />
+              <Box>
+                <Typography sx={{ fontSize: 13.5, fontWeight: 500 }}>{o.label}</Typography>
+                <Typography sx={{ fontSize: 12, color: 'text.secondary', mt: 0.5 }}>{o.description}</Typography>
+              </Box>
+            </Box>
+          ))}
           {missing.length ? <Typography sx={{ fontSize: 13, color: 'warning.dark' }}>Pick a column for {missing.map((f) => f.label).join(', ')}</Typography> : null}
           {busy ? <Box><LinearProgress variant="determinate" value={progress} /><Typography sx={{ mt: 2, fontSize: 12, color: 'text.secondary' }}>{progress}%</Typography></Box> : null}
           {!busy && !missing.length && !s ? <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>Run the check to see how many rows are new</Typography> : null}
@@ -284,6 +323,14 @@ export default function HistoricalImport() {
                 <Figure label="Already in the system" value={s.skipped.toLocaleString('en-US')} />
                 <Figure label="Cannot be read" value={s.errorCount.toLocaleString('en-US')} tone={s.errorCount ? '#b42318' : undefined} />
               </Box>
+              {dropped.length || s.summaryRows || s.duplicatesInFile || s.productsCreated ? (
+                <Box component="ul" sx={{ m: 0, pl: 5, display: 'flex', flexDirection: 'column', gap: 1.5, fontSize: 13, color: 'text.secondary' }}>
+                  {dropped.length ? <li>{dropped.length.toLocaleString('en-US')} rows repeat another row of the file and were sent once: {dropped.slice(0, 4).map((d) => `${d.row} = ${d.same}`).join('; ')}{dropped.length > 4 ? '…' : ''}</li> : null}
+                  {s.duplicatesInFile ? <li>{s.duplicatesInFile.toLocaleString('en-US')} more rows describe a record already in the file</li> : null}
+                  {s.summaryRows ? <li>{s.summaryRows.toLocaleString('en-US')} total lines (a quantity with no field and no date) were left out</li> : null}
+                  {s.productsCreated ? <li>{s.productsCreated.toLocaleString('en-US')} products {done ? 'were' : 'will be'} added to the catalog{s.newProducts?.length ? `: ${s.newProducts.slice(0, 6).join(', ')}${s.newProducts.length > 6 ? '…' : ''}` : ''}</li> : null}
+                </Box>
+              ) : null}
               {s.cropResolution && (s.cropResolution.unresolved > 0) ? (
                 <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
                   {s.cropResolution.unresolved.toLocaleString('en-US')} rows have no crop: map a crop column or add the field's Crop Rotation first

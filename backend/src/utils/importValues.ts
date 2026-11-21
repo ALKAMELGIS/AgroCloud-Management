@@ -56,3 +56,34 @@ export function normalizeTime(raw: string): string | undefined {
   }
   return undefined;
 }
+
+/** "53%", "53" or a fraction 0.53 (how Excel stores a % cell) -> 53. */
+export function normalizePercent(raw: string): number | undefined {
+  const v = raw.trim();
+  const hasSign = v.endsWith('%');
+  const n = Number(v.replace(/%/g, '').replace(/,/g, '').trim());
+  if (!Number.isFinite(n)) return undefined;
+  return !hasSign && Math.abs(n) <= 1.5 ? Math.round(n * 100 * 100) / 100 : n;
+}
+
+/** √, yes, y, true, 1, نعم -> true; no, n, false, 0, لا, N/A, blank -> false. */
+export function normalizeFlag(raw: string): boolean {
+  return /^(√|✓|✔|yes|y|true|1|available|نعم)$/i.test(raw.trim());
+}
+
+/** First whole number in text such as "3 days" or "PHI 14"; undefined when none. */
+export function leadingDays(raw: string): number | undefined {
+  const m = String(raw || '').match(/(\d+)/);
+  return m ? Number(m[1]) : undefined;
+}
+
+/**
+ * Field names written by hand: "NH 01", "NH-1", "nh01" and "GH -02" are the same
+ * field. Lower case, no spaces, dashes or underscores, numbers without leading zeros.
+ */
+export function canonicalFieldName(name: string): string {
+  return String(name || '')
+    .toLowerCase()
+    .replace(/[\s\-_.]+/g, '')
+    .replace(/\d+/g, (d) => String(Number(d)));
+}

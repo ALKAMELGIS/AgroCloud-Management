@@ -1148,8 +1148,6 @@ function RemoteSensing() {
                       overflow: 'auto',
                       flex: 1,
                       py: 0.25,
-                      '&::-webkit-scrollbar': { height: 4 },
-                      '&::-webkit-scrollbar-thumb': { bgcolor: 'action.disabled', borderRadius: 2 },
                     }}
                   >
                     {timeSeriesSteps.map((step, idx) => (
