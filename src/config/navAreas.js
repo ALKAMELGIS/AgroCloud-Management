@@ -129,6 +129,7 @@ const MANAGEMENT_SECTION = {
   label: 'MANAGEMENT',
   requiresRole: ['ceo', 'farm_manager', 'operation_manager'],
   items: [
+    { text: 'Settings', path: '/settings' },
     { text: 'Zones & Sites', path: '/manage/countries' },
     { text: 'Farm Areas & Crops', path: '/manage/farm-areas' },
     { text: 'Field Types & Names', path: '/manage/field-types' },

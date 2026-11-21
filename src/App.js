@@ -48,6 +48,7 @@ import { useShellLabel, useIsArabic } from './i18n/shellLabels';
 // Lazy-loaded page components (code splitting)
 const Home = lazy(() => import('./pages/Home'));
 const AreaHub = lazy(() => import('./pages/AreaHub'));
+const Settings = lazy(() => import('./pages/Settings'));
 const Login = lazy(() => import('./pages/Login'));
 const Register = lazy(() => import('./pages/Register'));
 const Landing = lazy(() => import('./pages/Landing'));
@@ -545,6 +546,8 @@ function AuthenticatedLayout() {
           <Routes>
             <Route path="/" element={guarded(Home)} />
             <Route path="/hub/:areaId" element={guarded(AreaHub)} />
+            <Route path="/settings" element={guarded(Settings)} />
+            <Route path="/settings/:section" element={guarded(Settings)} />
             <Route path="/summary" element={guarded(SummaryContents)} />
             <Route path="/assistant" element={guarded(Assistant)} />
             <Route path="/ecph-entry" element={guarded(ECPHEntry, NON_PEST)} />

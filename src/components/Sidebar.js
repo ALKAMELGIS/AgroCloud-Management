@@ -19,42 +19,8 @@ import {
   Collapse,
 } from '@mui/material';
 import {
-  HomeOutlined as HomeIcon,
-  ScienceOutlined as ScienceIcon,
-  WaterDropOutlined as WaterDropIcon,
-  DashboardOutlined as DashboardIcon,
-  SettingsOutlined as SettingsIcon,
-  AgricultureOutlined as AgricultureIcon,
-  AssessmentOutlined as AssessmentIcon,
-  DescriptionOutlined as DescriptionIcon,
-  LocationOnOutlined as LocationIcon,
-  ParkOutlined as ParkIcon,
-  LabelOutlined as LabelIcon,
-  SettingsInputComponentOutlined as ValvesIcon,
-  CloudOutlined as WeatherIcon,
-  MapOutlined as MapIcon,
-  SatelliteAltOutlined as RemoteSensingIcon,
-  AdminPanelSettingsOutlined as AdminIcon,
-  GroupOutlined as UsersIcon,
-  HistoryOutlined as HistoryIcon,
-  AssignmentOutlined as TaskIcon,
-  PestControlOutlined as BugReportIcon,
-  GpsFixedOutlined as GpsIcon,
-  GroupsOutlined as ManpowerIcon,
-  EditNoteOutlined as DataEntryIcon,
-  Inventory2Outlined as InventoryIcon,
-  CalendarMonthOutlined as CalendarIcon,
-  YardOutlined as SpaIcon,
-  TrendingUpOutlined as TrendingUpIcon,
-  SpaOutlined as EcoIcon,
-  ViewListOutlined as TemplatesIcon,
-  SchoolOutlined as SchoolIcon,
-  ElectricBoltOutlined as ElectricBoltIcon,
   SearchOutlined as TraceIcon,
-  EditNoteOutlined as ChangeRequestIcon,
-  EventNoteOutlined as ActivitySheetIcon,
   ChevronRightRounded as ChevronIcon,
-  ForumOutlined as AssistantIcon,
   LogoutOutlined as LogoutIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
@@ -68,77 +34,12 @@ import useOperatorWorkOrderBadgeCount from '../hooks/useOperatorWorkOrderBadgeCo
 import useChangeRequestBadgeCount from '../hooks/useChangeRequestBadgeCount';
 import useManpowerApprovalBadgeCount from '../hooks/useManpowerApprovalBadgeCount';
 import BrandLogo from './BrandLogo';
+import { ModuleIcon } from '../config/moduleIcons';
 import useOrganizationLogo from '../hooks/useOrganizationLogo';
 import { canUploadOrgLogo, uploadOrganizationLogo } from '../utils/organizationLogo';
 import { useNotification } from '../contexts/NotificationContext';
 import { useShellLabel } from '../i18n/shellLabels';
 
-const PATH_ICONS = {
-  '/': HomeIcon,
-  '/summary': DescriptionIcon,
-  '/daily-brief': AssessmentIcon,
-  '/assistant': AssistantIcon,
-  '/dashboard': DashboardIcon,
-  '/templates': TemplatesIcon,
-  '/ecph-entry': ScienceIcon,
-  '/fertigation/entry': WaterDropIcon,
-  '/irrigation/entry': WaterDropIcon,
-  '/harvest/entry': AgricultureIcon,
-  '/admin/crop-history': HistoryIcon,
-  '/pump-room': ElectricBoltIcon,
-  '/harvest/dashboard': AgricultureIcon,
-  '/fertigation/dashboard': WaterDropIcon,
-  '/efficiency-dashboard': TrendingUpIcon,
-  '/fertigation-harvest': AssessmentIcon,
-  '/ecph/reports': ScienceIcon,
-  '/fertigation/reports': WaterDropIcon,
-  '/harvest/reports': AgricultureIcon,
-  '/report-builder': DescriptionIcon,
-  '/weather-log': WeatherIcon,
-  '/weather-log/map': MapIcon,
-  '/remote-sensing': RemoteSensingIcon,
-  '/gps-tracking': GpsIcon,
-  '/gis-map': MapIcon,
-  '/audit/batch-trace': TraceIcon,
-  '/audit/phi-audit-log': HistoryIcon,
-  '/audit/change-requests': ChangeRequestIcon,
-  '/ipm/pesticide-applications': BugReportIcon,
-  '/ipm/biological-control-record': SpaIcon,
-  '/ipm/bumble-bees': EcoIcon,
-  '/ipm/product-catalog': InventoryIcon,
-  '/ipm/scouting-reports': DescriptionIcon,
-  '/ipm/pest-catalog': BugReportIcon,
-  '/ipm/spray-calendar': CalendarIcon,
-  '/tasks': TaskIcon,
-  '/shift-schedule': HistoryIcon,
-  '/manpower-record': ManpowerIcon,
-  '/manpower-activity-sheet': ActivitySheetIcon,
-  '/manage/countries': LocationIcon,
-  '/manage/farm-areas': ParkIcon,
-  '/manage/field-types': LabelIcon,
-  '/manage/valves': ValvesIcon,
-  '/manage/recipes': DescriptionIcon,
-  '/manage/seasons': CalendarIcon,
-  '/inventory': InventoryIcon,
-  '/yield-predictions': AgricultureIcon,
-  '/agronomic-reference': ScienceIcon,
-  '/admin/api-integrations': SettingsIcon,
-  '/admin/integrations/john-deere': SettingsIcon,
-  '/internship': SchoolIcon,
-  '/internship/grades': AssessmentIcon,
-  '/admin/users': UsersIcon,
-  '/admin/audit': HistoryIcon,
-  '/admin/recovery': HistoryIcon,
-  '/admin/backup': SettingsIcon,
-  '/admin/import': DataEntryIcon,
-  '/admin/health': DashboardIcon,
-  '/admin/api-keys': SettingsIcon,
-  '/admin/webhooks': SettingsIcon,
-  '/admin/feature-flags': SettingsIcon,
-  '/admin/organization': AdminIcon,
-  '/admin/platform': AdminIcon,
-  '/admin/enrollment': SchoolIcon,
-};
 
 // Section names are stored in capitals (they are also lookup keys); show them in
 // sentence case ("Data entry"), keeping acronyms such as IPM.
@@ -379,12 +280,11 @@ function Sidebar({ open, mobileOpen, onMobileClose, activeNavArea }) {
               <Collapse in={isOpen} timeout={200}>
               <List disablePadding sx={{ mt: 0.5 }}>
                 {section.items.map((item) => {
-                  const ItemIcon = PATH_ICONS[item.path] || DashboardIcon;
                   const badge = pathToBadge[item.path];
                   return (
                     <SidebarItem
                       key={item.path}
-                      item={{ ...item, text: L(item.text), icon: <ItemIcon /> }}
+                      item={{ ...item, text: L(item.text), icon: <ModuleIcon path={item.path} size={17} /> }}
                       active={isActive(item.path)}
                       onNavigate={handleNavigation}
                       badgeCount={badge?.count ?? 0}
@@ -491,7 +391,7 @@ function SidebarItem({ item, active, onNavigate, badgeCount = 0, badgeColor = 'e
         }),
       }}
     >
-      <Box component="span" sx={{ display: 'inline-flex', '& .MuiSvgIcon-root': { fontSize: 17, color: active ? 'primary.main' : 'inherit' } }}>
+      <Box component="span" sx={{ display: 'inline-flex', '& .MuiSvgIcon-root': { fontSize: 17, color: active ? 'primary.main' : 'inherit' }, '& .mod-ico': { color: active ? 'primary.main' : 'inherit' } }}>
         {badgeCount > 0 && rail ? (
           <Badge variant="dot" color={badgeColor}>{item.icon}</Badge>
         ) : item.icon}

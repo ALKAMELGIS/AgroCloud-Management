@@ -4,7 +4,7 @@ import { Box, ButtonBase, Skeleton, Typography } from '@mui/material';
 import { useAuth } from '../contexts/AuthContext';
 import { useActiveSite } from '../contexts/ActiveSiteContext';
 import { getShellSections } from '../config/navAreas';
-import { getTileMeta } from '../config/hubTiles';
+import { AREA_STYLE, ModuleIcon } from '../config/moduleIcons';
 import { apiRequest } from '../utils/api';
 import { useShellLabel } from '../i18n/shellLabels';
 import { displayDay } from '../utils/displayDate';
@@ -32,6 +32,8 @@ function Glyph({ k }) {
     </Box>
   );
 }
+
+const SETUP_ON_HOME = new Set(['/settings', '/yield-predictions', '/internship', '/internship/grades']);
 
 const fmt = (n) => (Number.isFinite(n) ? n.toLocaleString('en-US') : '–');
 
@@ -99,7 +101,14 @@ function Home() {
 
   const groups = useMemo(() => getShellSections(user)
     .map((g) => ({ ...g, items: g.items.filter((it) => it.path !== '/' && it.path !== '/summary') }))
+    // Setup: one Settings tile opens the hub with every admin screen; keep only what the hub does not hold.
+    .map((g) => (g.label === 'Setup' && g.items.some((it) => it.path === '/settings')
+      ? { ...g, items: g.items.filter((it) => SETUP_ON_HOME.has(it.path)) } : g))
     .filter((g) => g.items.length), [user]);
+  const [area, setArea] = useState(() => { try { return localStorage.getItem('agro_home_area') || 'All'; } catch { return 'All'; } });
+  const pickArea = (a) => { setArea(a); try { localStorage.setItem('agro_home_area', a); } catch { /* private mode */ } };
+  const curArea = groups.some((g) => g.label === area) ? area : 'All';
+  const shownGroups = curArea === 'All' ? groups : groups.filter((g) => g.label === curArea);
 
   const today = displayDay();
 
@@ -156,32 +165,52 @@ function Home() {
         )}
       </Box>
 
-      {/* Everything else, grouped like the sidebar */}
-      {groups.map((g) => (
-        <Box component="section" key={g.label} aria-label={g.label} sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2.5 }}>
-            <Typography component="h2" sx={{ fontSize: 14, fontWeight: 600 }}>{L(g.label)}</Typography>
-            <Typography component="span" sx={{ font: `500 11px ${MONO}`, color: 'text.disabled' }}>{g.items.length}</Typography>
-            <Box sx={{ flex: 1, height: '1px', bgcolor: 'rgba(22,40,30,0.08)' }} />
-          </Box>
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, minmax(0,1fr))', sm: 'repeat(3, minmax(0,1fr))', lg: 'repeat(4, minmax(0,1fr))' }, gap: 3 }}>
-            {g.items.map((it) => {
-              const meta = getTileMeta(it.path);
-              const Icon = meta.icon;
-              return (
-                <ButtonBase key={it.path} onClick={() => navigate(it.path)}
-                  sx={{ ...CARD, borderRadius: '14px', height: 64, px: 4, gap: 3, justifyContent: 'flex-start', textAlign: 'start', transition: 'box-shadow 150ms ease, border-color 150ms ease',
-                    '&:hover': { borderColor: 'rgba(22,40,30,0.16)', boxShadow: '0 4px 14px -8px rgba(22,40,30,0.25)' } }}>
-                  <Box sx={{ width: 34, height: 34, borderRadius: '10px', bgcolor: 'rgba(22,67,46,0.07)', color: 'primary.dark', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
-                    {Icon ? <Icon sx={{ fontSize: 18 }} /> : null}
-                  </Box>
-                  <Typography sx={{ fontSize: 13.5, fontWeight: 600, lineHeight: 1.3, minWidth: 0 }}>{L(it.text)}</Typography>
-                </ButtonBase>
-              );
-            })}
-          </Box>
+      {/* Area tabs, then each area's screens as icon tiles */}
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <Box role="tablist" aria-label="Areas"
+          sx={{ display: 'flex', gap: 1, p: 1, borderRadius: '12px', bgcolor: 'rgba(22,40,30,0.05)', alignSelf: 'flex-start', maxWidth: '100%', overflowX: 'auto', scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' } }}>
+          {[{ label: 'All' }, ...groups].map((g) => {
+            const on = curArea === g.label;
+            const st = AREA_STYLE[g.label];
+            return (
+              <ButtonBase key={g.label} role="tab" aria-selected={on} onClick={() => pickArea(g.label)}
+                sx={{ flexShrink: 0, height: 36, px: 4, gap: 2, borderRadius: '9px', fontSize: 13, fontWeight: on ? 600 : 500, color: on ? 'text.primary' : 'text.secondary', bgcolor: on ? 'background.paper' : 'transparent', boxShadow: on ? '0 1px 2px rgba(22,40,30,0.12)' : 'none', '&:hover': { color: 'text.primary' }, '&.Mui-focusVisible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 1 } }}>
+                {st ? <Box component="span" sx={{ width: 8, height: 8, borderRadius: '3px', bgcolor: st.color }} /> : null}
+                {L(g.label)}
+              </ButtonBase>
+            );
+          })}
         </Box>
-      ))}
+
+        {shownGroups.map((g) => {
+          const st = AREA_STYLE[g.label] || AREA_STYLE.Setup;
+          return (
+            <Box component="section" key={g.label} aria-label={g.label} sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                <Box sx={{ width: 32, height: 32, borderRadius: '9px', display: 'grid', placeItems: 'center', color: st.color, bgcolor: `${st.color}14`, flexShrink: 0 }}>
+                  <ModuleIcon d={st.icon} size={18} />
+                </Box>
+                <Typography component="h2" sx={{ fontSize: 15, fontWeight: 600 }}>{L(g.label)}</Typography>
+                <Typography component="span" sx={{ font: `500 12px ${MONO}`, color: 'text.disabled', ml: 'auto' }}>{g.items.length}</Typography>
+              </Box>
+              <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(148px, 1fr))', gap: 3 }}>
+                {g.items.map((it) => (
+                  <ButtonBase key={it.path} onClick={() => navigate(it.path)}
+                    sx={{ ...CARD, borderRadius: '14px', minHeight: 116, p: 4, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'space-between', gap: 3, textAlign: 'start', transition: 'transform 150ms ease, box-shadow 150ms ease, border-color 150ms ease',
+                      '&:hover': { transform: 'translateY(-2px)', borderColor: 'rgba(22,40,30,0.14)', boxShadow: '0 8px 20px -12px rgba(22,40,30,0.30)' },
+                      '&.Mui-focusVisible': { outline: '2px solid', outlineColor: st.color, outlineOffset: 2 },
+                      '@media (prefers-reduced-motion: reduce)': { transition: 'none', '&:hover': { transform: 'none' } } }}>
+                    <Box sx={{ width: 44, height: 44, borderRadius: '12px', display: 'grid', placeItems: 'center', color: st.color, background: `linear-gradient(160deg, ${st.color}1f, ${st.color}0d)`, boxShadow: `inset 0 0 0 1px ${st.color}2b` }}>
+                      <ModuleIcon path={it.path} size={22} />
+                    </Box>
+                    <Typography sx={{ fontSize: 13.5, fontWeight: 500, lineHeight: 1.35, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{L(it.text)}</Typography>
+                  </ButtonBase>
+                ))}
+              </Box>
+            </Box>
+          );
+        })}
+      </Box>
     </Box>
   );
 }

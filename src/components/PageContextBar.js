@@ -65,7 +65,7 @@ export default function PageContextBar() {
     <Box role="status" aria-live="polite" sx={srOnly}>{pageTitle || ''}</Box>
   );
 
-  if (pathname === '/' || pathname.startsWith('/hub/') || !meta) return <>{hiddenHeading}{announcer}</>;
+  if (pathname === '/' || pathname.startsWith('/hub/') || pathname === '/settings' || pathname.startsWith('/settings/') || !meta) return <>{hiddenHeading}{announcer}</>;
 
   const sep = (
     <SepIcon

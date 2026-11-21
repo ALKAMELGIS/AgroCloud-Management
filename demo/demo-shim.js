@@ -350,7 +350,9 @@
     if(path==='/field-types') return ok([{id:'ft1',name:'Greenhouse'},{id:'ft2',name:'Nethouse'},{id:'ft3',name:'PIVOT'}]);
     if(path==='/seasons') return ok(SEASONS);
     if(path==='/assignments/my-access') return ok({isFullAccess:true,siteIds:null});
-    if(path==='/organization') return ok({id:'org1',name:'Al Maha Farm',settings:{default_site:'c7s1'}});
+    if(path==='/organization'){ var orgSt; try{ orgSt=JSON.parse(localStorage.getItem('agro_demo_org_v1')||'null'); }catch(e){ orgSt=null; } orgSt=orgSt||{id:'org1',name:'Al Maha Farm',settings:{default_site:'c7s1'}};
+      if(method==='PUT'&&reqBody){ if(reqBody.name) orgSt.name=String(reqBody.name).slice(0,120); if(reqBody.settings&&typeof reqBody.settings==='object') orgSt.settings=Object.assign({},orgSt.settings,reqBody.settings); try{ localStorage.setItem('agro_demo_org_v1',JSON.stringify(orgSt)); }catch(e){} }
+      return ok(orgSt); }
     if(path==='/gis/arcgis/connections'){
       if(method==='POST'){ var c={id:'layer1',name:REPORT.layer.name,source_url:(reqBody&&reqBody.url||'').replace(/\/\d+\/?$/,''),layer_index:21,attribute_mapping:reqBody&&reqBody.mapping||REPORT.mapping,sync_status:'synced',linked_features:0,synced_features:0,created:!CONN.length}; CONN=[c]; return ok(c); }
       return ok(CONN);
