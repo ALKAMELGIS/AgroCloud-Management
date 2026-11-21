@@ -424,6 +424,26 @@
     });
     return LIVE;
   }
+  /* Speed: pages never wait for the network. The copy shipped with the app answers at once;
+     the live read runs in the background and is used from the next request once it has arrived. */
+  var COPY=null, LIVE_OK=false, COPY_META=null;
+  function copyLayer(){
+    if(COPY) return COPY;
+    COPY=of('./agro_structures.geojson').then(function(r){ if(!r.ok) throw new Error('no copy'); return r.json(); })
+      .then(function(fc){ if(!fc||!(fc.features||[]).length) throw new Error('empty'); fc.features.forEach(function(f,i){ if(f.id===undefined) f.id=(f.properties&&f.properties.OBJECTID)||i; }); fc._snapshot=true; return fc; })
+      .catch(function(e){ COPY=null; throw e; });
+    return COPY;
+  }
+  function copyMeta(){
+    if(!COPY_META) COPY_META=of('./agro_structures.meta.json').then(function(r){ if(!r.ok) throw new Error('no copy'); return r.json(); }).catch(function(){ COPY_META=null; return null; });
+    return COPY_META;
+  }
+  function fastLayer(){
+    if(LIVE_OK) return LIVE;
+    var bg=function(){ liveLayer().then(function(fc){ if(fc&&fc._live) LIVE_OK=true; }); };
+    if(typeof requestIdleCallback==='function') requestIdleCallback(bg,{timeout:4000}); else setTimeout(bg,1500);
+    return copyLayer().catch(function(){ return liveLayer(); });
+  }
   function jsonRes(x){ return new Response(JSON.stringify(x),{status:200,headers:{'Content-Type':'application/json'}}); }
 
   /* Satellite imagery on this device (demo / APK have no server). The
@@ -523,12 +543,25 @@
   var LINKED=null, AUTO_KEY='agro_demo_autoimport_v1';
   function autoLink(){
     if(LINKED) return LINKED;
-    LINKED=liveLayer().then(function(fc){
+    var already=null; try{ already=localStorage.getItem(AUTO_KEY); }catch(e){}
+    if(already){
+      /* Imported before on this device: the shapes are saved here, so pages answer at once.
+         Shapes still missing are linked quietly after the page has drawn. */
+      LINKED=Promise.resolve();
+      setTimeout(function(){ linkShapes(fastLayer()); },2500);
+      return LINKED;
+    }
+    LINKED=linkShapes(fastLayer());
+    LINKED=Promise.race([LINKED,new Promise(function(r){ setTimeout(r,8000); })]);
+    return LINKED;
+  }
+  function linkShapes(src){
+    return src.then(function(fc){
       /* First run on this device: import the whole Agro_Structures layer (every feature, drawn), like
          "Import from ArcGIS". Fields link by ZONE_ID + Farm_Code; the sample fields keep their readings. */
       var done=null; try{ done=localStorage.getItem(AUTO_KEY); }catch(e){}
       if(!done&&fc&&(fc.features||[]).length){
-        return Promise.resolve(typeof liveMeta==='function'?liveMeta():null).catch(function(){return null;}).then(function(meta){
+        return Promise.resolve(fc._live?liveMeta():copyMeta()).catch(function(){return null;}).then(function(meta){
           try{ var rep=demoImport(fc,meta||DEMO_META,{buildParents:true}); localStorage.setItem(AUTO_KEY,JSON.stringify({at:new Date().toISOString(),features:rep.features,shapes:rep.shapes.imported,source:fc._live?'live':'copy'})); }catch(e){}
           return fc;
         });
@@ -547,9 +580,6 @@
         (st[x.id].history=st[x.id].history||[]).push({id:Date.now()+n,operation:'import',edited_at:now,edited_by_name:'ArcGIS link (Farm_Code)',area_ha:geoArea(st[x.id].geometry)}); n++; });
       if(n) geoSave(st);
     }).catch(function(){});
-    /* Never hold pages up for long: without the layer, fields simply show no shape yet. */
-    LINKED=Promise.race([LINKED,new Promise(function(r){ setTimeout(r,20000); })]);
-    return LINKED;
   }
   function demoImport(fc,meta,opt){
     var C=JSON.parse(JSON.stringify(countries)),S=JSON.parse(JSON.stringify(sites)),A=JSON.parse(JSON.stringify(areas)),Fl=JSON.parse(JSON.stringify(fields));
@@ -673,11 +703,11 @@
       return autoLink().then(function(){ return jsonRes(body(url,'GET',null)); });
     }
     if(isApi(url)&&/\/gis\/layers\/demo-struct\/features(\?|$)/.test(url)){
-      return liveLayer().then(function(fc){ return jsonRes(ok(fc)); });
+      return fastLayer().then(function(fc){ return jsonRes(ok(fc)); });
     }
-    /* The layer list waits for the live read, so its name says where the polygons came from. */
+    /* The layer name says where the polygons came from (the shipped copy first, live once it has arrived). */
     if(isApi(url)&&/\/gis\/layers(\?|$)/.test(url)&&(!init||!init.method||init.method==='GET')){
-      return liveLayer().then(function(fc){
+      return fastLayer().then(function(fc){
         var live=fc&&fc._live;
         return jsonRes(ok([{id:'demo-struct',name:live?'Agro_Structures (ArcGIS Online · live)':(fc&&fc._snapshot)?'Agro_Structures (ArcGIS copy · 15 Nov 2026)':'Agro_Structures (ArcGIS not reachable)',
           sourceType:'arcgis_feature_service',featureCount:(fc&&fc.features||[]).length,isVisible:true,style:{color:'#1f7a4d',fillOpacity:0.25}}]));
@@ -685,7 +715,7 @@
     }
     if(isApi(url)&&/\/gis\/layers\/demo-struct\/metadata(\?|$)/.test(url)){
       /* Live symbology only together with the live polygons; the sample polygons keep the sample legend. */
-      return liveLayer().then(function(fc){ return fc&&(fc._live||fc._snapshot)?liveMeta():null; }).then(function(m){ return jsonRes(ok(m||DEMO_META)); });
+      return fastLayer().then(function(fc){ return fc&&fc._live?liveMeta():fc&&fc._snapshot?copyMeta():null; }).then(function(m){ return jsonRes(ok(m||DEMO_META)); });
     }
     if(isApi(url)){ var m=(init&&init.method)||'GET'; var b=null; try{b=init&&init.body?JSON.parse(init.body):null;}catch(e){}
       var rb=body(url,m,b); return Promise.resolve(new Response(JSON.stringify(rb),{status:rb&&rb.success===false&&rb.error&&rb.error.code==='DEMO'?400:200,headers:{'Content-Type':'application/json'}})); }
