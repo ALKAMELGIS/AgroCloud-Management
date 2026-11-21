@@ -62,6 +62,8 @@ const mix = (hex, t) => {
   return `#${c.map((v) => Math.round(255 + (v - 255) * t).toString(16).padStart(2, '0')).join('')}`;
 };
 const fmtNum = (v, d = 0) => (Number.isFinite(v) ? v.toLocaleString('en-US', { maximumFractionDigits: d, minimumFractionDigits: d }) : '–');
+/** Summary tiles are narrow: 100,000 and up shows as 10.4M or 254K so the figure never clips. */
+const fmtTile = (v, d = 0, from = 100000) => (Number.isFinite(v) && Math.abs(v) >= from ? v.toLocaleString('en-US', { notation: 'compact', maximumFractionDigits: 1 }) : fmtNum(v, d));
 
 function FitOnce({ bounds, sig }) {
   const map = useMap();
@@ -498,9 +500,9 @@ export default function FieldMapPanel({ fieldOverview = [], allFields = [], sele
   const seqTotal = seqVals.reduce((a, x) => a + x.v, 0);
   const seqTop = seqVals.reduce((a, x) => (!a || x.v > a.v ? x : a), null);
   const cards = isSeq ? [
-    { k: 'tot', label: mDef.key === 'fwater' || mDef.key === 'freq' ? 'Average' : 'Total', value: mDef.key === 'fwater' || mDef.key === 'freq' ? fmtNum(seqVals.length ? seqTotal / seqVals.length : NaN, mDef.decimals) : fmtNum(seqTotal, mDef.decimals), unit: mDef.unit, dot: formColor },
-    { k: 'avg', label: 'Per field', value: fmtNum(seqVals.length ? seqTotal / seqVals.length : NaN, mDef.decimals), unit: mDef.unit, dot: mix(formColor, 0.6) },
-    { k: 'top', label: 'Highest', value: seqTop ? seqTop.r.field.name : '–', unit: seqTop ? fmtNum(seqTop.v, mDef.decimals) : '', dot: mix(formColor, 0.8) },
+    { k: 'tot', label: mDef.key === 'fwater' || mDef.key === 'freq' ? 'Average' : 'Total', value: mDef.key === 'fwater' || mDef.key === 'freq' ? fmtTile(seqVals.length ? seqTotal / seqVals.length : NaN, mDef.decimals) : fmtTile(seqTotal, mDef.decimals), unit: mDef.unit, dot: formColor },
+    { k: 'avg', label: 'Per field', value: fmtTile(seqVals.length ? seqTotal / seqVals.length : NaN, mDef.decimals), unit: mDef.unit, dot: mix(formColor, 0.6) },
+    { k: 'top', label: seqTop ? `Top · ${fmtTile(seqTop.v, mDef.decimals, 10000)}${mDef.unit ? ` ${mDef.unit}` : ''}` : 'Highest', value: seqTop ? seqTop.r.field.name : '–', unit: '', dot: mix(formColor, 0.8) },
     { k: 'n', label: 'Fields with data', value: `${seqVals.length}`, unit: `of ${rows.length}`, dot: FILL.none },
   ] : ['good', 'warn', 'out', 'none'].map((k) => ({ k, label: WORD[k], value: String(counts[k]), dot: FILL[k] }));
 
@@ -769,8 +771,8 @@ export default function FieldMapPanel({ fieldOverview = [], allFields = [], sele
           <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', borderBottom: 1, borderColor: 'divider' }}>
             {cards.map((c, i) => (
               <Box key={c.k} sx={{ px: 4, py: 3, borderLeft: i ? 1 : 0, borderColor: 'divider', minWidth: 0 }}>
-                <Typography sx={{ fontSize: 11.5, color: 'text.secondary', display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                  <Box component="span" sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: c.dot }} />{c.label}
+                <Typography sx={{ fontSize: 11.5, color: 'text.secondary', display: 'flex', alignItems: 'center', gap: 1.5, whiteSpace: 'nowrap', overflow: 'hidden' }}>
+                  <Box component="span" sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: c.dot, flexShrink: 0 }} /><Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.label}</Box>
                 </Typography>
                 <Typography noWrap sx={{ fontSize: 22, fontWeight: 600, fontVariantNumeric: 'tabular-nums', lineHeight: 1.3 }}>
                   {c.value}{c.unit ? <Box component="span" sx={{ fontSize: 12, fontWeight: 500, color: 'text.secondary', ml: 1 }}>{c.unit}</Box> : null}

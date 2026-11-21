@@ -7,7 +7,7 @@ import {
 import { apiRequest } from '../../utils/api';
 import { listFertigationAll, listIrrigationRecordsAll, listWeatherLogsAll } from '../../utils/backendApi';
 import { StandardChartGrid } from '../../components/dashboard/StandardChart';
-import { irrigationCharts } from './standardChartSets';
+import { irrigationCharts, chartsInUnit } from './standardChartSets';
 import DashboardSection from '../../components/dashboard/DashboardSection';
 import DashboardStatCard from '../../components/dashboard/DashboardStatCard';
 import { excelTableSx, GutterCell } from '../../components/table/ExcelTable';
@@ -15,6 +15,7 @@ import { excelTableSx, GutterCell } from '../../components/table/ExcelTable';
 import { formatDate, toIsoDate } from './dashboardUtils';
 import { indexFertigationByHouseDate, waterOnlyRemainder } from './irrigationWaterOnly';
 import { attachTemps, buildDailyTempIndex } from './irrigationWeather';
+import { useOrgPrefs, showQty, unitFor } from '../../utils/orgPrefs';
 
 function toNum(v) {
   const n = Number(v);
@@ -212,7 +213,11 @@ export default function IrrigationDashboard({
     return [...drip, ...pivot].sort((a, b) => String(a.date).localeCompare(String(b.date)));
   }, [dripVisible, pivotFiltered, fieldName]);
 
-  const standardCharts = useMemo(() => irrigationCharts(tableRows), [tableRows]);
+  const prefs = useOrgPrefs();
+  const standardCharts = useMemo(() => {
+    const u = unitFor('water', prefs);
+    return chartsInUnit(irrigationCharts(tableRows), { from: 'm³', factor: u.factor, unit: u.unit, scatter: 'x', decimals: 0 });
+  }, [tableRows, prefs]);
 
   const totalWater = waterByDate.reduce((s, r) => s + r.water, 0);
   const totalCycles = freqByDate.reduce((s, r) => s + r.cycles, 0);
@@ -282,7 +287,7 @@ export default function IrrigationDashboard({
         <>
       <Grid container spacing={1.5} sx={{ mb: 3 }}>
         <Grid size={{ xs: 6, sm: 4 }}>
-          <DashboardStatCard lead title="Total water" value={totalWater.toFixed(1)} subtitle="m³" />
+          <DashboardStatCard lead title="Total water" value={showQty(totalWater, 'water', { decimals: 1, p: prefs }).text} subtitle={unitFor('water', prefs).unit} />
         </Grid>
         <Grid size={{ xs: 6, sm: 4 }}>
           <DashboardStatCard title="Total cycles" value={totalCycles.toFixed(0)} />

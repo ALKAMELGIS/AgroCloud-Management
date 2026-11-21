@@ -3,13 +3,15 @@ import { Box, Typography, Grid, Table, TableBody, TableCell, TableContainer, Tab
 
 import { listHarvestsAll } from '../../utils/backendApi';
 import { StandardChartGrid } from '../../components/dashboard/StandardChart';
-import { harvestCharts } from './standardChartSets';
+import { harvestCharts, chartsInUnit } from './standardChartSets';
 import { formatDate, toNumber } from './dashboardUtils';
 import DashboardSection from '../../components/dashboard/DashboardSection';
 import DashboardStatCard from '../../components/dashboard/DashboardStatCard';
 import { excelTableSx, GutterCell } from '../../components/table/ExcelTable';
+import { useOrgPrefs, showQty, unitFor } from '../../utils/orgPrefs';
 
 export default function HarvestDashboard({ onFieldStats, fieldId, fieldIds = null, siteId, dateFrom, dateTo, allFields = [] }) {
+  const prefs = useOrgPrefs();
   const [rawData, setData] = useState([]);
   // Slicers on the field map (zone, Farm_Code, type, crop, status) narrow the rows to their fields.
   const data = useMemo(() => (fieldIds && !fieldId ? rawData.filter((e) => fieldIds.includes(e.fieldId)) : rawData), [rawData, fieldIds, fieldId]);
@@ -62,13 +64,16 @@ export default function HarvestDashboard({ onFieldStats, fieldId, fieldIds = nul
 
     return {
       count: data.length,
-      totalKg: total.toLocaleString(undefined, { maximumFractionDigits: 1 }),
-      avgPerEntry: (total / data.length).toFixed(1),
+      total: showQty(total, 'yield', { decimals: 1, p: prefs }),
+      avg: showQty(total / data.length, 'yield', { decimals: 1, p: prefs }),
       topCrop: topCrop ? topCrop[0] : '-',
     };
-  }, [data]);
+  }, [data, prefs]);
 
-  const standardCharts = useMemo(() => harvestCharts(data, (e) => fieldMap[e.fieldId] || e.fieldName || e.fieldId), [data, fieldMap]);
+  const standardCharts = useMemo(() => {
+    const u = unitFor('yield', prefs);
+    return chartsInUnit(harvestCharts(data, (e) => fieldMap[e.fieldId] || e.fieldName || e.fieldId), { from: 'kg', factor: u.factor, unit: u.unit, scatter: 'y', decimals: 2 });
+  }, [data, fieldMap, prefs]);
 
   const tableData = useMemo(() => {
     const rows = data.slice(0, 200).map(entry => {
@@ -107,13 +112,13 @@ export default function HarvestDashboard({ onFieldStats, fieldId, fieldIds = nul
     <Box>
       <Grid container spacing={1.5} sx={{ mb: 3 }}>
         <Grid size={{ xs: 6, sm: 3 }}>
-          <DashboardStatCard lead title="Total harvest" value={`${stats.totalKg} kg`} />
+          <DashboardStatCard lead title="Total harvest" value={`${stats.total.text} ${stats.total.unit}`} />
         </Grid>
         <Grid size={{ xs: 6, sm: 3 }}>
           <DashboardStatCard title="Entries" value={stats.count} />
         </Grid>
         <Grid size={{ xs: 6, sm: 3 }}>
-          <DashboardStatCard title="Average per entry" value={`${stats.avgPerEntry} kg`} />
+          <DashboardStatCard title="Average per entry" value={`${stats.avg.text} ${stats.avg.unit}`} />
         </Grid>
         <Grid size={{ xs: 6, sm: 3 }}>
           <DashboardStatCard title="Top crop" value={stats.topCrop} />

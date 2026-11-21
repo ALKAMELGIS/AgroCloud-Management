@@ -2,14 +2,16 @@ import { useState, useEffect, useMemo } from 'react';
 import { Box, Typography, Grid, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TableSortLabel, CircularProgress } from '@mui/material';
 
 import { StandardChartGrid } from '../../components/dashboard/StandardChart';
-import { fertigationCharts } from './standardChartSets';
+import { fertigationCharts, chartsInUnit } from './standardChartSets';
 import { fetchFertigationDashboardData } from './fertigationDashboardAdapter';
 import { formatDate, toNumber } from './dashboardUtils';
 import DashboardSection from '../../components/dashboard/DashboardSection';
 import DashboardStatCard from '../../components/dashboard/DashboardStatCard';
 import { excelTableSx, GutterCell } from '../../components/table/ExcelTable';
+import { useOrgPrefs, showQty, unitFor } from '../../utils/orgPrefs';
 
 export default function FertigationDashboard({ onFieldStats, fieldId, fieldIds = null, siteId, dateFrom, dateTo, allFields = [] }) {
+  const prefs = useOrgPrefs();
   const [rawData, setData] = useState([]);
   // Slicers on the field map (zone, Farm_Code, type, crop, status) narrow the rows to their fields.
   const data = useMemo(() => (fieldIds && !fieldId ? rawData.filter((e) => fieldIds.includes(e.fieldId)) : rawData), [rawData, fieldIds, fieldId]);
@@ -71,7 +73,10 @@ export default function FertigationDashboard({ onFieldStats, fieldId, fieldIds =
     };
   }, [data]);
 
-  const standardCharts = useMemo(() => fertigationCharts(data, (e) => fieldMap[e.fieldId] || e.fieldName || e.fieldId), [data, fieldMap]);
+  const standardCharts = useMemo(() => {
+    const u = unitFor('water', prefs);
+    return chartsInUnit(fertigationCharts(data, (e) => fieldMap[e.fieldId] || e.fieldName || e.fieldId), { from: 'm³', factor: u.factor, unit: u.unit, scatter: 'y', decimals: 0 });
+  }, [data, fieldMap, prefs]);
 
   const tableData = useMemo(() => {
     const rows = data.slice(0, 200).map(entry => ({
@@ -112,7 +117,7 @@ export default function FertigationDashboard({ onFieldStats, fieldId, fieldIds =
           <DashboardStatCard lead title="Total fertiliser" value={stats.totalFert} subtitle="kg" />
         </Grid>
         <Grid size={{ xs: 6, sm: 4, md: 2 }}>
-          <DashboardStatCard title="Average daily water" value={stats.avgWater} subtitle="m³" />
+          <DashboardStatCard title="Average daily water" value={showQty(stats.avgWater, 'water', { decimals: 1, p: prefs }).text} subtitle={unitFor('water', prefs).unit} />
         </Grid>
         <Grid size={{ xs: 6, sm: 4, md: 2 }}>
           <DashboardStatCard title="Average flow rate" value={stats.avgFlow} />

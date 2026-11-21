@@ -227,3 +227,31 @@ export function harvestCharts(entries, fieldName) {
     { id: 'harv-week', kind: 'columns', title: 'Harvest per week', unit: 'kg', data: weekly(rows.map((r) => ({ date: r.date, value: r.kg }))) },
   ];
 }
+
+/* ---------------- Organization units ---------------- */
+
+/**
+ * Show the charts of one stored unit (kg of harvest, m³ of water) in the unit the
+ * organization chose (Settings > General). Only charts whose unit is `from` change;
+ * fertiliser kg stays kg. `scatter` names the scatter axis that carries the quantity.
+ */
+export function chartsInUnit(charts, { from, factor, unit, scatter, decimals = 1 }) {
+  if (!factor || factor === 1) return charts;
+  const r = (v) => (Number.isFinite(v) ? round(v * factor, decimals) : v);
+  const label = (s) => (typeof s === 'string' ? s.replace(from, unit) : s);
+  return charts.map((c) => {
+    if (c.unit === 'scatter') {
+      if (!scatter) return c;
+      const lab = scatter === 'x' ? 'xLabel' : 'yLabel';
+      if (!String(c[lab] || '').includes(from)) return c;
+      return { ...c, [lab]: label(c[lab]), data: c.data.map((d) => ({ ...d, [scatter]: r(d[scatter]) })) };
+    }
+    if (c.unit !== from) return c;
+    return {
+      ...c,
+      unit,
+      series: c.series ? c.series.map((s) => ({ ...s, name: label(s.name) })) : c.series,
+      data: c.data.map((d) => ({ ...d, ...('value' in d ? { value: r(d.value) } : {}), ...('prev' in d ? { prev: r(d.prev) } : {}), ...('now' in d ? { now: r(d.now) } : {}) })),
+    };
+  });
+}
