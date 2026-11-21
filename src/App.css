@@ -431,3 +431,40 @@ html[data-theme='dark'] .sheet-scroll::-webkit-scrollbar-thumb { background-colo
 .leaflet-container path:focus,
 .leaflet-container .leaflet-marker-icon:focus,
 .maplibregl-canvas:focus { outline: none; }
+
+/* 3D icons (Icon3D): no box; a soft shadow under the glyph that grows as it
+   lifts and tilts toward the pointer on hover or keyboard focus. */
+.icon3d {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  perspective: 240px;
+  filter: drop-shadow(0 3px 3px color-mix(in srgb, var(--i3d) 22%, transparent)) drop-shadow(0 8px 10px rgba(20, 33, 26, 0.08));
+  transition: filter 260ms cubic-bezier(.2, .7, .2, 1);
+}
+.icon3d svg {
+  overflow: visible;
+  transform-origin: 50% 70%;
+  transition: transform 320ms cubic-bezier(.2, .7, .2, 1);
+}
+.icon3d .icon3d-depth {
+  transition: transform 320ms cubic-bezier(.2, .7, .2, 1);
+}
+.icon3d-host:hover .icon3d,
+.icon3d-host.Mui-focusVisible .icon3d {
+  filter: drop-shadow(0 6px 5px color-mix(in srgb, var(--i3d) 28%, transparent)) drop-shadow(0 14px 16px rgba(20, 33, 26, 0.12));
+}
+.icon3d-host:hover .icon3d svg,
+.icon3d-host.Mui-focusVisible .icon3d svg {
+  transform: translateY(-4px) rotateX(14deg) rotateY(-12deg) scale(1.06);
+}
+.icon3d-host:hover .icon3d .icon3d-depth {
+  transform: translate(1.2px, 1.8px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .icon3d, .icon3d svg, .icon3d .icon3d-depth { transition: none; }
+  .icon3d-host:hover .icon3d svg, .icon3d-host.Mui-focusVisible .icon3d svg { transform: none; }
+}
+html[data-theme='dark'] .icon3d {
+  filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.45));
+}

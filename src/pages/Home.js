@@ -4,7 +4,7 @@ import { Box, ButtonBase, Skeleton, Typography } from '@mui/material';
 import { useAuth } from '../contexts/AuthContext';
 import { useActiveSite } from '../contexts/ActiveSiteContext';
 import { getShellSections } from '../config/navAreas';
-import { AREA_STYLE, ModuleIcon } from '../config/moduleIcons';
+import { AREA_STYLE, Icon3D, ICON_PATHS } from '../config/moduleIcons';
 import { useOrgPrefs, showQty } from '../utils/orgPrefs';
 import { apiRequest } from '../utils/api';
 import { useShellLabel } from '../i18n/shellLabels';
@@ -96,10 +96,10 @@ function Home() {
     const kg = showQty(Math.round(sum('harvest_this_week')), 'yield', { decimals: 0, p: prefs });
     const water = showQty(sum('water_this_week'), 'water', { decimals: 0, p: prefs });
     return [
-      { label: 'Fields', value: fmt(overview.length), unit: '' },
-      { label: 'Harvest this week', value: kg.text, unit: kg.unit },
-      { label: 'Water this week', value: water.text, unit: water.unit },
-      { label: 'Needs attention', value: fmt((attention || []).reduce((a, r) => a + r.value, 0)), unit: 'items' },
+      { label: 'Fields', value: fmt(overview.length), unit: '', icon: ICON_PATHS.areas, color: '#16432e' },
+      { label: 'Harvest this week', value: kg.text, unit: kg.unit, icon: ICON_PATHS.harvest, color: '#b4501f' },
+      { label: 'Water this week', value: water.text, unit: water.unit, icon: 'M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11zM9.5 14.5a2.5 2.5 0 0 0 2.5 2.5', color: '#1d5fa8' },
+      { label: 'Needs attention', value: fmt((attention || []).reduce((a, r) => a + r.value, 0)), unit: 'items', icon: 'M12 3l10 18H2zM12 10v5M12 18h.01', color: '#b42318' },
     ];
   }, [overview, attention, prefs]);
 
@@ -128,13 +128,16 @@ function Home() {
       {/* Key figures: one strip, hairline dividers */}
       <Box component="section" aria-label="Key figures" sx={{ ...CARD, display: 'grid', gridTemplateColumns: { xs: 'repeat(2, minmax(0,1fr))', md: 'repeat(4, minmax(0,1fr))' } }}>
         {(totals || [0, 1, 2, 3]).map((t, i) => (
-          <Box key={t.label || i} sx={{ px: { xs: 4, md: 7 }, py: { xs: 4, md: 6 }, borderLeft: { md: i ? HAIR : 0 }, borderTop: { xs: i > 1 ? HAIR : 0, md: 0 }, borderRight: { xs: i % 2 === 0 ? HAIR : 0, md: 0 } }}>
+          <Box key={t.label || i} className="icon3d-host" sx={{ display: 'flex', alignItems: 'center', gap: { xs: 3, md: 4 }, px: { xs: 4, md: 6 }, py: { xs: 4, md: 5 }, borderLeft: { md: i ? HAIR : 0 }, borderTop: { xs: i > 1 ? HAIR : 0, md: 0 }, borderRight: { xs: i % 2 === 0 ? HAIR : 0, md: 0 } }}>
             {totals ? (
               <>
+                <Icon3D d={t.icon} color={t.color} size={44} />
+                <Box sx={{ minWidth: 0 }}>
                 <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>{t.label}</Typography>
-                <Box sx={{ mt: 2.5, display: 'flex', alignItems: 'baseline', gap: 1.5 }}>
-                  <Typography component="span" sx={{ fontSize: { xs: 24, md: 30 }, fontWeight: 500, letterSpacing: '-0.03em', fontVariantNumeric: 'tabular-nums' }}>{t.value}</Typography>
+                <Box sx={{ mt: 1, display: 'flex', alignItems: 'baseline', gap: 1.5 }}>
+                  <Typography component="span" sx={{ fontSize: { xs: 22, md: 28 }, fontWeight: 500, letterSpacing: '-0.03em', fontVariantNumeric: 'tabular-nums' }}>{t.value}</Typography>
                   <Typography component="span" sx={{ fontSize: 13, color: 'text.secondary' }}>{t.unit}</Typography>
+                </Box>
                 </Box>
               </>
             ) : <Skeleton width="70%" height={56} />}
@@ -191,22 +194,18 @@ function Home() {
           return (
             <Box component="section" key={g.label} aria-label={g.label} sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-                <Box sx={{ width: 32, height: 32, borderRadius: '9px', display: 'grid', placeItems: 'center', color: st.color, bgcolor: `${st.color}14`, flexShrink: 0 }}>
-                  <ModuleIcon d={st.icon} size={18} />
-                </Box>
+                <Icon3D d={st.icon} color={st.color} size={26} />
                 <Typography component="h2" sx={{ fontSize: 15, fontWeight: 600 }}>{L(g.label)}</Typography>
                 <Typography component="span" sx={{ font: `500 12px ${MONO}`, color: 'text.disabled', ml: 'auto' }}>{g.items.length}</Typography>
               </Box>
               <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(148px, 1fr))', gap: 3 }}>
                 {g.items.map((it) => (
-                  <ButtonBase key={it.path} onClick={() => navigate(it.path)}
+                  <ButtonBase key={it.path} className="icon3d-host" onClick={() => navigate(it.path)}
                     sx={{ ...CARD, borderRadius: '14px', minHeight: 116, p: 4, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'space-between', gap: 3, textAlign: 'start', transition: 'transform 150ms ease, box-shadow 150ms ease, border-color 150ms ease',
-                      '&:hover': { transform: 'translateY(-2px)', borderColor: 'rgba(22,40,30,0.14)', boxShadow: '0 8px 20px -12px rgba(22,40,30,0.30)' },
+                      '&:hover': { borderColor: 'rgba(22,40,30,0.14)', boxShadow: '0 10px 24px -14px rgba(22,40,30,0.30)' },
                       '&.Mui-focusVisible': { outline: '2px solid', outlineColor: st.color, outlineOffset: 2 },
                       '@media (prefers-reduced-motion: reduce)': { transition: 'none', '&:hover': { transform: 'none' } } }}>
-                    <Box sx={{ width: 44, height: 44, borderRadius: '12px', display: 'grid', placeItems: 'center', color: st.color, background: `linear-gradient(160deg, ${st.color}1f, ${st.color}0d)`, boxShadow: `inset 0 0 0 1px ${st.color}2b` }}>
-                      <ModuleIcon path={it.path} size={22} />
-                    </Box>
+                    <Icon3D path={it.path} color={st.color} size={40} />
                     <Typography sx={{ fontSize: 13.5, fontWeight: 500, lineHeight: 1.35, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{L(it.text)}</Typography>
                   </ButtonBase>
                 ))}

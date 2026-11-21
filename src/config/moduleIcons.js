@@ -124,3 +124,43 @@ export function ModuleIcon({ path, d, size = 18, stroke = 1.6, ...rest }) {
     </svg>
   );
 }
+
+const shade = (hex, f) => {
+  const n = parseInt(hex.replace('#', ''), 16);
+  const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => Math.round(f > 0 ? v + (255 - v) * f : v * (1 + f)));
+  return `#${c.map((v) => v.toString(16).padStart(2, '0')).join('')}`;
+};
+let uid = 0;
+
+/**
+ * Icon with depth, no box: a soft tinted body, a darker extruded copy behind,
+ * a lit gradient stroke on top and a cast shadow. Inside an element with the
+ * class "icon3d-host" it lifts and tilts on hover and keyboard focus.
+ */
+export function Icon3D({ path, d, color = '#16432e', size = 36 }) {
+  const id = `i3d${(uid += 1)}`;
+  const shape = d || iconPathFor(path);
+  return (
+    <span className="icon3d" aria-hidden="true" style={{ width: size, height: size, '--i3d': color }}>
+      <svg width={size} height={size} viewBox="-1 -1 26 26" fill="none" focusable="false">
+        <defs>
+          <linearGradient id={`${id}s`} x1="0" y1="0" x2="0.6" y2="1">
+            <stop offset="0" stopColor={shade(color, 0.45)} />
+            <stop offset="0.55" stopColor={color} />
+            <stop offset="1" stopColor={shade(color, -0.35)} />
+          </linearGradient>
+          <linearGradient id={`${id}f`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor={shade(color, 0.7)} stopOpacity="0.55" />
+            <stop offset="1" stopColor={color} stopOpacity="0.18" />
+          </linearGradient>
+        </defs>
+        <g className="icon3d-depth" transform="translate(0.7 1.1)">
+          <path d={shape} stroke={shade(color, -0.45)} strokeOpacity="0.32" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+        </g>
+        <path d={shape} fill={`url(#${id}f)`} stroke="none" />
+        <path d={shape} stroke={`url(#${id}s)`} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+        <path d={shape} stroke="#fff" strokeOpacity="0.55" strokeWidth="0.5" strokeLinecap="round" strokeLinejoin="round" transform="translate(-0.35 -0.45)" />
+      </svg>
+    </span>
+  );
+}
