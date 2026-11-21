@@ -30,7 +30,7 @@ export default function PageContextBar() {
 
   // Browser tab shows the page ("Scouting Reports — Elite Agro Cloud").
   useEffect(() => {
-    document.title = pageTitle && pathname !== '/' ? `${pageTitle} — ${appName}` : `${L('Al Maha Farm')} — ${appName}`;
+    document.title = pageTitle && pathname !== '/' ? `${pageTitle} — ${appName}` : appName;
   }, [pageTitle, pathname, appName, L]);
 
   // Every page needs exactly one <h1>; add a screen-reader-only one when the page has none.

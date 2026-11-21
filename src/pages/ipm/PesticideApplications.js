@@ -773,7 +773,7 @@ export default function PesticideApplications() {
     try {
       const logoDataUrl = await fetchOrganizationLogoDataUrl();
       const doc = generateCostingReport({
-        siteName: activeSite?.name || 'Al Maha Farm',
+        siteName: activeSite?.name || 'AgroCloud',
         dateRange,
         subtitle: subtitleText,
         generatedBy: user?.name || user?.email || '',

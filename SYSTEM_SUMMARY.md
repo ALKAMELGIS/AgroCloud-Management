@@ -1,4 +1,4 @@
-# Al Maha Farm Management System - Complete Summary
+# AgroCloud Management - Complete Summary
 
 ## System Overview
 A comprehensive farm management system built with React and Material-UI for managing farm operations, harvest data, fertigation, and master data.

@@ -1,6 +1,6 @@
 # High Availability & Scaling Guide
 
-This document outlines the high availability (HA) and scaling setup for the Al Maha Farm application.
+This document outlines the high availability (HA) and scaling setup for the AgroCloud application.
 
 ## Architecture Overview
 

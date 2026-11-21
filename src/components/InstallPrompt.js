@@ -82,7 +82,7 @@ export default function InstallPrompt() {
         }
         sx={{ alignItems: 'center' }}
       >
-        Add Al Maha Farm to your home screen for faster access and an app-like experience.
+        Add AgroCloud to your home screen for faster access and an app-like experience.
       </Alert>
     </Snackbar>
   );

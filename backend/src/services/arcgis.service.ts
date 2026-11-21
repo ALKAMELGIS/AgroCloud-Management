@@ -116,7 +116,7 @@ async function safeFetch(rawUrl: string): Promise<{ ok: boolean; status: number;
       port: parsed.port || undefined,
       path: parsed.pathname + parsed.search,
       method: 'GET' as const,
-      headers: { 'User-Agent': 'AlMahaFarm/1.0' },
+      headers: { 'User-Agent': 'AgroCloud/1.0' },
     };
     logger.info({ hostname: options.hostname }, 'https fallback');
 

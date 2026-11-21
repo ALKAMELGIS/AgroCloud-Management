@@ -18,7 +18,7 @@ export function generateHarvestReport(harvests, options = {}) {
   // Header
   doc.setFontSize(20);
   doc.setTextColor(46, 125, 50); // Primary green
-  doc.text('Al Maha Farm', pageWidth / 2, 20, { align: 'center' });
+  doc.text('AgroCloud', pageWidth / 2, 20, { align: 'center' });
 
   doc.setFontSize(16);
   doc.setTextColor(0, 0, 0);
@@ -125,7 +125,7 @@ export function generateFertigationReport(fertigations, options = {}) {
   // Header
   doc.setFontSize(20);
   doc.setTextColor(46, 125, 50);
-  doc.text('Al Maha Farm', pageWidth / 2, 20, { align: 'center' });
+  doc.text('AgroCloud', pageWidth / 2, 20, { align: 'center' });
 
   doc.setFontSize(16);
   doc.setTextColor(0, 0, 0);
@@ -232,7 +232,7 @@ export function generateECPHReport(readings, options = {}) {
   // Header
   doc.setFontSize(20);
   doc.setTextColor(46, 125, 50);
-  doc.text('Al Maha Farm', pageWidth / 2, 20, { align: 'center' });
+  doc.text('AgroCloud', pageWidth / 2, 20, { align: 'center' });
 
   doc.setFontSize(16);
   doc.setTextColor(0, 0, 0);
@@ -342,7 +342,7 @@ export function generateECPHReport(readings, options = {}) {
  */
 export function generateCostingReport(reportData) {
   const {
-    siteName = 'Al Maha Farm',
+    siteName = 'AgroCloud',
     dateRange = '',
     subtitle = 'All Applications',
     generatedBy = '',

@@ -50,7 +50,6 @@ pre = '<script>window.__AGRO_DEMO_KEYS__=' + json.dumps(keys) + ';</script>' if 
 s = s.replace('<head>', '<head>' + pre + '<script>' + open('../demo/demo-shim.js').read() + '</script>', 1)
 print('demo keys:', ', '.join(sorted(keys)) or 'none')
 s = re.sub(r'<title>.*?</title>', '<title>AgroCloud Management</title>', s)
-s = s.replace('content="Al Maha Farm"', 'content="AgroCloud"')
 open('index.html', 'w').write(s)
 # Installable from any folder (GitHub Pages project site, iPhone "Add to Home Screen").
 import json

@@ -1,6 +1,6 @@
 /**
  * Create (or promote) the system owner: role "ceo" with every permission,
- * in the first organisation (created as "Al Maha Farm" if none exists).
+ * in the first organisation (created as "AgroCloud" if none exists).
  *
  *   DATABASE_URL=... node scripts/create-owner.js <email> "<name>"
  *
@@ -40,7 +40,7 @@ function askHidden(q) {
     if (!org) {
       org = (await c.query(
         `INSERT INTO organizations (name, slug, settings) VALUES ($1, $2, $3) RETURNING id, name`,
-        ['Al Maha Farm', 'al-maha-farm', JSON.stringify({ allow_registration: false })])).rows[0];
+        ['AgroCloud', 'agrocloud', JSON.stringify({ allow_registration: false })])).rows[0];
     }
     const hash = await bcrypt.hash(pw, 12);
     const existing = (await c.query(

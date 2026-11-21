@@ -227,7 +227,7 @@ notificationsRouter.post('/test', async (req: AuthRequest, res, next) => {
 
     const tickets = await pushNotificationService.sendToUser(userId, {
       title: 'Test Notification',
-      body: 'This is a test notification from Al Maha Farm',
+      body: 'This is a test notification from AgroCloud',
       type: 'info',
       data: { test: true },
     });

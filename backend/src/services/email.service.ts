@@ -62,12 +62,12 @@ export class EmailService {
     
     await this.sendEmail({
       to: email,
-      subject: 'Reset your Al Maha Farm password',
+      subject: 'Reset your AgroCloud password',
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h1 style="color: #2b6f4a;">Password Reset</h1>
           <p>Hi ${userName},</p>
-          <p>You requested to reset your password for Al Maha Farm. Click the button below to reset it:</p>
+          <p>You requested to reset your password for AgroCloud. Click the button below to reset it:</p>
           <p style="text-align: center; margin: 30px 0;">
             <a href="${resetUrl}" 
                style="background-color: #2b6f4a; color: white; padding: 12px 30px; 
@@ -79,7 +79,7 @@ export class EmailService {
           <p>This link will expire in 1 hour.</p>
           <p>If you didn't request this, please ignore this email.</p>
           <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
-          <p style="color: #666; font-size: 12px;">Al Maha Farm Management System</p>
+          <p style="color: #666; font-size: 12px;">AgroCloud</p>
         </div>
       `,
       text: `Hi ${userName},\n\nYou requested to reset your password. Click this link to reset it:\n\n${resetUrl}\n\nThis link will expire in 1 hour.\n\nIf you didn't request this, please ignore this email.`,
@@ -89,10 +89,10 @@ export class EmailService {
   async sendWelcomeEmail(email: string, userName: string): Promise<void> {
     await this.sendEmail({
       to: email,
-      subject: 'Welcome to Al Maha Farm',
+      subject: 'Welcome to AgroCloud',
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h1 style="color: #2b6f4a;">Welcome to Al Maha Farm!</h1>
+          <h1 style="color: #2b6f4a;">Welcome to AgroCloud!</h1>
           <p>Hi ${userName},</p>
           <p>Your account has been created successfully. You can now sign in to access the farm management system.</p>
           <p style="text-align: center; margin: 30px 0;">
@@ -104,10 +104,10 @@ export class EmailService {
           </p>
           <p>If you have any questions, contact your administrator.</p>
           <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
-          <p style="color: #666; font-size: 12px;">Al Maha Farm Management System</p>
+          <p style="color: #666; font-size: 12px;">AgroCloud</p>
         </div>
       `,
-      text: `Hi ${userName},\n\nWelcome to Al Maha Farm! Your account has been created successfully.\n\nSign in at: ${config.appUrl}/login`,
+      text: `Hi ${userName},\n\nWelcome to AgroCloud! Your account has been created successfully.\n\nSign in at: ${config.appUrl}/login`,
     });
   }
 
@@ -128,7 +128,7 @@ export class EmailService {
             </a>
           </p>
           <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
-          <p style="color: #666; font-size: 12px;">Al Maha Farm Management System</p>
+          <p style="color: #666; font-size: 12px;">AgroCloud</p>
         </div>
       `,
       text: `Hi ${userName},\n\n${alertTitle}\n\n${alertMessage}\n\nView dashboard: ${config.appUrl}/dashboard`,

@@ -1,6 +1,6 @@
 # Microsoft SSO Setup Guide
 
-This guide explains how to configure Microsoft Single Sign-On (SSO) for Al Maha Farm using Azure Active Directory (Azure AD / Microsoft Entra ID).
+This guide explains how to configure Microsoft Single Sign-On (SSO) for AgroCloud using Azure Active Directory (Azure AD / Microsoft Entra ID).
 
 ## Prerequisites
 
@@ -12,7 +12,7 @@ This guide explains how to configure Microsoft Single Sign-On (SSO) for Al Maha 
 1. Go to **Azure Portal** > **Azure Active Directory** > **App registrations**
 2. Click **New registration**
 3. Fill in the details:
-   - **Name**: `Al Maha Farm`
+   - **Name**: `AgroCloud`
    - **Supported account types**: Choose based on your needs:
      - `Accounts in this organizational directory only` - Single tenant (your company only)
      - `Accounts in any organizational directory` - Multi-tenant
@@ -32,7 +32,7 @@ After registration, note these values from the **Overview** page:
 
 1. Go to **Certificates & secrets** > **Client secrets**
 2. Click **New client secret**
-3. Add a description (e.g., "Al Maha Farm Backend")
+3. Add a description (e.g., "AgroCloud Backend")
 4. Choose expiration (recommended: 24 months)
 5. Click **Add**
 6. **IMPORTANT**: Copy the secret value immediately → `MICROSOFT_CLIENT_SECRET`

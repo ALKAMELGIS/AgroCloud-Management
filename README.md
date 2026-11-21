@@ -1,4 +1,4 @@
-# Al Maha Farm — Elite Agro Cloud
+# AgroCloud Management — Elite Agro Cloud
 
 Precision agriculture platform for managing farm operations end-to-end: harvest tracking, fertigation management, EC/pH monitoring, weather integration, satellite remote sensing, task management, and real-time analytics.
 
@@ -49,8 +49,8 @@ Step-by-step install on Windows with PostgreSQL + PostGIS: [docs/INSTALL_COMPANY
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/raxgax-commits/al-maha-farm.git
-cd al-maha-farm
+git clone https://github.com/ALKAMELGIS/AgroCloud-Management.git
+cd AgroCloud-Management
 
 # Frontend
 npm install --legacy-peer-deps
@@ -106,7 +106,7 @@ npx expo start
 ## Project Structure
 
 ```
-al-maha-farm/
+AgroCloud-Management/
 ├── src/                    # React frontend
 │   ├── components/         # Reusable UI components
 │   ├── contexts/           # React contexts (Auth, Theme, Notifications, Query)

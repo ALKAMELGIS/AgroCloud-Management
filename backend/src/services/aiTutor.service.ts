@@ -408,7 +408,7 @@ function buildCurriculumContext(mod: any, allModules: any[], existingLessons: an
     ? existingLessons.map(l => `- ${l.title}`).join('\n')
     : '(none yet)';
 
-  return `You are an expert agricultural curriculum designer at Elite Agro Holding (Al Maha Farm).
+  return `You are an expert agricultural curriculum designer at Elite Agro Holding (AgroCloud).
 You are building training content for the internship program.
 
 CONTEXT:

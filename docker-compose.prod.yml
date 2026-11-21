@@ -38,7 +38,7 @@ services:
 
   # Backend API
   backend:
-    image: ${BACKEND_IMAGE:-ghcr.io/your-org/al-maha-farm/backend:latest}
+    image: ${BACKEND_IMAGE:-ghcr.io/your-org/agrocloud-management/backend:latest}
     container_name: almaha-backend
     restart: unless-stopped
     depends_on:
@@ -72,7 +72,7 @@ services:
 
   # Frontend served by Nginx
   frontend:
-    image: ${FRONTEND_IMAGE:-ghcr.io/your-org/al-maha-farm/frontend:latest}
+    image: ${FRONTEND_IMAGE:-ghcr.io/your-org/agrocloud-management/frontend:latest}
     container_name: almaha-frontend
     restart: unless-stopped
     depends_on:

@@ -29,7 +29,7 @@ export async function runDatabaseBackup(): Promise<string | null> {
   }
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const filename = `almahafarm-backup-${timestamp}.sql.gz`;
+  const filename = `agrocloud-backup-${timestamp}.sql.gz`;
 
   try {
     logger.info({ filename }, 'Starting database backup');

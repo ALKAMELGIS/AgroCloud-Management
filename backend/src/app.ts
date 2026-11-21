@@ -78,7 +78,7 @@ app.use(apiLimiter);
 // Swagger API documentation
 app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
   customCss: '.swagger-ui .topbar { display: none }',
-  customSiteTitle: 'Al Maha Farm API Docs',
+  customSiteTitle: 'AgroCloud API Docs',
 }));
 
 // Swagger spec as JSON

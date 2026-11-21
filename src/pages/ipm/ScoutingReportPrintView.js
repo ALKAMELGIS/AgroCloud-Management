@@ -569,7 +569,7 @@ export default function ScoutingReportPrintView() {
         </div>
 
         <div className="footnote">
-          Generated from Al Maha Farm IPM — report id {report.id}.
+          Generated from AgroCloud IPM — report id {report.id}.
           Printed {new Date().toLocaleString()}.
         </div>
       </Box>

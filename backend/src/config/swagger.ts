@@ -4,7 +4,7 @@ const options: swaggerJsdoc.Options = {
   definition: {
     openapi: '3.0.0',
     info: {
-      title: 'Al Maha Farm API',
+      title: 'AgroCloud API',
       version: '1.0.0',
       description: `
 ## Farm Management System API
@@ -28,7 +28,7 @@ Authorization: Bearer <your-token>
 API requests are rate-limited to prevent abuse. If you receive a 429 error, wait before retrying.
       `,
       contact: {
-        name: 'Al Maha Farm Support',
+        name: 'AgroCloud Support',
       },
     },
     servers: [

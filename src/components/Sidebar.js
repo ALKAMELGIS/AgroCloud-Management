@@ -283,7 +283,7 @@ function Sidebar({ open, mobileOpen, onMobileClose, activeNavArea }) {
         </Tooltip>
         <Box sx={{ display: rail ? 'none' : 'block', minWidth: 0 }}>
           <Typography sx={{ fontWeight: 600, fontSize: '0.9375rem', color: 'text.primary', letterSpacing: '-0.015em', lineHeight: 1.2 }}>
-            {L('Al Maha Farm')}
+            {L('AgroCloud')}
           </Typography>
           <Typography sx={{ fontSize: '0.6875rem', color: 'text.secondary', lineHeight: 1.35 }}>
             {siteLine || L('Elite Agro Cloud')}

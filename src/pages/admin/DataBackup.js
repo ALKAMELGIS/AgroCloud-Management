@@ -80,7 +80,7 @@ export default function DataBackup() {
       a.href = url;
       const disposition = res.headers.get('content-disposition') || '';
       const match = disposition.match(/filename="?(.+?)"?$/);
-      a.download = match ? match[1] : `al-maha-backup-${new Date().toISOString().slice(0, 10)}.zip`;
+      a.download = match ? match[1] : `agrocloud-backup-${new Date().toISOString().slice(0, 10)}.zip`;
       document.body.appendChild(a);
       a.click();
       a.remove();

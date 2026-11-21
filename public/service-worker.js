@@ -1,5 +1,5 @@
 /* eslint-disable no-restricted-globals */
-// Al Maha Farm — prototype-grade service worker.
+// AgroCloud — prototype-grade service worker.
 //
 // Strategy:
 //   * Precache the app shell (root HTML + the hashed bundle files are not
@@ -12,7 +12,7 @@
 //     so they load instantly on repeat visits.
 //   * API (/api/*) requests are never cached. Data must always be live.
 
-const CACHE_NAME = 'al-maha-shell-v1';
+const CACHE_NAME = 'agrocloud-shell-v1';
 const OFFLINE_URL = '/';
 const PRECACHE_URLS = [
   '/',
@@ -36,7 +36,7 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((keys) =>
       Promise.all(
         keys
-          .filter((k) => k.startsWith('al-maha-shell-') && k !== CACHE_NAME)
+          .filter((k) => (k.startsWith('agrocloud-shell-') || k.startsWith('al-maha-shell-')) && k !== CACHE_NAME)
           .map((k) => caches.delete(k))
       )
     )
