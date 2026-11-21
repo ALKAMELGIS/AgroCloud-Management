@@ -206,15 +206,15 @@ function Login() {
 
   return (
     <Box sx={{ minHeight: '100dvh', display: 'flex', bgcolor: 'background.default' }}>
-      {/* Left branded panel — calm field horizon */}
+      {/* Left panel: the farm photo, quiet gradients so the logo and the headline read on it */}
       {!isMobile && (
         <Box
           component="aside"
           sx={{
-            width: { md: '46%', lg: '50%' },
+            width: { md: '46%', lg: '52%' },
             m: 3,
-            borderRadius: 6,
-            background: 'radial-gradient(120% 90% at 80% 0%, #2a6b4a 0%, #15402c 46%, #0b2418 100%)',
+            borderRadius: '24px',
+            bgcolor: '#0c2216',
             display: 'flex',
             flexDirection: 'column',
             justifyContent: 'space-between',
@@ -222,52 +222,55 @@ function Login() {
             position: 'relative',
             overflow: 'hidden',
             color: '#fff',
+            isolation: 'isolate',
           }}
         >
-          {/* rolling field horizon */}
+          <Box
+            component="img"
+            src={`${process.env.PUBLIC_URL || ''}/login-field.jpg`}
+            alt=""
+            aria-hidden="true"
+            fetchpriority="high"
+            decoding="async"
+            sx={{
+              position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: '6% 62%', zIndex: -2,
+              transformOrigin: '20% 65%',
+              animation: 'loginDrift 28s ease-in-out infinite alternate',
+              '@keyframes loginDrift': { from: { transform: 'scale(1.02)' }, to: { transform: 'scale(1.09)' } },
+              '@media (prefers-reduced-motion: reduce)': { animation: 'none' },
+            }}
+          />
           <Box
             aria-hidden="true"
-            component="svg"
-            viewBox="0 0 800 240"
-            preserveAspectRatio="none"
-            sx={{ position: 'absolute', left: 0, right: 0, bottom: 0, width: '100%', height: '34%', opacity: 0.9 }}
-          >
-            <path d="M0 150 C 160 110, 320 120, 460 140 S 700 170, 800 130 L800 240 L0 240 Z" fill="rgba(255,255,255,0.04)" />
-            <path d="M0 190 C 180 150, 360 170, 520 180 S 720 200, 800 170 L800 240 L0 240 Z" fill="rgba(255,255,255,0.05)" />
-            <g stroke="rgba(255,255,255,0.07)" strokeWidth="1" fill="none">
-              <path d="M0 210 Q 400 160 800 205" />
-              <path d="M0 222 Q 400 180 800 218" />
-              <path d="M0 232 Q 400 200 800 230" />
-            </g>
-          </Box>
+            sx={{
+              position: 'absolute', inset: 0, zIndex: -1,
+              background: [
+                'linear-gradient(180deg, rgba(6,20,13,0.62) 0%, rgba(6,20,13,0.10) 26%, rgba(6,20,13,0) 44%, rgba(6,20,13,0.55) 70%, rgba(6,20,13,0.92) 100%)',
+                'linear-gradient(90deg, rgba(6,20,13,0.35) 0%, rgba(6,20,13,0) 60%)',
+              ].join(','),
+            }}
+          />
 
           <Box sx={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 3 }}>
-            <Box
-              sx={{
-                width: 40,
-                height: 40,
-                borderRadius: 1.25,
-                bgcolor: '#fff',
-                border: '1px solid rgba(255,255,255,0.18)',
-                display: 'grid',
-                placeItems: 'center',
-              }}
-            >
+            <Box sx={{ width: 42, height: 42, borderRadius: '11px', bgcolor: '#fff', display: 'grid', placeItems: 'center', boxShadow: '0 4px 14px rgba(0,0,0,0.25)' }}>
               <BrandLogo size={30} />
             </Box>
-            <Typography sx={{ fontWeight: 600, fontSize: '1rem', color: '#fff', letterSpacing: '-0.01em' }}>
-              {tr('Elite Agro Cloud')}
-            </Typography>
+            <Box>
+              <Typography sx={{ fontWeight: 600, fontSize: '1.0625rem', color: '#fff', letterSpacing: '-0.01em', lineHeight: 1.2, textShadow: '0 1px 8px rgba(0,0,0,0.35)' }}>
+                {tr('Elite Agro Cloud')}
+              </Typography>
+              <Typography sx={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.78)', letterSpacing: '0.02em' }}>Elite Agro Projects</Typography>
+            </Box>
           </Box>
 
-          <Box sx={{ position: 'relative', maxWidth: 540, mb: { md: 20, lg: 24 } }}>
+          <Box sx={{ position: 'relative', maxWidth: 560 }}>
             <Typography
               component="h2"
-              sx={{ fontSize: { md: '2.25rem', lg: '2.875rem' }, fontWeight: 600, color: '#fff', lineHeight: 1.08, letterSpacing: '-0.035em', mb: 4 }}
+              sx={{ fontSize: { md: '2.5rem', lg: '3.25rem' }, fontWeight: 600, color: '#fff', lineHeight: 1.04, letterSpacing: '-0.035em', mb: 4, textShadow: '0 2px 24px rgba(0,0,0,0.35)' }}
             >
               {tr('Every field,')}<br />{tr('calmly in view.')}
             </Typography>
-            <Typography sx={{ fontSize: '1rem', color: 'rgba(255,255,255,0.74)', lineHeight: 1.6, mb: 6 }}>
+            <Typography sx={{ fontSize: '1.0625rem', color: 'rgba(255,255,255,0.84)', lineHeight: 1.6, mb: 6, maxWidth: 440 }}>
               {panelCopy}
             </Typography>
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
@@ -275,14 +278,11 @@ function Login() {
                 <Box
                   key={label}
                   sx={{
-                    px: 3.5,
-                    py: 1.5,
-                    borderRadius: 999,
-                    bgcolor: 'rgba(255,255,255,0.08)',
-                    border: '1px solid rgba(255,255,255,0.14)',
-                    fontSize: '0.8125rem',
-                    color: 'rgba(255,255,255,0.88)',
-                    fontWeight: 500,
+                    px: 3.5, py: 1.5, borderRadius: '999px',
+                    bgcolor: 'rgba(255,255,255,0.12)',
+                    backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
+                    boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.22)',
+                    fontSize: '0.8125rem', color: '#fff', fontWeight: 500,
                   }}
                 >
                   {label}
