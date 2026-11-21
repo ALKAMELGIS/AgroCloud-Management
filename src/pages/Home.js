@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useActiveSite } from '../contexts/ActiveSiteContext';
 import { getShellSections } from '../config/navAreas';
 import { AREA_STYLE, ModuleIcon } from '../config/moduleIcons';
+import { useOrgPrefs, showQty } from '../utils/orgPrefs';
 import { apiRequest } from '../utils/api';
 import { useShellLabel } from '../i18n/shellLabels';
 import { displayDay } from '../utils/displayDate';
@@ -43,6 +44,7 @@ function Home() {
   const { user } = useAuth();
   const role = user?.role;
   const { activeSiteId, activeSite } = useActiveSite();
+  const prefs = useOrgPrefs();
   const [overview, setOverview] = useState(null);
   const [thresholds, setThresholds] = useState({});
   useEffect(() => {
@@ -91,13 +93,15 @@ function Home() {
   const totals = useMemo(() => {
     if (!overview) return null;
     const sum = (k) => overview.reduce((a, f) => a + (Number(f[k]) || 0), 0);
+    const kg = showQty(Math.round(sum('harvest_this_week')), 'yield', { decimals: 0, p: prefs });
+    const water = showQty(sum('water_this_week'), 'water', { decimals: 0, p: prefs });
     return [
       { label: 'Fields', value: fmt(overview.length), unit: '' },
-      { label: 'Harvest this week', value: fmt(Math.round(sum('harvest_this_week'))), unit: 'kg' },
-      { label: 'Water this week', value: fmt(Math.round(sum('water_this_week'))), unit: 'm³' },
+      { label: 'Harvest this week', value: kg.text, unit: kg.unit },
+      { label: 'Water this week', value: water.text, unit: water.unit },
       { label: 'Needs attention', value: fmt((attention || []).reduce((a, r) => a + r.value, 0)), unit: 'items' },
     ];
-  }, [overview, attention]);
+  }, [overview, attention, prefs]);
 
   const groups = useMemo(() => getShellSections(user)
     .map((g) => ({ ...g, items: g.items.filter((it) => it.path !== '/' && it.path !== '/summary') }))

@@ -19,6 +19,7 @@ import { StatusChip } from '../../components/dashboard/clearCharts';
 import { STATUS } from '../../theme/formIdentity';
 import FieldWeatherStrip from '../../components/dashboard/FieldWeatherStrip';
 import DashboardSection from '../../components/dashboard/DashboardSection';
+import { showQty } from '../../utils/orgPrefs';
 
 function getEcPhColor(value, threshold) {
   if (value == null) return '#9e9e9e';
@@ -643,7 +644,7 @@ export default function FarmMonitor({
             </Grid>
             <Grid size={{ xs: 6, sm: 3 }}>
               <Typography variant="caption" color="text.secondary">Water (7d)</Typography>
-              <Typography variant="body1" fontWeight={600}>{Number(fieldSummary.water_this_week || 0).toFixed(1)} m³</Typography>
+              <Typography variant="body1" fontWeight={600}>{(() => { const w = showQty(Number(fieldSummary.water_this_week || 0), 'water', { decimals: 1 }); return `${w.text} ${w.unit}`; })()}</Typography>
             </Grid>
             <Grid size={{ xs: 6, sm: 3 }}>
               <Typography variant="caption" color="text.secondary">Latest Scouting</Typography>

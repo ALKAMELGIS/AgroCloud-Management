@@ -7,6 +7,7 @@ import {
 } from '@mui/icons-material';
 import { apiRequest } from '../../utils/api';
 import { displayDate } from '../../utils/displayDate';
+import { showQty, useOrgPrefs } from '../../utils/orgPrefs';
 
 /*
  * Field data panel (GIS map → View field data). One field, linked by ZONE_ID + Farm_Code:
@@ -17,7 +18,9 @@ import { displayDate } from '../../utils/displayDate';
 const MONO = '"IBM Plex Mono", monospace';
 const BAND = { ec: [1.8, 2.6], ph: [5.5, 6.5] };
 const SKIP = /(^id$|_id$|^organization|^created|^updated|^deleted|_by$|uuid|geometry|^photos?$|^attachments?$|^lines?$|^comments?$|^metadata$|^gis_|^source_)/i;
-const UNITS = { total_quantity: 'kg', quantity: 'kg', quantity_kg: 'kg', water_m3: 'm³', volume_m3: 'm³', area_ha: 'ha', cost: 'AED' };
+// Stored units of known record fields; yield and water show in the organization's units.
+const KIND = { total_quantity: 'yield', quantity: 'yield', quantity_kg: 'yield', water_m3: 'water', volume_m3: 'water' };
+const UNITS = { area_ha: 'ha' };
 
 const human = (k) => {
   const t = String(k).replace(/_/g, ' ').replace(/\b(ec|ph|phi|kg|m3)\b/gi, (m) => ({ ec: 'EC', ph: 'pH', phi: 'PHI', kg: 'kg', m3: 'm³' }[m.toLowerCase()]));
@@ -34,12 +37,15 @@ const fmt = (v) => {
   return s.length > 60 ? `${s.slice(0, 57)}…` : s;
 };
 /** Up to `n` meaningful values of a record: numbers first, then short text. */
-function keyValues(values, n = 4) {
+function keyValues(values, n = 4, prefs) {
   if (!values) return [];
   const entries = Object.entries(values).filter(([k, v]) => !SKIP.test(k) && !/date$/i.test(k) && fmt(v) !== null);
   const num = entries.filter(([, v]) => typeof v === 'number' || /^-?\d+(\.\d+)?$/.test(String(v)));
   const txt = entries.filter((e) => !num.includes(e) && String(e[1]).length <= 40);
-  return [...num, ...txt].slice(0, n).map(([k, v]) => ({ k, label: human(k), value: fmt(v), unit: UNITS[k] || '' }));
+  return [...num, ...txt].slice(0, n).map(([k, v]) => {
+    if (KIND[k] && Number.isFinite(Number(v))) { const q = showQty(v, KIND[k], { p: prefs }); return { k, label: human(k), value: q.text, unit: q.unit }; }
+    return { k, label: human(k), value: fmt(v), unit: k === 'cost' ? (prefs?.default_currency || 'AED') : (UNITS[k] || '') };
+  });
 }
 
 function Stat({ label, value, unit, sub, tone }) {
@@ -57,6 +63,9 @@ function Stat({ label, value, unit, sub, tone }) {
 
 export default function FieldDataPanel({ fieldId, summary, onClose, embedded = false }) {
   const navigate = useNavigate();
+  const prefs = useOrgPrefs();
+  const hv = showQty(Number(summary?.harvest?.totalKg || 0), 'yield', { decimals: 0, p: prefs });
+  const wv = showQty(Number(summary?.water?.totalM3 || 0), 'water', { decimals: 0, p: prefs });
   const [data, setData] = useState(null); // { zone_id, farm_code, forms }
   const [formId, setFormId] = useState(null);
 
@@ -111,8 +120,8 @@ export default function FieldDataPanel({ fieldId, summary, onClose, embedded = f
           <>
             {/* Key figures */}
             <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 3 }}>
-              <Stat label="Harvest · 30 days" value={Number(summary?.harvest?.totalKg || 0).toLocaleString('en-US')} unit="kg" sub={`${summary?.harvest?.count || 0} entries`} />
-              <Stat label="Water · 30 days" value={Number(summary?.water?.totalM3 || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })} unit="m³" />
+              <Stat label="Harvest · 30 days" value={hv.text} unit={hv.unit} sub={`${summary?.harvest?.count || 0} entries`} />
+              <Stat label="Water · 30 days" value={wv.text} unit={wv.unit} />
               <Stat label="EC out · 7-day avg" value={num(ec.avgEcOut, 2)} unit="mS/cm" sub={`In ${num(ec.avgEcIn, 2)} · target 1.8–2.6`} tone={out(ec.avgEcOut, BAND.ec) ? '#b42318' : undefined} />
               <Stat label="pH out · 7-day avg" value={num(ec.avgPhOut, 1)} sub={`In ${num(ec.avgPhIn, 1)} · target 5.5–6.5`} tone={out(ec.avgPhOut, BAND.ph) ? '#b42318' : undefined} />
             </Box>
@@ -152,7 +161,7 @@ export default function FieldDataPanel({ fieldId, summary, onClose, embedded = f
               ) : null}
             </Box>
             {(form.records || []).map((r) => {
-              const kv = keyValues(r.values);
+              const kv = keyValues(r.values, 4, prefs);
               return (
                 <Box key={r.record_id} sx={{ px: 4, py: 3, '& + &': { borderTop: '1px solid', borderColor: 'divider' } }}>
                   <Typography sx={{ fontFamily: MONO, fontSize: 12, color: 'text.secondary', mb: 1.5 }}>{r.record_date ? displayDate(String(r.record_date).slice(0, 10)) : '–'}</Typography>

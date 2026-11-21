@@ -7,6 +7,7 @@ import { useNotification } from '../contexts/NotificationContext';
 import { getShellSections } from '../config/navAreas';
 import { ModuleIcon, ICON_PATHS } from '../config/moduleIcons';
 import { apiRequest } from '../utils/api';
+import { setOrgPrefs } from '../utils/orgPrefs';
 import { useShellLabel } from '../i18n/shellLabels';
 
 /*
@@ -95,7 +96,7 @@ const ZONES = ['Asia/Dubai', 'Asia/Riyadh', 'Asia/Qatar', 'Asia/Muscat', 'Asia/K
 const CURRENCIES = ['AED', 'SAR', 'QAR', 'OMR', 'KWD', 'BHD', 'EGP', 'USD', 'EUR'];
 const WEEK = [['saturday', 'Saturday'], ['sunday', 'Sunday'], ['monday', 'Monday']];
 const AREA_UNITS = [['m2', 'm² and hectare'], ['dunam', 'Dunam'], ['acre', 'Acre']];
-const YIELD_UNITS = [['kg', 'kg'], ['t', 'Tonne'], ['box', 'Box']];
+const YIELD_UNITS = [['kg', 'kg'], ['t', 'Tonne']];
 const WATER_UNITS = [['m3', 'm³ and litre'], ['gal', 'Gallon']];
 
 function Row({ label, help, children }) {
@@ -183,6 +184,7 @@ function GeneralPane() {
       await apiRequest('/organization', { method: 'PUT', body: JSON.stringify({ name: name.trim(), settings: body }) });
       if (s.default_site) setActiveSiteId(s.default_site);
       setSaved(JSON.stringify([name, s]));
+      setOrgPrefs(body);
       notify.success('Settings saved');
     } catch (e) {
       notify.error(e.message || 'Could not save');
@@ -217,15 +219,15 @@ function GeneralPane() {
             </Row>
           </Card>
           <Card title="Region and language" desc="How dates, money and text appear">
-            <Row label="Language" help="Arabic switches the layout to right-to-left"><Pick label="Language" value={s.language} onChange={(v) => set('language', v)} options={LANGS} disabled={!canEdit} /></Row>
+            <Row label="Language" help="Default for everyone until a person picks their own"><Pick label="Language" value={s.language} onChange={(v) => set('language', v)} options={LANGS} disabled={!canEdit} /></Row>
             <Row label="Time zone" help="Used for entries, reminders and the day boundary"><Pick label="Time zone" value={s.timezone} onChange={(v) => set('timezone', v)} options={ZONES.includes(s.timezone) ? ZONES : [s.timezone, ...ZONES]} disabled={!canEdit} /></Row>
             <Row label="Currency" help="Labour cost, inventory and reports"><Pick label="Currency" value={s.default_currency} onChange={(v) => set('default_currency', v)} options={CURRENCIES.includes(s.default_currency) ? CURRENCIES : [s.default_currency, ...CURRENCIES]} disabled={!canEdit} /></Row>
-            <Row label="First day of week" help="Weekly reports and attendance"><Pick label="First day of week" value={s.week_start} onChange={(v) => set('week_start', v)} options={WEEK} disabled={!canEdit} /></Row>
+            <Row label="First day of week" help="This week on the dashboard and in entry history"><Pick label="First day of week" value={s.week_start} onChange={(v) => set('week_start', v)} options={WEEK} disabled={!canEdit} /></Row>
           </Card>
           <Card title="Units" desc="Stored in metric, shown in the unit chosen here">
             <Row label="Area" help="Fields, zones and structures"><Pick label="Area unit" value={s.units.area} onChange={(v) => setUnit('area', v)} options={AREA_UNITS} disabled={!canEdit} /></Row>
-            <Row label="Yield" help="Harvest entry and reports"><Pick label="Yield unit" value={s.units.yield} onChange={(v) => setUnit('yield', v)} options={YIELD_UNITS} disabled={!canEdit} /></Row>
-            <Row label="Water" help="Irrigation and tank mixing"><Pick label="Water unit" value={s.units.water} onChange={(v) => setUnit('water', v)} options={WATER_UNITS} disabled={!canEdit} /></Row>
+            <Row label="Yield" help="Home, field map and field panel; entry stays in kg"><Pick label="Yield unit" value={s.units.yield} onChange={(v) => setUnit('yield', v)} options={YIELD_UNITS} disabled={!canEdit} /></Row>
+            <Row label="Water" help="Home, field map and field panel; entry stays in m³"><Pick label="Water unit" value={s.units.water} onChange={(v) => setUnit('water', v)} options={WATER_UNITS} disabled={!canEdit} /></Row>
           </Card>
         </>
       )}

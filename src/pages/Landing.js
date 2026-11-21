@@ -109,6 +109,7 @@ export default function Landing() {
 
   const switchLanguage = () => {
     const code = isAr ? 'en' : 'ar';
+    try { localStorage.setItem('agro_lang_picked', '1'); } catch { /* storage blocked */ }
     i18n.changeLanguage(code);
     document.documentElement.dir = code === 'ar' ? 'rtl' : 'ltr';
     document.documentElement.lang = code;

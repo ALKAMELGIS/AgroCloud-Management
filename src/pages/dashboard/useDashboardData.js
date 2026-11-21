@@ -12,6 +12,7 @@ import { fetchFertigationDashboardData } from './fertigationDashboardAdapter';
 import { fetchWeatherForSiteFields } from '../../utils/siteFieldWeather';
 import { apiRequest } from '../../utils/api';
 import { useActiveSite } from '../../contexts/ActiveSiteContext';
+import { weekStartOf } from '../../utils/orgPrefs';
 
 // ─── Agronomic thresholds (for EC/pH icon coloring) ─────────────────
 function useAgronomicThresholds() {
@@ -86,9 +87,7 @@ function useAnalytics(analyticsParams) {
   const today = new Date();
   const yesterday = new Date();
   yesterday.setDate(today.getDate() - 1);
-  const thisWeekStart = new Date(today);
-  thisWeekStart.setDate(today.getDate() - (today.getDay() || 7) + 1);
-  thisWeekStart.setHours(0, 0, 0, 0);
+  const thisWeekStart = weekStartOf(today);
   const lastWeekStart = new Date(thisWeekStart);
   lastWeekStart.setDate(thisWeekStart.getDate() - 7);
 

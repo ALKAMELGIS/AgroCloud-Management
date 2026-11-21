@@ -1,4 +1,5 @@
 import { intersectDateRange } from './seasonListDates';
+import { weekStartOf } from './orgPrefs';
 
 export const DATE_PRESETS = [
   { id: 'season', label: 'This season' },
@@ -30,11 +31,9 @@ export function getDateRangeForPreset(preset, seasonRange = {}) {
       raw = { startDate: todayStr, endDate: todayStr };
       break;
     case 'week': {
-      const day = today.getDay();
-      const diff = today.getDate() - day + (day === 0 ? -6 : 1);
-      const monday = new Date(today);
-      monday.setDate(diff);
-      raw = { startDate: toISO(monday), endDate: todayStr };
+      // First day of the week from Settings > General (Saturday by default).
+      const start = weekStartOf(today);
+      raw = { startDate: `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-${String(start.getDate()).padStart(2, '0')}`, endDate: todayStr };
       break;
     }
     case 'month': {

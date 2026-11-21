@@ -13,6 +13,7 @@ export default function LanguageSwitcher() {
 
   const changeLanguage = (code) => {
     if (!code) return;
+    try { localStorage.setItem('agro_lang_picked', '1'); } catch { /* storage blocked */ }
     i18n.changeLanguage(code);
     // Update document direction for RTL support
     document.documentElement.dir = code === 'ar' ? 'rtl' : 'ltr';

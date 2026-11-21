@@ -19,6 +19,8 @@ import InstallPrompt from './components/InstallPrompt';
 import OfflineQueueBanner from './components/OfflineQueueBanner';
 import AppUpdateBanner from './components/AppUpdateBanner';
 import SiteSeasonSwitcher from './components/SiteSeasonSwitcher';
+import { setOrgPrefs } from './utils/orgPrefs';
+import { apiRequest } from './utils/api';
 import CommandPalette from './components/CommandPalette';
 import NotificationCenter from './components/NotificationCenter';
 import { ConfirmHost } from './components/ConfirmDialog';
@@ -393,6 +395,27 @@ function AuthenticatedLayout() {
   useEffect(() => {
     setNavArea((current) => resolveNavArea(location.pathname, user, current));
   }, [location.pathname, user]);
+
+  // Organization defaults (Settings > General): units, first day of week, language.
+  const orgId = user?.organizationId || user?.organization_id || null;
+  useEffect(() => {
+    if (!user) return undefined;
+    let alive = true;
+    apiRequest('/organization').then((org) => {
+      if (!alive || !org) return;
+      setOrgPrefs(org.settings);
+      // The organization's language applies until the person picks one themselves.
+      let picked = false;
+      try { picked = localStorage.getItem('agro_lang_picked') === '1'; } catch { /* storage blocked */ }
+      const lang = org.settings?.language;
+      if (!picked && (lang === 'ar' || lang === 'en') && !(i18n.language || '').startsWith(lang)) {
+        i18n.changeLanguage(lang);
+        document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
+        document.documentElement.lang = lang;
+      }
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, [orgId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleNavAreaChange = (nextArea) => {
     if (visibleNavAreas.includes(nextArea)) {

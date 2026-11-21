@@ -20,6 +20,7 @@ import { MapLifecycle } from '../../utils/leafletSafe';
 import { flyAndFlash } from '../../components/map/mapFlash';
 import { STATUS, FORM_IDENTITY } from '../../theme/formIdentity';
 import { meter, isStale, DEFAULT_BANDS } from './FarmMonitor';
+import { useOrgPrefs, unitFor } from '../../utils/orgPrefs';
 
 const Map3D = lazy(() => import('../../components/map/Map3D'));
 
@@ -43,14 +44,14 @@ const FORM_MEASURES = {
   ecph: MEASURES,
   fertigation: [
     { key: 'fert', label: 'Fertilizer', unit: 'kg', decimals: 0, seq: true, get: (x) => x?.fert },
-    { key: 'fwater', label: 'Water / day', unit: 'm³', decimals: 1, seq: true, get: (x) => x?.waterAvg },
+    { key: 'fwater', label: 'Water / day', unit: 'm³', decimals: 1, kind: 'water', seq: true, get: (x) => x?.waterAvg },
   ],
   irrigation: [
-    { key: 'iwater', label: 'Water', unit: 'm³', decimals: 0, seq: true, get: (x) => x?.water },
+    { key: 'iwater', label: 'Water', unit: 'm³', decimals: 0, kind: 'water', seq: true, get: (x) => x?.water },
     { key: 'freq', label: 'Cycles / day', unit: '', decimals: 1, seq: true, get: (x) => x?.freqAvg },
   ],
   harvest: [
-    { key: 'kg', label: 'Harvest', unit: 'kg', decimals: 0, seq: true, get: (x) => x?.kg },
+    { key: 'kg', label: 'Harvest', unit: 'kg', decimals: 0, kind: 'yield', seq: true, get: (x) => x?.kg },
     { key: 'hn', label: 'Entries', unit: '', decimals: 0, seq: true, get: (x) => x?.n },
   ],
 };
@@ -339,7 +340,14 @@ export function sliceIdsOf(facets, f) {
 
 export default function FieldMapPanel({ fieldOverview = [], allFields = [], selectedFieldId, onSelect, onFilterChange, agronomicThresholds, dateTo, form = 'ecph', formStats = null, slice = null, onSliceChange = null }) {
   const geo = useGeo();
-  const measures = FORM_MEASURES[form] || MEASURES;
+  const prefs = useOrgPrefs();
+  // Water and harvest show in the organization's units (Settings > General).
+  const measures = useMemo(() => (FORM_MEASURES[form] || MEASURES).map((x) => {
+    if (!x.kind) return x;
+    const u = unitFor(x.kind, prefs);
+    if (u.factor === 1) return x;
+    return { ...x, unit: u.unit, decimals: u.decimals, get: (v) => { const n = Number(x.get(v)); return Number.isFinite(n) ? n * u.factor : n; } };
+  }), [form, prefs]);
   const [measureBy, setMeasureBy] = useState(() => { try { return JSON.parse(localStorage.getItem('agro_dash_measure_v2') || '{}'); } catch { return {}; } });
   useEffect(() => { try { localStorage.setItem('agro_dash_measure_v2', JSON.stringify(measureBy)); } catch { /* ignore */ } }, [measureBy]);
   const measure = measures.some((x) => x.key === measureBy[form]) ? measureBy[form] : measures[0].key;
